@@ -43,6 +43,47 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
 });
 
+// ─── Ruta principal (Generación Visual de QR) ─────────────────────
+app.get('/', (req, res) => {
+  const whatsapp = require('./services/whatsapp');
+  
+  if (whatsapp.isConfigured()) {
+    return res.send(`
+      <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+        <h1 style="color: #27ae60;">✅ WhatsApp Vinculado Correctamente</h1>
+        <p>El Agente Three Inmobiliaria ya está listo y esperando leads.</p>
+        <p><a href="/test.html" style="color: #3498db; text-decoration: none;">Ir al Simulador de Registro</a></p>
+      </div>
+    `);
+  }
+
+  const qrString = whatsapp.getLatestQr();
+  if (!qrString) {
+    return res.send(`
+      <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+        <h2>⏳ Generando el código QR de WhatsApp...</h2>
+        <p>Esto puede tardar unos segundos. Por favor, <a href="/">refresca la página</a> en 10 segundos.</p>
+      </div>
+    `);
+  }
+
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><title>Vincular WhatsApp</title></head>
+    <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background: #f0f2f5;">
+      <h2>📲 Escanea este código QR con el WhatsApp de tu móvil</h2>
+      <p>Abre WhatsApp > Ajustes > Dispositivos Vinculados > Vincular un dispositivo</p>
+      <div style="background: white; padding: 20px; display: inline-block; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrString)}" alt="WhatsApp QR Code" />
+      </div>
+      <p style="color: #555; font-size: 0.9em; margin-top: 20px;">Refresca la página manualmente si el código caduca (cada minuto).</p>
+      <p><a href="/" style="padding: 10px 20px; background: #3498db; color: white; border-radius: 5px; text-decoration: none;">Refrescar código</a></p>
+    </body>
+    </html>
+  `);
+});
+
 // ─── Iniciar servidor ─────────────────────────────────────────────
 app.listen(config.port, () => {
   console.log(`

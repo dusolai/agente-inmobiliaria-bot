@@ -9,6 +9,7 @@ const config = require('../config/config');
 
 let client = null;
 let isReady = false;
+let latestQr = null;
 
 function initialize() {
   console.log('🔄 Inicializando cliente de WhatsApp Web...');
@@ -37,10 +38,12 @@ function initialize() {
     console.log('📲 Escanea este código QR con el WhatsApp de tu móvil:');
     console.log('======================================================\n');
     qrcode.generate(qr, { small: true });
+    latestQr = qr;
   });
 
   client.on('ready', () => {
     isReady = true;
+    latestQr = null;
     console.log('✅ [WhatsApp Web] Cliente autenticado y listo para enviar mensajes.');
   });
 
@@ -54,6 +57,7 @@ function initialize() {
 
   client.on('disconnected', (reason) => {
     isReady = false;
+    latestQr = null;
     console.log('❌ [WhatsApp Web] Cliente desconectado:', reason);
     // Reiniciar cliente si se desconecta
     client.destroy();
@@ -97,8 +101,14 @@ async function sendTextMessage(to, body) {
  */
 const isConfigured = () => isReady;
 
+/**
+ * Devuelve el último código QR generado
+ */
+const getLatestQr = () => latestQr;
+
 module.exports = {
   initialize,
   sendTextMessage,
-  isConfigured
+  isConfigured,
+  getLatestQr
 };
