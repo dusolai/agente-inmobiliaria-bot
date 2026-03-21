@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Registro (Developer)</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h1 { color: #2c3e50; font-size: 1.5rem; margin-top: 0; }
+        p { color: #5d6d7e; font-size: 0.9rem; margin-bottom: 1.5rem; }
+        .form-group { margin-bottom: 1.25rem; }
+        label { display: block; font-weight: 600; margin-bottom: 0.5rem; color: #34495e; font-size: 0.9rem; }
+        input { width: 100%; padding: 0.75rem; border: 1px solid #dcdde1; border-radius: 6px; font-size: 1rem; box-sizing: border-box; }
+        input:focus { outline: none; border-color: #3498db; box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2); }
+        .hint { font-size: 0.8rem; color: #e74c3c; margin-top: 0.5rem; display: block; }
+        button { background: #3498db; color: white; border: none; padding: 1rem; width: 100%; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.3s; }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #95a5a6; cursor: not-allowed; }
+        #message { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; text-align: center; font-size: 0.9rem; display: none; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Simular Registro</h1>
+        <p>Simula que un usuario (tú) acaba de rellenar el formulario de registro (ej. Facebook Ads).</p>
+        
+        <form id="registroForm">
+            <div class="form-group">
+                <label for="name">Tu Nombre Real</label>
+                <input type="text" id="name" required placeholder="Ej. Diego Garcia">
+            </div>
+            
+            <div class="form-group">
+                <label for="phone">Tu Teléfono Personal</label>
+                <input type="tel" id="phone" required placeholder="Ej. 34667550070">
+                <span class="hint">(Pon el prefijo del país sin el +, por ejemplo 34 para España)</span>
+            </div>
+            
+            <button type="submit" id="submitBtn">Registrarme</button>
+        </form>
+
+        <div id="message"></div>
+    </div>
+
+    <script>
+        document.getElementById('registroForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const msgDiv = document.getElementById('message');
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+
+            btn.disabled = true;
+            btn.textContent = 'Procesando...';
+            msgDiv.style.display = 'none';
+
+            try {
+                const response = await fetch('/webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, phone })
+                });
+
+                const data = await response.json();
+                
+                msgDiv.style.display = 'block';
+                if (response.ok && data.success) {
+                    msgDiv.className = 'success';
+                    msgDiv.textContent = '✅ Registro simulado con éxito. El bot debería enviar el WhatsApp en breve.';
+                    document.getElementById('registroForm').reset();
+                } else {
+                    msgDiv.className = 'error';
+                    msgDiv.textContent = '❌ Error: ' + (data.error || 'Fallo desconocido en el servidor');
+                }
+            } catch (err) {
+                msgDiv.style.display = 'block';
+                msgDiv.className = 'error';
+                msgDiv.textContent = '❌ Error de conexión con el servidor (/webhook no responde).';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Registrarme';
+            }
+        });
+    </script>
+</body>
+</html>
