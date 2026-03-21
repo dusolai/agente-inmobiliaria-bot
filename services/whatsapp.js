@@ -17,7 +17,17 @@ function initialize() {
   client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions'],
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox', 
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu'
+      ],
+      timeout: 120000 // Aumentado a 2 minutos para evitar timeout en servidores lentos
     }
   });
 
@@ -50,7 +60,9 @@ function initialize() {
     client.initialize();
   });
 
-  client.initialize();
+  client.initialize().catch(err => {
+    console.error('❌ [WhatsApp Web] Error crítico al inicializar el navegador:', err);
+  });
 }
 
 /**
