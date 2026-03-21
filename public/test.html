@@ -61,7 +61,7 @@
                 const response = await fetch('/webhook/new-lead', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, phone })
+                    body: JSON.stringify({ nombre: name, telefono: phone })
                 });
 
                 const data = await response.json();
