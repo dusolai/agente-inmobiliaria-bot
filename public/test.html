@@ -58,7 +58,7 @@
             msgDiv.style.display = 'none';
 
             try {
-                const response = await fetch('/webhook', {
+                const response = await fetch('/webhook/new-lead', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, phone })
@@ -78,7 +78,7 @@
             } catch (err) {
                 msgDiv.style.display = 'block';
                 msgDiv.className = 'error';
-                msgDiv.textContent = '❌ Error de conexión con el servidor (/webhook no responde).';
+                msgDiv.textContent = '❌ Error de conexión con el servidor (/webhook/new-lead no responde).';
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Registrarme';
