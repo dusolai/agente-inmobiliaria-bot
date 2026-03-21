@@ -1,0 +1,140 @@
+
+--- Page 1 ---
+Documentación T écnica: Embudo Agéntico de
+Cualificación (v3.0)
+1. Objetiv o del Sist ema
+Automatizar el proceso de venta consultiva. El sistema filtra prospectos (leads)
+mediante el consumo de contenido (Video y R euniones Grupales) para asegurar que
+solo los perfiles más cualificados lleguen a la agenda 1 a 1, mientras un agente
+automatizado gestiona el seguimiento de los rezagados.
+2. Flujo Operativ o Paso a P aso
+Fase 1: Entrada y Activ ación
+1. Captura:  El usuario completa un Formulario 📝 .
+2. Centralización:  Los datos se vuelcan automáticamente en un Excel (o Google
+Sheets) 📊 .
+3. Disp arador : Al detectar una nueva fila en el Excel, el Agente se activa y envía el
+mensaje de bienvenida con el enlace al Video de V entas (VSL) 🚀 .
+Fase 2: Pr imer Filtr o (El Video + W eb)
+El usuario llega a la Landing P age para ver el video.
+Mecanismo W eb: Se utiliza un Botón R etardado (Delayed Button) debajo del video
+⏳.
+Este botón para agendar la "R eunión Conjunta" permanece oculto y solo aparece
+automáticamente cuando el video termina (o pasa el tiempo clave).
+🟢 CAMINO "SÍ" (Int erés confir mado):
+
+--- Page 2 ---
+El usuario hace clic en el botón que ha aparecido al final del video.
+Este clic lleva directamente a la agenda de la R eunión Grupal (sin esperar mensaje).
+Acción del Sist ema:  El clic etiqueta al usuario como "Video Visto" ✅  y detiene la
+secuencia de recordatorios.
+🔴 CAMINO "NO" (R ecuperación):
+Si el usuario abandona la página antes de que aparezca el botón (o no hace clic),
+entra en un bucle de recordatorios cada 48 horas 🔄 .
+Condición de salida:  Si tras los recordatorios sigue inactivo, se marca como Fin
+(Descarte) 🗑 .
+
+--- Page 3 ---
+Fase 3: Segundo Filtr o (La R eunión Conjunta)
+El sistema verifica la asistencia del usuario a la sesión grupal agendada.
+🟢 CAMINO "SÍ" (Lead Calient e):
+Si el usuario entra a la reunión, el Agente de WhatsApp se activa para el cierre:
+envía el enlace exclusivo para agendar una Sesión 1 a 1 🤝 .
+🔴 CAMINO "NO" (R ecuperación):
+Si se registró pero no asistió, entra en un bucle de recordatorios cada 48 horas para
+reagendar.
+Condición de salida:  Si persiste la inasistencia, se marca como Fin (Descarte).
+3. Reglas de Aut omatización
+Frecuencia de R ecordatorios: Estrictamente cada 2 días (48 horas) en las ramas
+negativas ⏱ .
+Regla de "S top" (Actualizada) 🛑 : El disparador para detener los recordatorios de
+la Fase 2 es el Clic en el Botón W eb. Si el sistema detecta este clic, debe cancelar
+inmediatamente los mensajes de insistencia.
+Descar te: Se recomienda un máximo de 3 recordatorios antes de descartar al lead
+definitivamente.
+4. Anex o: Guiones del Agent e (Copywr iting)
+A continuación, los textos sugeridos de ejemplo. R ecuerda reemplazar lo que está entre
+corchetes [...] con tus variables.
+A. Mensaje de Bienv enida (Inicio)
+
+--- Page 4 ---
+¡Hola [Nombr e]! 👋  Soy el asist ente de [T u Empr esa].
+Hemos r ecibido tu solicitud. P ara v er si podemos ayudar te con [Pr oblema Princip al], es  
+necesario que v eas est e breve video explicativ o sobr e nuestr o mét odo. 🎬
+Míralo aquí ahora: 
+👉 [Enlace al Video]
+Nota: Al final del video se activ ará la opción p ara continuar . ¡Saludos!
+            
+B. Rama "NO vio el video " (Recordatorios cada 2 días)
+Recordatorio 1:
+Hola [Nombr e], not é que no has podido t erminar el video aún. 👀
+Hay un punt o clav e en el minut o 5 sobr e [Beneficio] que t e interesa mucho. Tienes que  
+verlo hasta el final p ara desbloquear el siguient e paso.
+👇 Aquí tienes el acceso:
+[Enlace al Video]
+            
+
+--- Page 5 ---
+Recordatorio 2:
+[Nombr e], el acceso al video explicativ o caducará pr onto. ⏳
+Si realment e quier es solucionar [Pr oblema], est e es el primer p aso indispensable.
+¿Puedes v erlo hoy ? 
+🎥 [Enlace al Video]
+            
+C. Rama "Sí vio el video " (Mensaje de R espaldo)
+(Opcional: Solo s e envía si el usuar io hizo clic en el bot ón per o NO c omplet ó la r eserva).
+¡Genial, [Nombr e]! He vist o que t erminast e el video. 🎉
+Por si se cerr ó la p ágina ant es de r eservar, aquí tienes el enlace dir ecto a la Sesión  
+Grup al de Estrat egia.
+Reserva tu plaza aquí: 
+📅 [Enlace a Landing de R eunión Conjunta]
+            
+D. Rama "NO asistió a la r eunión " (Recordatorios cada 2 días)
+Recordatorio 1:
+Hola [Nombr e], te echamos de menos en la sesión de ay er. 😔
+Hubo pr eguntas muy int eresant es. No quier o que pier das la opor tunidad, ¿t e va bien  
+agendar p ara la pr óxima?
+
+--- Page 6 ---
+🗓 [Enlace a R euniones]
+            
+Recordatorio 2:
+[Nombr e], ¿sigues int eresado en [R esultado]? 🤔
+He vist o que no pudist e sumar te. Int enta r eservar con tiempo aquí: 
+🔗 [Enlace a R euniones]
+Si ya no t e interesa, ignora est e mensaje.
+            
+E. Rama "Sí asistió a la r eunión " (Cierr e / Agenda 1a1)
+¡Hola [Nombr e]! Gracias por p articipar hoy . 🙌
+Dado tu int erés, [Nombr e del Exper to] ha aut orizado una Sesión 1 a 1 contigo p ara 
+trazar un plan a medida.
+Agenda tu hueco per sonal aquí (plazas limitadas):
+✅ [Enlace Calendly/Agenda P ersonal]
+            
+
+--- Page 7 ---
+5. Nota Aclarat oria sobr e Presupuest o y Alcance
+Es fundamental diferenciar entre la automatización base y la lógica avanzada descrita
+en este documento completo.
+LO INCL UIDO (Pr esupuest o Actual: 200€) ✅
+El alcance presupuestado cubre exclusivamente la F ase 1 (Activación Lineal):
+1. Conexión entre el Formulario y la Hoja de Cálculo (Excel/Sheets).
+2. Detección del nuevo Lead.
+3. Envío del Mensaje Único de Bienvenida por WhatsApp con el enlace a la Landing
+Page 📲 .
+EXTRAS (A Pr esupuestar Ap arte) ➕
+Todo el desarrollo de lógica condicional ("Sí/No") y seguimiento inteligente descrito en
+las Fases 2 y 3 no está incluido en el presupuesto inicial y requiere una valoración
+adicional. Esto incluye:
+Sistema de Rastr eo W eb 🕸 : Configurar la detección de si el usuario hizo clic o no
+en el botón retardado de la web.
+Lógica de Ramas (Bifur cación) 🔀 : Programar al agente para que tome decisiones
+distintas (Camino A o Camino B) según el comportamiento del usuario.
+Bucles de Seguimient o (Follow-up) 🔁 : Configuración de los recordatorios
+automáticos cada 48 horas y su programación para detenerse si el usuario
+convierte.
+Integración con W ebinar s/Zoom 📹 : Conexión para verificar automáticamente si
+el usuario asistió o no a la reunión grupal.
+
+--- Page 8 ---
+Gestión de Cierr e 🏁 : Automatización del envío del enlace de Calendly solo a los
+asistentes confirmados.

@@ -1,0 +1,9 @@
+node_modules/
+.env
+.DS_Store
+*.log
+.wwebjs_auth/
+.wwebjs_cache/
+data/leads.json
+public-old/
+LANDING-THREE-INMOBILIARIA/

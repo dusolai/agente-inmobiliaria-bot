@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - Three Inmobiliaria</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>Three Inmo</h2>
+      <p>Embudo Agéntico v3.0</p>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="active"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg> Inicio</a>
+      <a href="javascript:void(0)" onclick="fetchLeads('video_enviado')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Pendientes Video</a>
+      <a href="javascript:void(0)" onclick="fetchLeads('video_visto')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> Video Visto</a>
+      <a href="javascript:void(0)" onclick="fetchLeads('reunion_registrado')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> Registrados Reunión</a>
+      <a href="javascript:void(0)" onclick="fetchLeads('agenda_1a1')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> Cierres 1a1</a>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <h1>Panel de Control de Leads</h1>
+      <button class="btn-primary" onclick="window.open('/?lead=test', '_blank')">Ver Landing VSL</button>
+    </header>
+
+    <!-- KPIs -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <h3>Total Leads Activos</h3>
+        <p class="kpi-value" id="kpi-activos">0</p>
+      </div>
+      <div class="kpi-card">
+        <h3>Vídeos Vistos (Fase 2)</h3>
+        <p class="kpi-value kpi-warning" id="kpi-vistos">0</p>
+      </div>
+      <div class="kpi-card">
+        <h3>Reuniones (Fase 3)</h3>
+        <p class="kpi-value kpi-accent" id="kpi-reuniones">0</p>
+      </div>
+      <div class="kpi-card">
+        <h3>Tasa Conversión (1a1)</h3>
+        <p class="kpi-value kpi-success" id="kpi-conversion">0%</p>
+      </div>
+    </section>
+
+    <!-- Data Table -->
+    <section class="table-section">
+      <div class="table-header">
+        <h2 id="table-title">Todos los Leads</h2>
+        <div class="actions">
+          <button class="btn-secondary" onclick="fetchLeads()">Todos</button>
+          <button class="btn-secondary" onclick="fetchStats()">Refrescar</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table id="leads-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Teléfono</th>
+              <th>Estado</th>
+              <th>Fecha Ingreso</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="leads-tbody">
+            <!-- Row template -->
+            <tr><td colspan="5" style="text-align: center;">Cargando leads...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/admin/js/admin.js"></script>
+</body>
+</html>
