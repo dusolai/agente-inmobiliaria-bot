@@ -30,14 +30,20 @@ function initialize() {
         '--disable-blink-features=AutomationControlled',
         '--no-first-run',
         '--no-zygote',
-        '--single-process',
+        // ELIMINADO: '--single-process' causa crashes (Target closed) en Linux con WhatsApp Web
         '--disable-gpu'
       ],
       timeout: 120000 // Aumentado a 2 minutos para evitar timeout en servidores lentos
     },
     // Engañamos a WhatsApp fingiendo ser un navegador Chrome normal de Windows
     // Si sabe que somos un "Headless" Linux, bloquea el intento de escanear el QR ("No se pudo vincular el dispositivo")
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    
+    // Evitamos descargar la última versión ultra-pesada de WhatsApp Web que puede crashear servidores pequeños
+    webVersionCache: {
+      type: 'remote',
+      remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1012111644-alpha.html'
+    }
   });
 
   client.on('qr', (qr) => {
