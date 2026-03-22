@@ -25,12 +25,17 @@ function initialize() {
         '--disable-extensions',
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
+        // Ocultar que es un navegador sin interfaz gráfica
+        '--disable-blink-features=AutomationControlled',
         '--no-first-run',
         '--no-zygote',
         '--disable-gpu'
       ],
       timeout: 120000 // Aumentado a 2 minutos para evitar timeout en servidores lentos
-    }
+    },
+    // Engañamos a WhatsApp fingiendo ser un navegador Chrome normal de Windows
+    // Si sabe que somos un "Headless" Linux, bloquea el intento de escanear el QR ("No se pudo vincular el dispositivo")
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   });
 
   client.on('qr', (qr) => {
