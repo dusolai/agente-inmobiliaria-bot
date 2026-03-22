@@ -1,16 +1,10 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
 const path = require('path');
 const QRCode = require('qrcode');
-const pino = require('pino');
 
 /**
  * Servicio de WhatsApp usando Baileys (WebSocket directo, SIN navegador)
- * Esto es muchísimo más ligero y estable que whatsapp-web.js + Puppeteer.
- * Funciona perfectamente en servidores Docker con recursos limitados.
+ * Usa import() dinámico porque Baileys v6 es un módulo ESM.
  */
-
-// Logger silencioso pero COMPLETO (Baileys necesita todas las funciones de pino)
-const logger = pino({ level: 'silent' });
 
 let sock = null;
 let isReady = false;
@@ -21,8 +15,20 @@ async function initialize() {
   console.log('🔄 Inicializando cliente de WhatsApp (Baileys)...');
   
   try {
+    // Import dinámico porque Baileys v6 es ESM y nuestro proyecto usa CommonJS
+    const baileys = await import('@whiskeysockets/baileys');
+    const makeWASocket = baileys.default;
+    const { useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore } = baileys;
+    
+    // Importar pino también dinámicamente (v9 también es ESM)
+    const pinoModule = await import('pino');
+    const pino = pinoModule.default;
+    const logger = pino({ level: 'warn' }); // Solo mostrar warnings y errores
+    
     const authDir = path.join(process.cwd(), 'auth_info');
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
+    
+    console.log('🔗 Creando socket de WhatsApp...');
     
     sock = makeWASocket({
       auth: {
@@ -33,9 +39,13 @@ async function initialize() {
       logger: logger
     });
     
+    console.log('✅ Socket creado. Esperando eventos de conexión...');
+    
     // ─── Evento: Actualización de conexión ────────────────────────────
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
+      
+      console.log('📡 connection.update:', JSON.stringify({ connection, qr: qr ? 'QR_PRESENT' : undefined, hasError: !!lastDisconnect?.error }));
       
       if (qr) {
         console.log('\n======================================================');
@@ -52,24 +62,25 @@ async function initialize() {
       }
       
       if (connection === 'close') {
-        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
         
-        console.log(`❌ [WhatsApp] Conexión cerrada. Reconectar: ${shouldReconnect}`);
+        console.log(`❌ [WhatsApp] Conexión cerrada (código: ${statusCode}). Error: ${lastDisconnect?.error?.message || 'ninguno'}. Reconectar: ${shouldReconnect}`);
         
         isReady = false;
         latestQr = null;
         latestQrDataUrl = null;
         
         if (shouldReconnect) {
-          setTimeout(() => {
-            console.log('🔄 Reintentando conexión...');
-            initialize();
-          }, 5000);
+          // Espera progresiva para no saturar
+          const delay = 10000; // 10 segundos entre reintentos
+          console.log(`🔄 Reintentando conexión en ${delay/1000}s...`);
+          setTimeout(() => initialize(), delay);
         } else {
           console.log('⚠️ [WhatsApp] Sesión cerrada por el usuario. Se requiere nuevo QR.');
           const fs = require('fs');
           try { fs.rmSync(authDir, { recursive: true, force: true }); } catch(e) {}
-          setTimeout(() => initialize(), 3000);
+          setTimeout(() => initialize(), 5000);
         }
       }
       
@@ -84,8 +95,9 @@ async function initialize() {
     sock.ev.on('creds.update', saveCreds);
     
   } catch (err) {
-    console.error('❌ [WhatsApp] Error crítico al inicializar:', err);
-    setTimeout(() => initialize(), 10000);
+    console.error('❌ [WhatsApp] Error crítico al inicializar:', err.message);
+    console.error(err.stack);
+    setTimeout(() => initialize(), 15000);
   }
 }
 
