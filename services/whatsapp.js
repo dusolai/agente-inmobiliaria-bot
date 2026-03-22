@@ -19,6 +19,7 @@ function initialize() {
     authStrategy: new LocalAuth(),
     puppeteer: {
       executablePath: '/usr/bin/chromium', // <-- Fuerza el uso de Chromium del sistema operativo
+      protocolTimeout: 0, // <-- INFINITO para ordenadores/servidores muy lentos al conectar
       args: [
         '--no-sandbox', 
         '--disable-setuid-sandbox', 
@@ -29,6 +30,7 @@ function initialize() {
         '--disable-blink-features=AutomationControlled',
         '--no-first-run',
         '--no-zygote',
+        '--single-process',
         '--disable-gpu'
       ],
       timeout: 120000 // Aumentado a 2 minutos para evitar timeout en servidores lentos
