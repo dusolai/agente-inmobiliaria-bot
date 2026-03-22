@@ -16,7 +16,6 @@ const MAX_RETRIES = 10;
 async function initialize() {
   console.log('🔄 Inicializando cliente de WhatsApp (Baileys)...');
   
-  // LIMPIAR socket anterior si existe (evita acumular conexiones fantasma)
   if (sock) {
     try {
       sock.ev.removeAllListeners();
@@ -26,10 +25,9 @@ async function initialize() {
   }
   
   try {
-    // Import dinámico porque Baileys v6 es ESM y nuestro proyecto usa CommonJS
     const baileys = await import('@whiskeysockets/baileys');
     const makeWASocket = baileys.default;
-    const { useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore } = baileys;
+    const { useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, fetchLatestBaileysVersion } = baileys;
     
     const pinoModule = await import('pino');
     const pino = pinoModule.default;
@@ -38,6 +36,11 @@ async function initialize() {
     const authDir = path.join(process.cwd(), 'auth_info');
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     
+    // Obtenemos dinámicamente la ultimísima versión de WhatsApp Web para evitar Error 405 (versiones baneadas)
+    console.log('🌐 Consultando última versión de web.whatsapp.com...');
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    console.log(`🤖 Versión de WhatsApp obtenida: ${version.join('.')} (Última: ${isLatest})`);
+    
     console.log('🔗 Creando socket de WhatsApp...');
     
     sock = makeWASocket({
@@ -45,9 +48,10 @@ async function initialize() {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, logger)
       },
+      version: version, // <-- Fundamental para evitar el error 405 Connection Failure
       browser: ['Three Inmobiliaria', 'Chrome', '120.0.0'],
       logger: logger,
-      connectTimeoutMs: 60000, // 60 segundos para conectar
+      connectTimeoutMs: 60000, 
     });
     
     console.log('✅ Socket creado. Esperando eventos de conexión...');
@@ -63,7 +67,7 @@ async function initialize() {
       }));
       
       if (qr) {
-        retryCount = 0; // Reset retry count when we get a QR
+        retryCount = 0; 
         console.log('\n======================================================');
         console.log('📲 Nuevo código QR generado. Escanealo desde la web.');
         console.log('======================================================\n');
@@ -99,7 +103,6 @@ async function initialize() {
             return;
           }
           
-          // Backoff exponencial: 10s, 20s, 40s, 80s...
           const delay = Math.min(10000 * Math.pow(2, retryCount - 1), 120000);
           console.log(`🔄 Reintento ${retryCount}/${MAX_RETRIES} en ${delay/1000}s...`);
           setTimeout(() => initialize(), delay);
