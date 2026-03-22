@@ -10,9 +10,20 @@ let sock = null;
 let isReady = false;
 let latestQr = null;
 let latestQrDataUrl = null;
+let retryCount = 0;
+const MAX_RETRIES = 10;
 
 async function initialize() {
   console.log('🔄 Inicializando cliente de WhatsApp (Baileys)...');
+  
+  // LIMPIAR socket anterior si existe (evita acumular conexiones fantasma)
+  if (sock) {
+    try {
+      sock.ev.removeAllListeners();
+      sock.end();
+    } catch(e) {}
+    sock = null;
+  }
   
   try {
     // Import dinámico porque Baileys v6 es ESM y nuestro proyecto usa CommonJS
@@ -20,10 +31,9 @@ async function initialize() {
     const makeWASocket = baileys.default;
     const { useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore } = baileys;
     
-    // Importar pino también dinámicamente (v9 también es ESM)
     const pinoModule = await import('pino');
     const pino = pinoModule.default;
-    const logger = pino({ level: 'warn' }); // Solo mostrar warnings y errores
+    const logger = pino({ level: 'warn' });
     
     const authDir = path.join(process.cwd(), 'auth_info');
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
@@ -36,18 +46,24 @@ async function initialize() {
         keys: makeCacheableSignalKeyStore(state.keys, logger)
       },
       browser: ['Three Inmobiliaria', 'Chrome', '120.0.0'],
-      logger: logger
+      logger: logger,
+      connectTimeoutMs: 60000, // 60 segundos para conectar
     });
     
     console.log('✅ Socket creado. Esperando eventos de conexión...');
     
-    // ─── Evento: Actualización de conexión ────────────────────────────
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
       
-      console.log('📡 connection.update:', JSON.stringify({ connection, qr: qr ? 'QR_PRESENT' : undefined, hasError: !!lastDisconnect?.error }));
+      console.log('📡 connection.update:', JSON.stringify({ 
+        connection, 
+        qr: qr ? 'QR_PRESENT' : undefined, 
+        hasError: !!lastDisconnect?.error,
+        statusCode: lastDisconnect?.error?.output?.statusCode
+      }));
       
       if (qr) {
+        retryCount = 0; // Reset retry count when we get a QR
         console.log('\n======================================================');
         console.log('📲 Nuevo código QR generado. Escanealo desde la web.');
         console.log('======================================================\n');
@@ -68,18 +84,32 @@ async function initialize() {
         console.log(`❌ [WhatsApp] Conexión cerrada (código: ${statusCode}). Error: ${lastDisconnect?.error?.message || 'ninguno'}. Reconectar: ${shouldReconnect}`);
         
         isReady = false;
-        latestQr = null;
-        latestQrDataUrl = null;
         
         if (shouldReconnect) {
-          // Espera progresiva para no saturar
-          const delay = 10000; // 10 segundos entre reintentos
-          console.log(`🔄 Reintentando conexión en ${delay/1000}s...`);
+          retryCount++;
+          
+          if (retryCount > MAX_RETRIES) {
+            console.log(`⚠️ [WhatsApp] Demasiados reintentos (${retryCount}). Esperando 5 minutos antes de reintentar...`);
+            latestQr = null;
+            latestQrDataUrl = null;
+            setTimeout(() => {
+              retryCount = 0;
+              initialize();
+            }, 5 * 60 * 1000); // 5 minutos
+            return;
+          }
+          
+          // Backoff exponencial: 10s, 20s, 40s, 80s...
+          const delay = Math.min(10000 * Math.pow(2, retryCount - 1), 120000);
+          console.log(`🔄 Reintento ${retryCount}/${MAX_RETRIES} en ${delay/1000}s...`);
           setTimeout(() => initialize(), delay);
         } else {
           console.log('⚠️ [WhatsApp] Sesión cerrada por el usuario. Se requiere nuevo QR.');
+          latestQr = null;
+          latestQrDataUrl = null;
           const fs = require('fs');
           try { fs.rmSync(authDir, { recursive: true, force: true }); } catch(e) {}
+          retryCount = 0;
           setTimeout(() => initialize(), 5000);
         }
       }
@@ -88,6 +118,7 @@ async function initialize() {
         isReady = true;
         latestQr = null;
         latestQrDataUrl = null;
+        retryCount = 0;
         console.log('✅ [WhatsApp] Cliente autenticado y listo para enviar mensajes.');
       }
     });
@@ -97,7 +128,7 @@ async function initialize() {
   } catch (err) {
     console.error('❌ [WhatsApp] Error crítico al inicializar:', err.message);
     console.error(err.stack);
-    setTimeout(() => initialize(), 15000);
+    setTimeout(() => initialize(), 30000);
   }
 }
 
