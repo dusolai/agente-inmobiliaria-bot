@@ -18,6 +18,7 @@ function initialize() {
   client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
+      executablePath: '/usr/bin/chromium', // <-- Fuerza el uso de Chromium del sistema operativo
       args: [
         '--no-sandbox', 
         '--disable-setuid-sandbox', 
