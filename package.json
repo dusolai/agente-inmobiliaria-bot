@@ -17,14 +17,14 @@
   "author": "Three Inmobiliaria",
   "license": "ISC",
   "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.16",
     "axios": "^1.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^4.21.0",
     "googleapis": "^144.0.0",
     "node-cron": "^3.0.3",
-    "qrcode-terminal": "^0.12.0",
-    "uuid": "^10.0.0",
-    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main"
+    "qrcode": "^1.5.4",
+    "uuid": "^10.0.0"
   }
 }

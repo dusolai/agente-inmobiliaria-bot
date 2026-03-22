@@ -1,13 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 
-// ─── Controladores Globales de Errores para evitar Crash de Puppeteer ──
+// ─── Controladores Globales de Errores ──────────────────────────────
 process.on('unhandledRejection', (reason, promise) => {
-  if (reason && reason.message && reason.message.includes('Execution context was destroyed')) {
-    console.log('⚠️ [Puppeteer] Contexto destruido durante recarga (Normal en vinculación inicial). Ignorando...');
-  } else {
-    console.error('⚠️ [Global] Rechazo de promesa no controlado:', reason);
-  }
+  console.error('⚠️ [Global] Rechazo de promesa no controlado:', reason);
 });
 
 const path = require('path');
@@ -57,8 +53,8 @@ app.get('/', (req, res) => {
     `);
   }
 
-  const qrString = whatsapp.getLatestQr();
-  if (!qrString) {
+  const qrDataUrl = whatsapp.getLatestQr();
+  if (!qrDataUrl) {
     return res.send(`
       <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
         <h2>⏳ Generando el código QR de WhatsApp...</h2>
@@ -67,17 +63,20 @@ app.get('/', (req, res) => {
     `);
   }
 
+  // Baileys genera el QR como base64 data URL, lo insertamos directamente
   res.send(`
     <!DOCTYPE html>
     <html lang="es">
-    <head><title>Vincular WhatsApp</title></head>
+    <head><title>Vincular WhatsApp</title>
+    <meta http-equiv="refresh" content="20">
+    </head>
     <body style="font-family: sans-serif; text-align: center; margin-top: 50px; background: #f0f2f5;">
       <h2>📲 Escanea este código QR con el WhatsApp de tu móvil</h2>
       <p>Abre WhatsApp > Ajustes > Dispositivos Vinculados > Vincular un dispositivo</p>
       <div style="background: white; padding: 20px; display: inline-block; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrString)}" alt="WhatsApp QR Code" />
+        <img src="${qrDataUrl}" alt="WhatsApp QR Code" width="300" height="300" />
       </div>
-      <p style="color: #555; font-size: 0.9em; margin-top: 20px;">Refresca la página manualmente si el código caduca (cada minuto).</p>
+      <p style="color: #555; font-size: 0.9em; margin-top: 20px;">La página se refresca automáticamente cada 20 segundos.</p>
       <p><a href="/" style="padding: 10px 20px; background: #3498db; color: white; border-radius: 5px; text-decoration: none;">Refrescar código</a></p>
     </body>
     </html>
@@ -105,7 +104,7 @@ app.listen(config.port, () => {
   const scheduler = require('./services/scheduler');
   scheduler.iniciar();
 
-  // ─── Iniciar cliente de WhatsApp Web (QR) ───────────────────────
+  // ─── Iniciar cliente de WhatsApp (Baileys) ───────────────────────
   const whatsapp = require('./services/whatsapp');
   whatsapp.initialize();
 });
