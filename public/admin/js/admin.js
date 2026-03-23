@@ -31,6 +31,18 @@ const formatEstado = (estado) => {
   return map[estado] || estado;
 };
 
+// Obtener botón de acción según el estado
+const getActionButtons = (leadId, estado) => {
+  if (estado === 'video_enviado') {
+    return `<button class="btn-secondary btn-small" onclick="simulateAction('${leadId}', 'video')">Simular Clic Video</button>`;
+  } else if (estado === 'video_visto') {
+    return `<button class="btn-secondary btn-small" onclick="simulateAction('${leadId}', 'reunion')">Simular Pre-registro Reunión</button>`;
+  } else if (estado === 'reunion_registrado') {
+    return `<button class="btn-secondary btn-small" onclick="simulateAction('${leadId}', 'asistencia')">Simular Asistir a Zoom</button>`;
+  }
+  return '<span style="color:var(--text-muted); font-size:12px;">✅ Proceso completado</span>';
+};
+
 // Fetch KPIs
 async function fetchStats() {
   try {
@@ -69,12 +81,15 @@ async function fetchLeads(estado = '') {
 
     tbody.innerHTML = data.leads.map(lead => `
       <tr>
-        <td><strong>${lead.nombre}</strong><br><small style="color:var(--text-muted)">${lead.email || '-'}</small></td>
+        <td>
+          <strong>${lead.nombre}</strong><br>
+          <small style="color:var(--text-muted)">ID: ${lead.id.split('-')[0]}...</small>
+        </td>
         <td>${lead.telefono}</td>
         <td><span class="badge ${getBadgeClass(lead.estado)}">${formatEstado(lead.estado)}</span></td>
         <td>${formatFecha(lead.createdAt)}</td>
         <td>
-          <button class="btn-secondary btn-small" onclick="testTransition('${lead.id}')">Simular Clic Video</button>
+          ${getActionButtons(lead.id, lead.estado)}
         </td>
       </tr>
     `).join('');
@@ -85,21 +100,45 @@ async function fetchLeads(estado = '') {
   }
 }
 
-// Handler rápido para simular que un prospecto hace clic en el vídeo
-async function testTransition(leadId) {
-  if(confirm('¿Simular clic en el botón del vídeo VSL para este usuario?')) {
+// Handler para simular transiciones completas
+async function simulateAction(leadId, tipo) {
+  let url = '';
+  let body = {};
+  let mensaje = '';
+  
+  if (tipo === 'video') {
+    mensaje = '¿Simular clic en el vídeo VSL para este usuario?';
+    url = '/tracking/video-click';
+    body = { leadId };
+  } else if (tipo === 'reunion') {
+    mensaje = '¿Simular registro en la reunión grupal para este usuario?';
+    url = '/tracking/reunion-registro';
+    body = { leadId };
+  } else if (tipo === 'asistencia') {
+    mensaje = '¿Simular Asistencia por Zoom (Cierre) para este usuario?';
+    url = '/webhook/zoom-attendance';
+    body = { leadId, attended: true };
+  }
+
+  if(confirm(mensaje)) {
     try {
-      const res = await fetch('/tracking/video-click', {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadId })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
-      alert(data.message || 'Estado actualizado');
+      
+      if (res.ok) {
+        alert('✨ ' + (data.message || 'Estado actualizado y WhatsApp enviado con éxito.'));
+      } else {
+        alert('❌ Error: ' + data.error);
+      }
+      
       fetchLeads();
       fetchStats();
     } catch (err) {
-      alert('Error en simulación');
+      alert('Error de red en simulación');
     }
   }
 }
