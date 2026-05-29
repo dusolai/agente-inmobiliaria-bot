@@ -5,9 +5,17 @@ const { v4: uuidv4 } = require('uuid');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 
+// ─── Perfiles de lead (segmentación por la pregunta de filtrado) ──
+const LEAD_PROFILES = {
+  PROFESIONAL: 'profesional',     // agente inmobiliario / agencia
+  EMPRENDEDOR: 'emprendedor',     // busca un sobresueldo / colaborador
+  SIN_DEFINIR: 'sin_definir',
+};
+
 // ─── Estados posibles del Lead ────────────────────────────────────
 const LEAD_STATES = {
   NUEVO: 'nuevo',
+  ESPERANDO_CUALIFICACION: 'esperando_cualificacion', // se envió la pregunta de filtrado
   VIDEO_ENVIADO: 'video_enviado',
   VIDEO_VISTO: 'video_visto',
   REUNION_REGISTRADO: 'reunion_registrado',
@@ -18,7 +26,8 @@ const LEAD_STATES = {
 
 // ─── Transiciones válidas de estado ───────────────────────────────
 const VALID_TRANSITIONS = {
-  [LEAD_STATES.NUEVO]: [LEAD_STATES.VIDEO_ENVIADO, LEAD_STATES.DESCARTADO],
+  [LEAD_STATES.NUEVO]: [LEAD_STATES.ESPERANDO_CUALIFICACION, LEAD_STATES.VIDEO_ENVIADO, LEAD_STATES.DESCARTADO],
+  [LEAD_STATES.ESPERANDO_CUALIFICACION]: [LEAD_STATES.VIDEO_ENVIADO, LEAD_STATES.DESCARTADO],
   [LEAD_STATES.VIDEO_ENVIADO]: [LEAD_STATES.VIDEO_VISTO, LEAD_STATES.DESCARTADO],
   [LEAD_STATES.VIDEO_VISTO]: [LEAD_STATES.REUNION_REGISTRADO, LEAD_STATES.DESCARTADO],
   [LEAD_STATES.REUNION_REGISTRADO]: [LEAD_STATES.REUNION_ASISTIO, LEAD_STATES.DESCARTADO],
@@ -59,11 +68,13 @@ function createLead({ nombre, email, telefono, fuente = 'formulario' }) {
     email: email || '',
     telefono: telefono || '',
     fuente,
+    perfil: LEAD_PROFILES.SIN_DEFINIR,
     estado: LEAD_STATES.NUEVO,
     createdAt: now,
     updatedAt: now,
     historial: [{ estado: LEAD_STATES.NUEVO, fecha: now }],
     recordatorios: {
+      fase1: { enviados: 0, ultimoEnvio: null }, // recordatorios de la pregunta de cualificación
       fase2: { enviados: 0, ultimoEnvio: null },
       fase3: { enviados: 0, ultimoEnvio: null },
     },
@@ -194,6 +205,7 @@ function getStats() {
 
 module.exports = {
   LEAD_STATES,
+  LEAD_PROFILES,
   VALID_TRANSITIONS,
   createLead,
   getAllLeads,

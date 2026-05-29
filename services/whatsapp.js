@@ -127,7 +127,38 @@ async function initialize() {
     });
     
     sock.ev.on('creds.update', saveCreds);
-    
+
+    // ─── Mensajes entrantes: respuesta a la pregunta de cualificación ──
+    sock.ev.on('messages.upsert', async ({ messages: incoming, type }) => {
+      if (type !== 'notify') return;
+
+      for (const msg of incoming) {
+        try {
+          if (!msg.message || msg.key.fromMe) continue;
+
+          const jid = msg.key.remoteJid || '';
+          if (!jid.endsWith('@s.whatsapp.net')) continue; // ignorar grupos/estados
+
+          const telefono = jid.replace('@s.whatsapp.net', '');
+          const m = msg.message;
+          const texto =
+            m.conversation ||
+            m.extendedTextMessage?.text ||
+            m.buttonsResponseMessage?.selectedButtonId ||
+            m.buttonsResponseMessage?.selectedDisplayText ||
+            m.listResponseMessage?.title ||
+            '';
+
+          if (!texto) continue;
+
+          const conversationFlow = require('./conversationFlow');
+          await conversationFlow.handleIncoming(telefono, texto);
+        } catch (err) {
+          console.error('❌ [WhatsApp] Error procesando mensaje entrante:', err.message);
+        }
+      }
+    });
+
   } catch (err) {
     console.error('❌ [WhatsApp] Error crítico al inicializar:', err.message);
     console.error(err.stack);

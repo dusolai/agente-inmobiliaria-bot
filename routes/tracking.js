@@ -48,7 +48,7 @@ router.post('/video-click', async (req, res) => {
     // 2. Enviar mensaje de respaldo con enlace a reunión grupal (opcional)
     const texto = messages.mensajeVideoVisto({
       nombre: lead.nombre,
-      enlaceReunion: config.landing.reunionGrupalUrl,
+      enlaceReunion: config.landing.calendlyGrupalUrl,
     });
     await whatsapp.sendTextMessage(lead.telefono, texto);
 

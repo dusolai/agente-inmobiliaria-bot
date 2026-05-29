@@ -26,6 +26,16 @@ module.exports = {
   landing: {
     vslVideoUrl: process.env.VSL_VIDEO_URL || 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     landingUrl: process.env.LANDING_URL || 'http://localhost:3000',
+
+    // Dos landing pages según el perfil del lead (reunión 29-05)
+    landingProfesionalUrl: process.env.LANDING_PROFESIONAL_URL || process.env.LANDING_URL || 'http://localhost:3000',
+    landingEmprendedorUrl: process.env.LANDING_EMPRENDEDOR_URL || process.env.LANDING_URL || 'http://localhost:3000',
+
+    // Dos integraciones de Calendly: grupal (genérica) e individual (post-cierre)
+    calendlyGrupalUrl: process.env.CALENDLY_GRUPAL_URL || process.env.REUNION_GRUPAL_URL || '#',
+    calendlyIndividualUrl: process.env.CALENDLY_INDIVIDUAL_URL || process.env.CALENDLY_URL || '#',
+
+    // Compatibilidad con nombres antiguos
     calendlyUrl: process.env.CALENDLY_URL || '#',
     reunionGrupalUrl: process.env.REUNION_GRUPAL_URL || '#',
   },
@@ -33,8 +43,10 @@ module.exports = {
   agent: {
     empresaNombre: process.env.EMPRESA_NOMBRE || 'Three Inmobiliaria',
     expertoNombre: process.env.EXPERTO_NOMBRE || 'Nuestro Experto',
-    reminderIntervalHours: parseInt(process.env.REMINDER_INTERVAL_HOURS) || 48,
+    // Reunión 22-05: recordatorios cada 24 h (antes 48)
+    reminderIntervalHours: parseInt(process.env.REMINDER_INTERVAL_HOURS) || 24,
     maxReminders: parseInt(process.env.MAX_REMINDERS) || 3,
-    delayedButtonSeconds: parseInt(process.env.DELAYED_BUTTON_SECONDS) || 300,
+    // Reunión 22-05/Agente: el botón de agenda aparece tras 1 min de vídeo
+    delayedButtonSeconds: parseInt(process.env.DELAYED_BUTTON_SECONDS) || 60,
   },
 };

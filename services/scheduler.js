@@ -30,6 +30,49 @@ const reunionReminders = [
 ];
 
 /**
+ * Procesa recordatorios de Fase 1: leads a los que se envió la pregunta de
+ * filtrado pero aún no han respondido (estado esperando_cualificacion).
+ * Reenvía la pregunta cada 24 h, máximo 3 veces, y luego descarta.
+ */
+async function procesarRecordatoriosFase1() {
+  const leads = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION });
+  const ahora = Date.now();
+
+  for (const lead of leads) {
+    const fase1 = (lead.recordatorios && lead.recordatorios.fase1) || { enviados: 0, ultimoEnvio: null };
+
+    if (fase1.enviados >= MAX_REMINDERS) {
+      console.log(`🗑  [Scheduler] Descartando lead (no respondió la cualificación): ${lead.nombre}`);
+      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
+      await whatsapp.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+      continue;
+    }
+
+    const referencia = fase1.ultimoEnvio
+      ? new Date(fase1.ultimoEnvio).getTime()
+      : new Date(lead.createdAt).getTime();
+
+    if (ahora - referencia < REMINDER_INTERVAL_MS) continue;
+
+    console.log(`🔔 [Scheduler] Recordatorio Cualificación #${fase1.enviados + 1} → ${lead.nombre}`);
+    await whatsapp.sendTextMessage(
+      lead.telefono,
+      messages.mensajeReactivacion({ nombre: lead.nombre })
+    );
+
+    leadManager.updateLead(lead.id, {
+      recordatorios: {
+        ...lead.recordatorios,
+        fase1: {
+          enviados: fase1.enviados + 1,
+          ultimoEnvio: new Date().toISOString(),
+        },
+      },
+    });
+  }
+}
+
+/**
  * Procesa recordatorios de Fase 2: leads que recibieron el video pero no lo han visto.
  */
 async function procesarRecordatoriosFase2() {
@@ -109,7 +152,7 @@ async function procesarRecordatoriosFase3() {
     console.log(`🔔 [Scheduler] Recordatorio Reunión #${fase3.enviados + 1} → ${lead.nombre}`);
     await whatsapp.sendTextMessage(
       lead.telefono,
-      msgFn({ nombre: lead.nombre, enlaceReunion: config.landing.reunionGrupalUrl })
+      msgFn({ nombre: lead.nombre, enlaceReunion: config.landing.calendlyGrupalUrl })
     );
 
     leadManager.updateLead(lead.id, {
@@ -129,6 +172,7 @@ async function procesarRecordatoriosFase3() {
  */
 async function ejecutarCiclo() {
   console.log(`\n⏰ [Scheduler] Ciclo de recordatorios — ${new Date().toLocaleString()}`);
+  await procesarRecordatoriosFase1();
   await procesarRecordatoriosFase2();
   await procesarRecordatoriosFase3();
   console.log(`✅ [Scheduler] Ciclo completado\n`);

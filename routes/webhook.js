@@ -32,15 +32,16 @@ router.post('/new-lead', async (req, res) => {
     // 1. Crear lead
     const lead = leadManager.createLead({ nombre, email, telefono, fuente });
 
-    // 2. Transicionar a "video_enviado"
-    leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_ENVIADO);
+    // 2. Transicionar a "esperando_cualificacion" (reunión 29-05)
+    leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
 
-    // 3. Enviar mensaje de bienvenida por WhatsApp
-    const enlaceVideo = `${config.landing.landingUrl}?lead=${lead.id}`;
-    const texto = messages.mensajeBienvenida({ nombre, enlaceVideo });
+    // 3. Enviar mensaje de reactivación con la pregunta de filtrado.
+    //    La respuesta del lead la procesa services/conversationFlow.js y, según
+    //    su perfil, recibe la landing profesional o emprendedor con el vídeo.
+    const texto = messages.mensajeReactivacion({ nombre });
     const waResult = await whatsapp.sendTextMessage(telefono, texto);
 
-    console.log(`🆕 [Webhook] Nuevo lead: ${nombre} (${telefono})`);
+    console.log(`🆕 [Webhook] Nuevo lead: ${nombre} (${telefono}) — pregunta de filtrado enviada`);
 
     res.status(201).json({
       success: true,
@@ -78,7 +79,7 @@ router.post('/zoom-attendance', async (req, res) => {
 
         const texto = messages.mensajeCierre({
           nombre: lead.nombre,
-          enlaceCalendly: config.landing.calendlyUrl,
+          enlaceCalendly: config.landing.calendlyIndividualUrl,
         });
         await whatsapp.sendTextMessage(lead.telefono, texto);
 
@@ -102,7 +103,7 @@ router.post('/zoom-attendance', async (req, res) => {
           leadManager.transitionState(match.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
           const texto = messages.mensajeCierre({
             nombre: match.nombre,
-            enlaceCalendly: config.landing.calendlyUrl,
+            enlaceCalendly: config.landing.calendlyIndividualUrl,
           });
           await whatsapp.sendTextMessage(match.telefono, texto);
           resultados.push({ lead: match.nombre, status: 'asistio' });

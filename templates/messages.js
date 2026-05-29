@@ -5,7 +5,52 @@ const config = require('../config/config');
  * Cada función recibe un objeto con las variables necesarias y devuelve el texto final.
  */
 
-// ─── A. Mensaje de Bienvenida (Inicio) ───────────────────────────
+// ─── A. Mensaje de Reactivación con pregunta de filtrado (29-05) ──
+// Inicia la conversación, personaliza con el nombre y segmenta al lead.
+function mensajeReactivacion({ nombre }) {
+  return (
+    `Hola ${nombre}, ¿qué tal? 👋\n\n` +
+    `Hace un tiempo pediste información sobre nuestro proyecto inmobiliario y justo ahora estamos reabriendo nuevas plazas.\n\n` +
+    `Antes de enviarte la información, quería preguntarte algo rápido para pasarte directamente a lo que más te encaje:\n\n` +
+    `*¿Actualmente trabajas en el sector inmobiliario o estás buscando una oportunidad adicional para generar un sobresueldo?*\n\n` +
+    `Responde con el número:\n` +
+    `1️⃣ Soy agente / trabajo en una inmobiliaria\n` +
+    `2️⃣ Busco una oportunidad para generar un sobresueldo`
+  );
+}
+
+// Re-pregunta si la respuesta no se entiende
+function mensajeReintentarCualificacion({ nombre }) {
+  return (
+    `Perdona ${nombre}, no te he entendido. 🙏\n\n` +
+    `Para enviarte la información correcta, responde con un número:\n` +
+    `1️⃣ Soy agente / trabajo en una inmobiliaria\n` +
+    `2️⃣ Busco una oportunidad para generar un sobresueldo`
+  );
+}
+
+// ─── A2. Ramas según el perfil ───────────────────────────────────
+function mensajeRamaProfesional({ nombre, enlaceLanding }) {
+  return (
+    `¡Genial, ${nombre}! 🙌\n\n` +
+    `Creo que te puede interesar más la parte profesional: estamos trabajando con agentes y agencias inmobiliarias.\n\n` +
+    `Aquí tienes toda la información:\n` +
+    `👉 ${enlaceLanding}\n\n` +
+    `Cuando la veas, te explico también cómo lo están aplicando otros profesionales del sector. 🎬`
+  );
+}
+
+function mensajeRamaEmprendedor({ nombre, enlaceLanding }) {
+  return (
+    `¡Perfecto, ${nombre}! 🚀\n\n` +
+    `Lo que más te encaja es nuestro modelo de emprendedores y colaboradores que generan ingresos dentro del sector inmobiliario *sin necesidad de dedicarse profesionalmente a ello*.\n\n` +
+    `Te dejo aquí toda la información:\n` +
+    `👉 ${enlaceLanding}\n\n` +
+    `Échale un vistazo al vídeo y, al terminar, se activará el siguiente paso. 🎬`
+  );
+}
+
+// ─── A0. (Legacy) Mensaje de Bienvenida directo a vídeo ───────────
 function mensajeBienvenida({ nombre, enlaceVideo }) {
   return (
     `¡Hola ${nombre}! 👋 Soy el asistente de ${config.agent.empresaNombre}.\n\n` +
@@ -82,11 +127,12 @@ function recordatorioReunion3({ nombre, enlaceReunion }) {
   );
 }
 
-// ─── E. Rama "Sí asistió a la reunión" (Cierre / Agenda 1a1) ─────
+// ─── E. Rama "Sí asistió a la reunión" (Cierre grupal → individual) ─
+// Tras la sesión grupal, al interesado se le ofrece una reunión individual (29-05).
 function mensajeCierre({ nombre, enlaceCalendly }) {
   return (
-    `¡Hola ${nombre}! Gracias por participar hoy. 🙌\n\n` +
-    `Dado tu interés, ${config.agent.expertoNombre} ha autorizado una Sesión 1 a 1 contigo para trazar un plan a medida.\n\n` +
+    `¡Hola ${nombre}! Gracias por participar en la sesión de hoy. 🙌\n\n` +
+    `Ya tienes toda la información. Si quieres dar el paso e iniciar en el proyecto, puedes reservar una *reunión individual* para verlo en detalle.\n\n` +
     `Agenda tu hueco personal aquí (plazas limitadas):\n` +
     `✅ ${enlaceCalendly}`
   );
@@ -102,6 +148,10 @@ function mensajeDescarte({ nombre }) {
 }
 
 module.exports = {
+  mensajeReactivacion,
+  mensajeReintentarCualificacion,
+  mensajeRamaProfesional,
+  mensajeRamaEmprendedor,
   mensajeBienvenida,
   recordatorioVideo1,
   recordatorioVideo2,
