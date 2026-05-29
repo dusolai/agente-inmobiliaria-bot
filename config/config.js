@@ -25,11 +25,12 @@ module.exports = {
 
   landing: {
     vslVideoUrl: process.env.VSL_VIDEO_URL || 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    landingUrl: process.env.LANDING_URL || 'http://localhost:3000',
+    landingUrl: process.env.LANDING_URL || 'https://three-inmobiliaria-emprende.pages.dev/',
 
-    // Dos landing pages según el perfil del lead (reunión 29-05)
-    landingProfesionalUrl: process.env.LANDING_PROFESIONAL_URL || process.env.LANDING_URL || 'http://localhost:3000',
-    landingEmprendedorUrl: process.env.LANDING_EMPRENDEDOR_URL || process.env.LANDING_URL || 'http://localhost:3000',
+    // Dos landing pages reales según el perfil del lead (reunión 29-05).
+    // Profesional → agentes inmobiliarios | Emprendedor → sobresueldo/colaboradores.
+    landingProfesionalUrl: process.env.LANDING_PROFESIONAL_URL || 'https://threeinmobiliaria.pages.dev/',
+    landingEmprendedorUrl: process.env.LANDING_EMPRENDEDOR_URL || 'https://three-inmobiliaria-emprende.pages.dev/',
 
     // Dos integraciones de Calendly: grupal (genérica) e individual (post-cierre)
     calendlyGrupalUrl: process.env.CALENDLY_GRUPAL_URL || process.env.REUNION_GRUPAL_URL || '#',
