@@ -1,6 +1,6 @@
 const config = require('../config/config');
 const leadManager = require('./leadManager');
-const whatsapp = require('./whatsapp');
+const messaging = require('./messaging');
 const messages = require('../templates/messages');
 
 /**
@@ -79,7 +79,7 @@ async function handleIncoming(telefono, texto) {
   const perfil = interpretarRespuesta(texto);
 
   if (!perfil) {
-    await whatsapp.sendTextMessage(
+    await messaging.sendTextMessage(
       lead.telefono,
       messages.mensajeReintentarCualificacion({ nombre: lead.nombre })
     );
@@ -100,7 +100,7 @@ async function handleIncoming(telefono, texto) {
     : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
 
   console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing enviada`);
-  await whatsapp.sendTextMessage(lead.telefono, texto2);
+  await messaging.sendTextMessage(lead.telefono, texto2);
 }
 
 module.exports = { handleIncoming, interpretarRespuesta, enlaceLandingPorPerfil };

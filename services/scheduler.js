@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const config = require('../config/config');
 const leadManager = require('./leadManager');
-const whatsapp = require('./whatsapp');
+const messaging = require('./messaging');
 const messages = require('../templates/messages');
 
 /**
@@ -44,7 +44,7 @@ async function procesarRecordatoriosFase1() {
     if (fase1.enviados >= MAX_REMINDERS) {
       console.log(`🗑  [Scheduler] Descartando lead (no respondió la cualificación): ${lead.nombre}`);
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
-      await whatsapp.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+      await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
       continue;
     }
 
@@ -55,7 +55,7 @@ async function procesarRecordatoriosFase1() {
     if (ahora - referencia < REMINDER_INTERVAL_MS) continue;
 
     console.log(`🔔 [Scheduler] Recordatorio Cualificación #${fase1.enviados + 1} → ${lead.nombre}`);
-    await whatsapp.sendTextMessage(
+    await messaging.sendTextMessage(
       lead.telefono,
       messages.mensajeReactivacion({ nombre: lead.nombre })
     );
@@ -87,7 +87,7 @@ async function procesarRecordatoriosFase2() {
     if (fase2.enviados >= MAX_REMINDERS) {
       console.log(`🗑  [Scheduler] Descartando lead (máx recordatorios Fase 2): ${lead.nombre}`);
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
-      await whatsapp.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+      await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
       continue;
     }
 
@@ -104,7 +104,7 @@ async function procesarRecordatoriosFase2() {
     const enlaceVideo = `${config.landing.landingUrl}?lead=${lead.id}`;
 
     console.log(`🔔 [Scheduler] Recordatorio Video #${fase2.enviados + 1} → ${lead.nombre}`);
-    await whatsapp.sendTextMessage(
+    await messaging.sendTextMessage(
       lead.telefono,
       msgFn({ nombre: lead.nombre, enlaceVideo })
     );
@@ -136,7 +136,7 @@ async function procesarRecordatoriosFase3() {
     if (fase3.enviados >= MAX_REMINDERS) {
       console.log(`🗑  [Scheduler] Descartando lead (máx recordatorios Fase 3): ${lead.nombre}`);
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
-      await whatsapp.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+      await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
       continue;
     }
 
@@ -150,7 +150,7 @@ async function procesarRecordatoriosFase3() {
     const msgFn = reunionReminders[idx];
 
     console.log(`🔔 [Scheduler] Recordatorio Reunión #${fase3.enviados + 1} → ${lead.nombre}`);
-    await whatsapp.sendTextMessage(
+    await messaging.sendTextMessage(
       lead.telefono,
       msgFn({ nombre: lead.nombre, enlaceReunion: config.landing.calendlyGrupalUrl })
     );

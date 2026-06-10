@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const config = require('../config/config');
 const leadManager = require('../services/leadManager');
-const whatsapp = require('../services/whatsapp');
+const messaging = require('../services/messaging');
 const messages = require('../templates/messages');
 
 /**
@@ -50,7 +50,7 @@ router.post('/video-click', async (req, res) => {
       nombre: lead.nombre,
       enlaceReunion: config.landing.calendlyGrupalUrl,
     });
-    await whatsapp.sendTextMessage(lead.telefono, texto);
+    await messaging.sendTextMessage(lead.telefono, texto);
 
     res.json({
       success: true,

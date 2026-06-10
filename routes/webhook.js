@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const config = require('../config/config');
 const leadManager = require('../services/leadManager');
-const whatsapp = require('../services/whatsapp');
+const messaging = require('../services/messaging');
 const messages = require('../templates/messages');
 
 /**
@@ -39,7 +39,7 @@ router.post('/new-lead', async (req, res) => {
     //    La respuesta del lead la procesa services/conversationFlow.js y, según
     //    su perfil, recibe la landing profesional o emprendedor con el vídeo.
     const texto = messages.mensajeReactivacion({ nombre });
-    const waResult = await whatsapp.sendTextMessage(telefono, texto);
+    const waResult = await messaging.sendTextMessage(telefono, texto);
 
     console.log(`🆕 [Webhook] Nuevo lead: ${nombre} (${telefono}) — pregunta de filtrado enviada`);
 
@@ -81,7 +81,7 @@ router.post('/zoom-attendance', async (req, res) => {
           nombre: lead.nombre,
           enlaceCalendly: config.landing.calendlyIndividualUrl,
         });
-        await whatsapp.sendTextMessage(lead.telefono, texto);
+        await messaging.sendTextMessage(lead.telefono, texto);
 
         console.log(`🤝 [Webhook] Lead asistió a reunión: ${lead.nombre}`);
       }
@@ -105,7 +105,7 @@ router.post('/zoom-attendance', async (req, res) => {
             nombre: match.nombre,
             enlaceCalendly: config.landing.calendlyIndividualUrl,
           });
-          await whatsapp.sendTextMessage(match.telefono, texto);
+          await messaging.sendTextMessage(match.telefono, texto);
           resultados.push({ lead: match.nombre, status: 'asistio' });
         }
       }

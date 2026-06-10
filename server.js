@@ -107,4 +107,9 @@ app.listen(config.port, () => {
   // ─── Iniciar cliente de WhatsApp (Baileys) ───────────────────────
   const whatsapp = require('./services/whatsapp');
   whatsapp.initialize();
+
+  // ─── Iniciar adaptador de Telegram (modo piloto) ─────────────────
+  // Si TELEGRAM_BOT_TOKEN está vacío, el adaptador se salta solo.
+  const telegram = require('./services/telegram');
+  telegram.initialize();
 });

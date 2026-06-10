@@ -11,6 +11,11 @@ module.exports = {
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
   },
 
+  // Canal Telegram (modo piloto previo a producción)
+  telegram: {
+    botToken: process.env.TELEGRAM_BOT_TOKEN || '',
+  },
+
   google: {
     sheetsId: process.env.GOOGLE_SHEETS_ID || '',
     serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '',
