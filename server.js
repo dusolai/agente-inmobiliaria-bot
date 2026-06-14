@@ -35,9 +35,10 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ─── Ruta catch-all para SPA ──────────────────────────────────────
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
+// ─── /admin redirige al panel CRM en vivo ─────────────────────────
+// (antes había una segunda interfaz separada; ahora todo vive en /monitor.html)
+app.get(['/admin', '/admin/', '/crm'], (req, res) => {
+  res.redirect('/monitor.html');
 });
 
 // ─── Ruta principal (Generación Visual de QR) ─────────────────────

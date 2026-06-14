@@ -107,4 +107,50 @@ router.get('/stats/activity', (req, res) => {
   res.json(activityLog.getStats());
 });
 
+/**
+ * GET /api/system/status
+ * Estado de los componentes del sistema, para el panel CRM.
+ */
+router.get('/system/status', (req, res) => {
+  const whatsapp = require('../services/whatsapp');
+  const telegram = require('../services/telegram');
+  const config = require('../config/config');
+  res.json({
+    whatsapp: { connected: whatsapp.isConfigured() },
+    telegram: { enabled: telegram.isReady() },
+    calendly: {
+      grupal: Boolean(config.landing.calendlyGrupalUrl && config.landing.calendlyGrupalUrl !== '#'),
+      individual: Boolean(config.landing.calendlyIndividualUrl && config.landing.calendlyIndividualUrl !== '#'),
+    },
+    backendPublicUrl: config.backendPublicUrl,
+  });
+});
+
+/**
+ * POST /api/leads/:id/resend-question
+ * Reenvía la pregunta de filtrado al lead y lo retrocede a
+ * esperando_cualificacion (útil para repetir la prueba o reactivar a un lead
+ * que se quedó parado).
+ */
+router.post('/leads/:id/resend-question', async (req, res) => {
+  try {
+    const messaging = require('../services/messaging');
+    const messages = require('../templates/messages');
+    const activityLog = require('../services/activityLog');
+    const lead = leadManager.getLeadById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
+
+    leadManager.updateLead(lead.id, {
+      estado: leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION,
+      perfil: leadManager.LEAD_PROFILES.SIN_DEFINIR,
+    });
+    activityLog.appendActivity(lead.id, 'question_resent', { manual: true });
+    await messaging.sendTextMessage(lead.telefono, messages.mensajeReactivacion({ nombre: lead.nombre }));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ [API] Error resend-question:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
