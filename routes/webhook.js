@@ -4,6 +4,7 @@ const config = require('../config/config');
 const leadManager = require('../services/leadManager');
 const messaging = require('../services/messaging');
 const conversationFlow = require('../services/conversationFlow');
+const activityLog = require('../services/activityLog');
 const messages = require('../templates/messages');
 
 /**
@@ -72,7 +73,13 @@ router.post('/zoom-attendance', async (req, res) => {
       if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
 
       if (attended) {
-        // Transitionar a "reunion_asistio" y enviar enlace 1a1
+        // Registramos el momento exacto en el que detectamos su entrada
+        // a la reunión. En producción (con Zoom API) esto vendrá del polling
+        // de participantes de Zoom; en piloto lo dispara el panel /admin.
+        const duracionMinutos = req.body.duration || null;
+        activityLog.appendActivity(lead.id, 'meeting_joined', { duracionMinutos });
+
+        // Transicionamos a "reunion_asistio" y enviamos el cierre 1-a-1
         const result = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
         if (result.error) {
           return res.status(400).json({ error: result.error });

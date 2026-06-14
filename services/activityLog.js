@@ -78,12 +78,38 @@ function getStats() {
   const all = readAll();
   // Sets de leadIds que han alcanzado cada tipo de evento
   const leadsPorTipo = new Map(); // type -> Set(leadId)
+  const leadsCalGrupal = new Set();
+  const leadsCalIndividual = new Set();
+  const leadsEnEstado = new Map(); // estado -> Set(leadId)
+
   for (const e of all) {
     if (!leadsPorTipo.has(e.type)) leadsPorTipo.set(e.type, new Set());
     leadsPorTipo.get(e.type).add(e.leadId);
+
+    // Distinguimos por subtipo de Calendly (grupal vs individual)
+    if (e.type === 'calendly_intent' && e.meta && e.meta.tipo === 'grupal') {
+      leadsCalGrupal.add(e.leadId);
+    }
+    if (e.type === 'calendly_intent' && e.meta && e.meta.tipo === 'individual') {
+      leadsCalIndividual.add(e.leadId);
+    }
+
+    // Contamos cuántos leads alcanzaron cada estado del embudo (a través
+    // de state_changed con meta.to).
+    if (e.type === 'state_changed' && e.meta && e.meta.to) {
+      const st = e.meta.to;
+      if (!leadsEnEstado.has(st)) leadsEnEstado.set(st, new Set());
+      leadsEnEstado.get(st).add(e.leadId);
+    }
   }
+
   const counts = {};
   for (const [type, set] of leadsPorTipo.entries()) counts[type] = set.size;
+  counts['calendly_intent_grupal'] = leadsCalGrupal.size;
+  counts['calendly_intent_individual'] = leadsCalIndividual.size;
+  for (const [st, set] of leadsEnEstado.entries()) {
+    counts[`state_${st}`] = set.size;
+  }
 
   return {
     totalEventos: all.length,

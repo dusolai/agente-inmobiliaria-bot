@@ -337,16 +337,21 @@
 
 <script>
   const STAGES = [
-    { key: 'lead_created',        label: 'Creado',           tag: 'lead' },
-    { key: 'message_received',    label: '1ª respuesta',     tag: 'msg' },
-    { key: 'profile_set',         label: 'Cualificado',      tag: 'profile' },
-    { key: 'landing_view',        label: 'Abrió landing',    tag: 'lead' },
-    { key: 'video_play',          label: 'Le dio al play',   tag: 'video' },
-    { key: 'video_progress_25',   label: '25% vídeo',        tag: 'video' },
-    { key: 'video_progress_50',   label: '50% vídeo',        tag: 'video' },
-    { key: 'video_progress_75',   label: '75% vídeo',        tag: 'video' },
-    { key: 'video_complete',      label: 'Vídeo completo',   tag: 'video' },
-    { key: 'calendly_intent',     label: 'Clic en Calendly', tag: 'calendly' },
+    { key: 'lead_created',                 label: 'Creado',                tag: 'lead' },
+    { key: 'message_received',             label: '1ª respuesta',          tag: 'msg' },
+    { key: 'profile_set',                  label: 'Cualificado',           tag: 'profile' },
+    { key: 'landing_view',                 label: 'Abrió landing',         tag: 'lead' },
+    { key: 'video_play',                   label: 'Le dio al play',        tag: 'video' },
+    { key: 'video_progress_25',            label: '25% vídeo',             tag: 'video' },
+    { key: 'video_progress_50',            label: '50% vídeo',             tag: 'video' },
+    { key: 'video_progress_75',            label: '75% vídeo',             tag: 'video' },
+    { key: 'video_complete',               label: 'Vídeo completo',        tag: 'video' },
+    { key: 'calendly_intent_grupal',       label: 'Clic Calendly grupal',  tag: 'calendly' },
+    { key: 'state_reunion_registrado',     label: 'Reservó grupal',        tag: 'state' },
+    { key: 'meeting_joined',               label: 'Entró a la reunión',    tag: 'state' },
+    { key: 'state_reunion_asistio',        label: 'Asistió grupal',        tag: 'state' },
+    { key: 'calendly_intent_individual',   label: 'Clic Calendly 1-a-1',   tag: 'calendly' },
+    { key: 'state_agenda_1a1',             label: 'Reservó 1-a-1',         tag: 'state' },
   ];
 
   let selectedLeadId = null;
@@ -366,7 +371,7 @@
   function fmtTime(ts) { try { return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return ts; } }
   function fmtDateTime(ts) { try { return new Date(ts).toLocaleString('es-ES'); } catch { return ts; } }
   function eventTag(type) {
-    if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started' || type === 'question_resent') return 'state';
+    if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started' || type === 'question_resent' || type === 'meeting_joined') return 'state';
     if (type === 'message_received') return 'msg';
     if (type === 'profile_set') return 'profile';
     if (type.startsWith('video_') || type === 'calendly_button_revealed') return 'video';
@@ -393,6 +398,7 @@
       case 'calendly_click':     return 'clic en botón de la landing';
       case 'calendly_intent':    return `pulsó enlace ${m.tipo || ''}`;
       case 'calendly_booked':    return 'reserva confirmada';
+      case 'meeting_joined':     return m.duracionMinutos ? `entró a la reunión (${m.duracionMinutos} min)` : 'entró a la reunión';
       default:                   return JSON.stringify(m);
     }
   }
@@ -501,7 +507,7 @@
       <button class="btn primary" data-act="resend">Reenviar cuestionario</button>
       <button class="btn green" data-act="mark-video-visto" ${s === 'video_enviado' ? '' : 'disabled'}>Marcar vídeo visto</button>
       <button class="btn green" data-act="mark-registrado" ${s === 'video_visto' ? '' : 'disabled'}>Marcar registró a reunión</button>
-      <button class="btn green" data-act="mark-asistio" ${s === 'reunion_registrado' ? '' : 'disabled'}>Marcar asistió (envía cierre)</button>
+      <button class="btn green" data-act="mark-asistio" ${s === 'reunion_registrado' ? '' : 'disabled'}>Entró a la reunión (envía cierre 1-a-1)</button>
       <button class="btn warn" data-act="descartar" ${s === 'descartado' ? 'disabled' : ''}>Descartar</button>
       <button class="btn danger" data-act="eliminar">Eliminar lead</button>
     </div>`;
