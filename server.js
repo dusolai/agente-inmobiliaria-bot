@@ -16,6 +16,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ─── /admin redirige al panel CRM en vivo ─────────────────────────
+// IMPORTANTE: este redirect debe ir ANTES del static middleware, porque si no
+// express.static encuentra public/admin/index.html (panel antiguo) y lo sirve
+// directamente, sin pasar por nuestro redirect.
+app.get(['/admin', '/admin/', '/admin/index.html', '/crm'], (req, res) => {
+  res.redirect('/monitor.html');
+});
+
 // ─── Archivos estáticos ───────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -33,12 +41,6 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     env: config.env,
   });
-});
-
-// ─── /admin redirige al panel CRM en vivo ─────────────────────────
-// (antes había una segunda interfaz separada; ahora todo vive en /monitor.html)
-app.get(['/admin', '/admin/', '/crm'], (req, res) => {
-  res.redirect('/monitor.html');
 });
 
 // ─── Ruta principal (Generación Visual de QR) ─────────────────────
