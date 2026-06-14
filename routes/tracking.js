@@ -3,6 +3,7 @@ const router = express.Router();
 const config = require('../config/config');
 const leadManager = require('../services/leadManager');
 const messaging = require('../services/messaging');
+const conversationFlow = require('../services/conversationFlow');
 const messages = require('../templates/messages');
 
 /**
@@ -46,9 +47,16 @@ router.post('/video-click', async (req, res) => {
     console.log(`🎥 [Tracking] Video visto por: ${lead.nombre}`);
 
     // 2. Enviar mensaje de respaldo con enlace a reunión grupal (opcional)
+    // Enlace de Calendly personalizado: lleva el leadId en utm_content para
+    // poder atar la reserva al lead cuando llegue el webhook de Calendly
+    // (o cuando se redirija a /tracking/calendly-booked).
+    const enlaceReunion = conversationFlow.enlaceCalendlyConTracking(
+      config.landing.calendlyGrupalUrl,
+      leadManager.getLeadById(lead.id)
+    );
     const texto = messages.mensajeVideoVisto({
       nombre: lead.nombre,
-      enlaceReunion: config.landing.calendlyGrupalUrl,
+      enlaceReunion,
     });
     await messaging.sendTextMessage(lead.telefono, texto);
 
@@ -93,6 +101,69 @@ router.post('/reunion-registro', async (req, res) => {
   } catch (err) {
     console.error('❌ [Tracking] Error reunion-registro:', err.message);
     res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+/**
+ * GET /tracking/calendly-booked
+ * Página de confirmación a la que Calendly redirige cuando se completa una
+ * reserva. Acepta `leadId` directo o `utm_content=lead_<id>` (que es lo que
+ * envía Calendly si se configura el "Redirect to external site" con la
+ * variable {{utm_content}}).
+ *
+ * Acciones:
+ *  1. Localiza al lead.
+ *  2. Si está en estado video_visto → transiciona a reunion_registrado.
+ *  3. Envía un mensaje de confirmación por WhatsApp/Telegram.
+ *  4. Devuelve una página HTML de "¡Reserva confirmada!".
+ */
+router.get('/calendly-booked', async (req, res) => {
+  try {
+    const leadId =
+      req.query.leadId ||
+      conversationFlow.leadIdDesdeUtm(req.query.utm_content);
+
+    if (!leadId) {
+      return res.status(400).send('Falta leadId o utm_content');
+    }
+
+    const lead = leadManager.getLeadById(leadId);
+    if (!lead) {
+      return res.status(404).send('Lead no encontrado');
+    }
+
+    // Solo transicionar si tiene sentido (evita carreras y dobles clics)
+    if (lead.estado === leadManager.LEAD_STATES.VIDEO_VISTO) {
+      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_REGISTRADO);
+      console.log(`📅 [Tracking] Reserva confirmada vía Calendly: ${lead.nombre}`);
+
+      // Avisar al lead por WhatsApp/Telegram (opcional, agradable de tener)
+      try {
+        await messaging.sendTextMessage(
+          lead.telefono,
+          `¡Perfecto ${lead.nombre}! Tu reserva está confirmada. Te enviaremos un recordatorio antes de la reunión.`
+        );
+      } catch (e) {
+        console.error('No se pudo enviar la confirmación al lead:', e.message);
+      }
+    }
+
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8">
+<title>Reserva confirmada</title>
+<style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#faf8fc;color:#311B92;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;padding:1rem}
+.card{background:#fff;padding:3rem;border-radius:20px;box-shadow:0 20px 60px rgba(49,27,146,.1);max-width:480px}
+h1{margin:0 0 1rem;font-size:1.8rem}
+p{color:#5d6d7e;line-height:1.6}</style>
+</head><body><div class="card">
+<div style="font-size:3rem">✅</div>
+<h1>¡Reserva confirmada!</h1>
+<p>Te hemos enviado los detalles por mensaje. Nos vemos en la reunión.</p>
+</div></body></html>`);
+  } catch (err) {
+    console.error('❌ [Tracking] Error calendly-booked:', err.message);
+    res.status(500).send('Error interno');
   }
 });
 

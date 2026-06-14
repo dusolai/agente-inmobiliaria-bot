@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const config = require('../config/config');
 const leadManager = require('./leadManager');
 const messaging = require('./messaging');
+const conversationFlow = require('./conversationFlow');
 const messages = require('../templates/messages');
 
 /**
@@ -150,9 +151,13 @@ async function procesarRecordatoriosFase3() {
     const msgFn = reunionReminders[idx];
 
     console.log(`🔔 [Scheduler] Recordatorio Reunión #${fase3.enviados + 1} → ${lead.nombre}`);
+    const enlaceReunion = conversationFlow.enlaceCalendlyConTracking(
+      config.landing.calendlyGrupalUrl,
+      lead
+    );
     await messaging.sendTextMessage(
       lead.telefono,
-      msgFn({ nombre: lead.nombre, enlaceReunion: config.landing.calendlyGrupalUrl })
+      msgFn({ nombre: lead.nombre, enlaceReunion })
     );
 
     leadManager.updateLead(lead.id, {

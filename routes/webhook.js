@@ -3,6 +3,7 @@ const router = express.Router();
 const config = require('../config/config');
 const leadManager = require('../services/leadManager');
 const messaging = require('../services/messaging');
+const conversationFlow = require('../services/conversationFlow');
 const messages = require('../templates/messages');
 
 /**
@@ -77,9 +78,13 @@ router.post('/zoom-attendance', async (req, res) => {
           return res.status(400).json({ error: result.error });
         }
 
+        const enlaceCalendly = conversationFlow.enlaceCalendlyConTracking(
+          config.landing.calendlyIndividualUrl,
+          leadManager.getLeadById(lead.id)
+        );
         const texto = messages.mensajeCierre({
           nombre: lead.nombre,
-          enlaceCalendly: config.landing.calendlyIndividualUrl,
+          enlaceCalendly,
         });
         await messaging.sendTextMessage(lead.telefono, texto);
 
@@ -101,9 +106,13 @@ router.post('/zoom-attendance', async (req, res) => {
 
         if (match) {
           leadManager.transitionState(match.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
+          const enlaceCalendly = conversationFlow.enlaceCalendlyConTracking(
+            config.landing.calendlyIndividualUrl,
+            leadManager.getLeadById(match.id)
+          );
           const texto = messages.mensajeCierre({
             nombre: match.nombre,
-            enlaceCalendly: config.landing.calendlyIndividualUrl,
+            enlaceCalendly,
           });
           await messaging.sendTextMessage(match.telefono, texto);
           resultados.push({ lead: match.nombre, status: 'asistio' });

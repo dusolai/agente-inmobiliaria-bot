@@ -103,4 +103,47 @@ async function handleIncoming(telefono, texto) {
   await messaging.sendTextMessage(lead.telefono, texto2);
 }
 
-module.exports = { handleIncoming, interpretarRespuesta, enlaceLandingPorPerfil };
+/**
+ * Construye un enlace de Calendly personalizado por lead.
+ *
+ * Añade al enlace base parámetros que viajan con la reserva:
+ *  - utm_source / utm_medium / utm_content=lead_<id>  (visibles en el panel de
+ *    Calendly y en webhooks; permiten saber qué lead reservó qué).
+ *  - name / email (rellenan automáticamente el formulario de Calendly).
+ *
+ * En cuanto Calendly Standard esté activo, el webhook de Calendly recibirá
+ * estos datos y el endpoint /tracking/calendly-booked podrá mover al lead a
+ * "reunion_registrado" automáticamente.
+ */
+function enlaceCalendlyConTracking(baseUrl, lead) {
+  if (!baseUrl || baseUrl === '#') return baseUrl;
+  try {
+    const url = new URL(baseUrl);
+    url.searchParams.set('utm_source', 'embudo');
+    url.searchParams.set('utm_medium', 'whatsapp');
+    url.searchParams.set('utm_content', `lead_${lead.id}`);
+    if (lead.nombre && lead.nombre !== 'Sin nombre') url.searchParams.set('name', lead.nombre);
+    if (lead.email) url.searchParams.set('email', lead.email);
+    return url.toString();
+  } catch (e) {
+    // Si la URL no es válida, devolvemos la original tal cual
+    return baseUrl;
+  }
+}
+
+/**
+ * Extrae el leadId de un valor utm_content del tipo "lead_<uuid>".
+ */
+function leadIdDesdeUtm(utmContent) {
+  if (!utmContent || typeof utmContent !== 'string') return null;
+  const m = utmContent.match(/^lead_(.+)$/);
+  return m ? m[1] : null;
+}
+
+module.exports = {
+  handleIncoming,
+  interpretarRespuesta,
+  enlaceLandingPorPerfil,
+  enlaceCalendlyConTracking,
+  leadIdDesdeUtm,
+};
