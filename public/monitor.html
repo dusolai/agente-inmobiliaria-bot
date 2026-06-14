@@ -64,8 +64,14 @@
   .cols{display:grid;grid-template-columns:340px 1fr;gap:1.2rem}
   @media (max-width:880px){.cols{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
 
+  /* Filtros por fase */
+  .lead-filters{display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.7rem}
+  .lead-filters button{font-size:.7rem;font-weight:700;padding:.32rem .6rem;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;transition:all .15s}
+  .lead-filters button:hover{background:#f4f1fa;color:var(--purple);border-color:rgba(49,27,146,.25)}
+  .lead-filters button.active{background:var(--purple);color:#fff;border-color:var(--purple)}
+
   /* Leads list */
-  .leads-list{max-height:560px;overflow-y:auto}
+  .leads-list{max-height:520px;overflow-y:auto}
   .lead{padding:.7rem .9rem;border-bottom:1px solid var(--line);cursor:pointer;transition:background .15s;display:flex;justify-content:space-between;align-items:center;gap:.6rem}
   .lead:hover{background:#f4f1fa}
   .lead.active{background:linear-gradient(90deg,rgba(255,107,53,.08),transparent);border-left:3px solid var(--orange);padding-left:calc(.9rem - 3px)}
@@ -183,6 +189,16 @@
     <div class="cols">
       <div class="panel">
         <h2>Leads <small id="lead-count">0</small></h2>
+        <div class="lead-filters" id="leadFilters">
+          <button data-f="" class="active">Todos</button>
+          <button data-f="esperando_cualificacion">Cualificación</button>
+          <button data-f="video_enviado">Pdte. vídeo</button>
+          <button data-f="video_visto">Vídeo visto</button>
+          <button data-f="reunion_registrado">Registrado</button>
+          <button data-f="reunion_asistio">Asistió</button>
+          <button data-f="agenda_1a1">Agenda 1a1</button>
+          <button data-f="descartado">Descartados</button>
+        </div>
         <div id="leads" class="leads-list">
           <div class="empty">Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span></div>
         </div>
@@ -335,6 +351,7 @@
 
   let selectedLeadId = null;
   let currentTab = 'inicio';
+  let leadFilter = ''; // '' = todos; o un estado concreto
 
   const $ = (id) => document.getElementById(id);
 
@@ -432,8 +449,11 @@
         </div>`;
       }).join('');
 
-      const leads = (leadsResp.leads || []).slice().sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-      $('lead-count').textContent = leads.length ? `${leads.length} totales` : '';
+      const allLeads = (leadsResp.leads || []).slice().sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      const leads = leadFilter ? allLeads.filter(l => l.estado === leadFilter) : allLeads;
+      $('lead-count').textContent = leadFilter
+        ? `${leads.length} de ${allLeads.length}`
+        : (allLeads.length ? `${allLeads.length} totales` : '');
 
       if (leads.length === 0) {
         $('leads').innerHTML = `<div class="empty">Esperando actividad…<br><br>
@@ -578,6 +598,13 @@
   }
   document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   document.querySelectorAll('[data-internal]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); switchTab(a.dataset.internal); }));
+
+  // ─── Filtros de leads por fase ─────────────────────────
+  document.querySelectorAll('#leadFilters button').forEach(b => b.addEventListener('click', () => {
+    leadFilter = b.dataset.f;
+    document.querySelectorAll('#leadFilters button').forEach(bb => bb.classList.toggle('active', bb.dataset.f === leadFilter));
+    refresh();
+  }));
 
   // ─── Copiar al portapapeles ────────────────────────────
   document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async (e) => {
