@@ -151,10 +151,7 @@ async function procesarRecordatoriosFase3() {
     const msgFn = reunionReminders[idx];
 
     console.log(`🔔 [Scheduler] Recordatorio Reunión #${fase3.enviados + 1} → ${lead.nombre}`);
-    const enlaceReunion = conversationFlow.enlaceCalendlyConTracking(
-      config.landing.calendlyGrupalUrl,
-      lead
-    );
+    const enlaceReunion = conversationFlow.enlaceRedirectorCalendly(lead, 'grupal');
     await messaging.sendTextMessage(
       lead.telefono,
       msgFn({ nombre: lead.nombre, enlaceReunion })

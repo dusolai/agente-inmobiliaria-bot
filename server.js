@@ -23,6 +23,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/webhook', require('./routes/webhook'));
 app.use('/api', require('./routes/api'));
 app.use('/tracking', require('./routes/tracking'));
+app.use('/r', require('./routes/redirector'));
 
 // ─── Ruta de salud ────────────────────────────────────────────────
 app.get('/health', (req, res) => {

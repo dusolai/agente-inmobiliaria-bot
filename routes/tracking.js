@@ -4,6 +4,7 @@ const config = require('../config/config');
 const leadManager = require('../services/leadManager');
 const messaging = require('../services/messaging');
 const conversationFlow = require('../services/conversationFlow');
+const activityLog = require('../services/activityLog');
 const messages = require('../templates/messages');
 
 /**
@@ -45,14 +46,14 @@ router.post('/video-click', async (req, res) => {
     }
 
     console.log(`🎥 [Tracking] Video visto por: ${lead.nombre}`);
+    activityLog.appendActivity(lead.id, 'calendly_click', null, req.ip);
 
     // 2. Enviar mensaje de respaldo con enlace a reunión grupal (opcional)
-    // Enlace de Calendly personalizado: lleva el leadId en utm_content para
-    // poder atar la reserva al lead cuando llegue el webhook de Calendly
-    // (o cuando se redirija a /tracking/calendly-booked).
-    const enlaceReunion = conversationFlow.enlaceCalendlyConTracking(
-      config.landing.calendlyGrupalUrl,
-      leadManager.getLeadById(lead.id)
+    // URL del redirector propio: registra el clic y lleva al Calendly grupal
+    // con UTMs + prefill. Así medimos la actividad sin depender de webhooks.
+    const enlaceReunion = conversationFlow.enlaceRedirectorCalendly(
+      leadManager.getLeadById(lead.id),
+      'grupal'
     );
     const texto = messages.mensajeVideoVisto({
       nombre: lead.nombre,
@@ -164,6 +165,29 @@ p{color:#5d6d7e;line-height:1.6}</style>
   } catch (err) {
     console.error('❌ [Tracking] Error calendly-booked:', err.message);
     res.status(500).send('Error interno');
+  }
+});
+
+/**
+ * POST /tracking/event
+ * Endpoint genérico para que la landing (vsl.js) reporte eventos del usuario:
+ * play del vídeo, hitos de progreso, ended, etc.
+ * Body: { leadId, type, meta? }
+ */
+router.post('/event', (req, res) => {
+  try {
+    const { leadId, type, meta } = req.body || {};
+    if (!leadId || !type) {
+      return res.status(400).json({ error: 'leadId y type son obligatorios' });
+    }
+    // Verificamos que el lead existe (silenciamos errores: es tracking)
+    const lead = leadManager.getLeadById(leadId);
+    if (!lead) return res.json({ ok: true, ignored: 'lead_not_found' });
+    activityLog.appendActivity(leadId, type, meta || null, req.ip);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ [Tracking] Error /event:', err.message);
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 

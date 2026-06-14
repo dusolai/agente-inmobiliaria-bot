@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const leadManager = require('../services/leadManager');
+const activityLog = require('../services/activityLog');
 
 /**
  * GET /api/leads
@@ -75,6 +76,35 @@ router.get('/config', (req, res) => {
     vslVideoUrl: require('../config/config').landing.vslVideoUrl,
     reunionGrupalUrl: require('../config/config').landing.reunionGrupalUrl,
   });
+});
+
+/**
+ * GET /api/leads/:id/activity
+ * Línea de tiempo (eventos) de un lead concreto.
+ */
+router.get('/leads/:id/activity', (req, res) => {
+  const lead = leadManager.getLeadById(req.params.id);
+  if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
+  const eventos = activityLog.getActivityByLead(req.params.id);
+  res.json({ lead, total: eventos.length, eventos });
+});
+
+/**
+ * GET /api/activity?limit=100
+ * Últimos N eventos de cualquier lead (para el panel "actividad reciente").
+ */
+router.get('/activity', (req, res) => {
+  const limit = parseInt(req.query.limit, 10) || 100;
+  res.json({ total: limit, eventos: activityLog.getRecentActivity(limit) });
+});
+
+/**
+ * GET /api/stats/activity
+ * Métricas agregadas: cuántos leads únicos han alcanzado cada tipo de evento.
+ * Sirve para construir el embudo de conversión en el panel.
+ */
+router.get('/stats/activity', (req, res) => {
+  res.json(activityLog.getStats());
 });
 
 module.exports = router;

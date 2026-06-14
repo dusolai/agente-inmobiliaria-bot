@@ -28,6 +28,13 @@ module.exports = {
     clientSecret: process.env.ZOOM_CLIENT_SECRET || '',
   },
 
+  // URL pública del propio backend (la que se usa en los enlaces que envía el
+  // agente, p. ej. el redirector /r/grupal?l=...). En Seenode se configura
+  // con BACKEND_PUBLIC_URL para que apunte al dominio real.
+  backendPublicUrl:
+    process.env.BACKEND_PUBLIC_URL ||
+    'https://web-78t58qun41lt.up-de-fra1-k8s-1.apps.run-on-seenode.com',
+
   landing: {
     vslVideoUrl: process.env.VSL_VIDEO_URL || 'https://www.youtube.com/embed/dQw4w9WgXcQ',
     landingUrl: process.env.LANDING_URL || 'https://three-inmobiliaria-emprende.pages.dev/',

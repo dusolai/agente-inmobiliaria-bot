@@ -78,9 +78,9 @@ router.post('/zoom-attendance', async (req, res) => {
           return res.status(400).json({ error: result.error });
         }
 
-        const enlaceCalendly = conversationFlow.enlaceCalendlyConTracking(
-          config.landing.calendlyIndividualUrl,
-          leadManager.getLeadById(lead.id)
+        const enlaceCalendly = conversationFlow.enlaceRedirectorCalendly(
+          leadManager.getLeadById(lead.id),
+          'individual'
         );
         const texto = messages.mensajeCierre({
           nombre: lead.nombre,
@@ -106,9 +106,9 @@ router.post('/zoom-attendance', async (req, res) => {
 
         if (match) {
           leadManager.transitionState(match.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
-          const enlaceCalendly = conversationFlow.enlaceCalendlyConTracking(
-            config.landing.calendlyIndividualUrl,
-            leadManager.getLeadById(match.id)
+          const enlaceCalendly = conversationFlow.enlaceRedirectorCalendly(
+            leadManager.getLeadById(match.id),
+            'individual'
           );
           const texto = messages.mensajeCierre({
             nombre: match.nombre,

@@ -1,6 +1,7 @@
 const config = require('../config/config');
 const leadManager = require('./leadManager');
 const messaging = require('./messaging');
+const activityLog = require('./activityLog');
 const messages = require('../templates/messages');
 
 /**
@@ -73,6 +74,9 @@ async function handleIncoming(telefono, texto) {
   const lead = leadManager.getLeadByPhone(telefono);
   if (!lead) return; // mensaje de alguien que no es un lead conocido
 
+  // Registramos toda la actividad inbound del lead, esté en el estado que esté
+  activityLog.appendActivity(lead.id, 'message_received', { texto });
+
   // Solo nos interesa la respuesta a la pregunta de filtrado
   if (lead.estado !== LEAD_STATES.ESPERANDO_CUALIFICACION) return;
 
@@ -88,6 +92,7 @@ async function handleIncoming(telefono, texto) {
 
   // Guardar perfil y avanzar a "vídeo enviado"
   leadManager.updateLead(lead.id, { perfil });
+  activityLog.appendActivity(lead.id, 'profile_set', { perfil });
   const result = leadManager.transitionState(lead.id, LEAD_STATES.VIDEO_ENVIADO);
   if (result.error) {
     console.error(`❌ [Flujo] No se pudo avanzar el lead ${lead.id}: ${result.error}`);
@@ -132,6 +137,19 @@ function enlaceCalendlyConTracking(baseUrl, lead) {
 }
 
 /**
+ * Construye la URL del redirector propio que el bot manda al lead.
+ * Esta URL es la que va por WhatsApp/Telegram. El backend registra el clic
+ * y redirige a la URL real de Calendly (ya con UTMs + prefill).
+ *
+ *   tipo: 'grupal' | 'individual'
+ *   resultado: https://<backend>/r/<tipo>?l=<leadId>
+ */
+function enlaceRedirectorCalendly(lead, tipo) {
+  const base = config.backendPublicUrl.replace(/\/$/, '');
+  return `${base}/r/${tipo}?l=${encodeURIComponent(lead.id)}`;
+}
+
+/**
  * Extrae el leadId de un valor utm_content del tipo "lead_<uuid>".
  */
 function leadIdDesdeUtm(utmContent) {
@@ -145,5 +163,6 @@ module.exports = {
   interpretarRespuesta,
   enlaceLandingPorPerfil,
   enlaceCalendlyConTracking,
+  enlaceRedirectorCalendly,
   leadIdDesdeUtm,
 };

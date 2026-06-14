@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const activityLog = require('./activityLog');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
@@ -88,6 +89,7 @@ function createLead({ nombre, email, telefono, fuente = 'formulario' }) {
 
   leads.push(lead);
   writeLeads(leads);
+  activityLog.appendActivity(lead.id, 'lead_created', { fuente, telefono });
   return lead;
 }
 
@@ -167,6 +169,10 @@ function transitionState(id, nuevoEstado) {
   }
 
   writeLeads(leads);
+  activityLog.appendActivity(lead.id, 'state_changed', {
+    from: lead.historial[lead.historial.length - 2]?.estado || null,
+    to: nuevoEstado,
+  });
   return { error: null, lead };
 }
 
