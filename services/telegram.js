@@ -72,24 +72,33 @@ async function procesarUpdate(update) {
   const leadManager = require('./leadManager');
   const messages = require('../templates/messages');
   const conversationFlow = require('./conversationFlow');
+  const activityLog = require('./activityLog');
 
-  // /start → registrar/reactivar el lead y enviar la pregunta de filtrado
-  if (texto.toLowerCase().startsWith('/start')) {
+  // Comandos que disparan el cuestionario desde cero (modo piloto):
+  //   /start, /empezar, /empezar_cuestionario
+  const txtLower = texto.toLowerCase();
+  const esArranque =
+    txtLower.startsWith('/start') ||
+    txtLower.startsWith('/empezar');
+
+  if (esArranque) {
     let lead = leadManager.getLeadByPhone(telefono);
     if (!lead) {
       lead = leadManager.createLead({ nombre, telefono, fuente: 'telegram-pilot' });
-    } else {
-      // Re-arrancar: volver a estado inicial para repetir la prueba
-      leadManager.updateLead(lead.id, { nombre });
     }
-    if (lead.estado !== leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION) {
-      // Reset suave para piloto: forzar el estado de espera
-      lead.estado = leadManager.LEAD_STATES.NUEVO;
-      leadManager.updateLead(lead.id, { estado: leadManager.LEAD_STATES.NUEVO });
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
-    } else {
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
-    }
+    // Reset limpio del lead para repetir la prueba: estado a "esperando
+    // cualificación", perfil sin definir y contadores de recordatorios a cero.
+    leadManager.updateLead(lead.id, {
+      nombre,
+      estado: leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION,
+      perfil: leadManager.LEAD_PROFILES.SIN_DEFINIR,
+      recordatorios: {
+        fase1: { enviados: 0, ultimoEnvio: null },
+        fase2: { enviados: 0, ultimoEnvio: null },
+        fase3: { enviados: 0, ultimoEnvio: null },
+      },
+    });
+    activityLog.appendActivity(lead.id, 'pilot_started');
     await sendMessage(telefono, messages.mensajeReactivacion({ nombre }));
     console.log(`🆕 [Telegram] Piloto iniciado: ${nombre} (${telefono})`);
     return;

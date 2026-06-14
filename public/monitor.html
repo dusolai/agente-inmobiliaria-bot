@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor en vivo · Three Inmobiliaria</title>
+<style>
+  :root{
+    --purple:#311B92; --purple2:#4527A0; --purpledark:#1a0b54;
+    --orange:#FF6B35; --orange2:#E64A19; --amber:#FFB300;
+    --ink:#2c3e50; --muted:#5d6d7e; --bg:#faf8fc; --line:rgba(49,27,146,.10);
+    --green:#2e9e5b; --red:#e0464b; --yellow:#f0a020; --grey:#8893a5;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5;min-height:100vh}
+  .wrap{max-width:1280px;margin:0 auto;padding:24px}
+
+  header{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.6rem}
+  .brand{display:flex;align-items:center;gap:.8rem}
+  .brand h1{font-size:1.3rem;color:var(--purple);font-weight:900;letter-spacing:-.3px}
+  .brand small{display:block;color:var(--muted);font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+  .live{display:inline-flex;align-items:center;gap:.4rem;background:#fff;border:1px solid var(--line);border-radius:50px;padding:.4rem 1rem;font-size:.85rem;color:var(--muted);font-weight:600}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(46,158,91,.6);animation:pulse 1.6s infinite}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(46,158,91,.6)}
+    70%{box-shadow:0 0 0 12px rgba(46,158,91,0)}
+    100%{box-shadow:0 0 0 0 rgba(46,158,91,0)}
+  }
+
+  /* KPI strip */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem;margin-bottom:1.4rem}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1rem 1.1rem;border-top:4px solid var(--purple)}
+  .kpi b{display:block;font-size:1.9rem;font-weight:900;color:var(--purple);line-height:1}
+  .kpi span{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+  .kpi.o{border-top-color:var(--orange)} .kpi.o b{color:var(--orange)}
+  .kpi.g{border-top-color:var(--green)} .kpi.g b{color:var(--green)}
+  .kpi.y{border-top-color:var(--yellow)} .kpi.y b{color:#b9700c}
+
+  /* Funnel */
+  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1.2rem 1.3rem;margin-bottom:1.2rem;box-shadow:0 6px 20px rgba(49,27,146,.04)}
+  .panel h2{font-size:.85rem;color:var(--purple);font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:.9rem;display:flex;justify-content:space-between;align-items:center}
+  .panel h2 small{font-weight:600;color:var(--muted);font-size:.72rem;text-transform:none;letter-spacing:0}
+  .funnel-row{display:grid;grid-template-columns:200px 1fr 50px;gap:.6rem;align-items:center;margin:.4rem 0;font-size:.85rem}
+  .funnel-row .label{color:var(--ink);font-weight:600}
+  .funnel-row .bar{height:18px;background:#eee;border-radius:10px;overflow:hidden;position:relative}
+  .funnel-row .bar > div{height:100%;background:linear-gradient(90deg,var(--purple),var(--orange));border-radius:10px;transition:width .4s ease}
+  .funnel-row .num{text-align:right;font-weight:800;color:var(--purple);font-size:.9rem}
+
+  /* Main two-column area */
+  .cols{display:grid;grid-template-columns:340px 1fr;gap:1.2rem}
+  @media (max-width:880px){.cols{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+
+  /* Leads list */
+  .leads-list{max-height:540px;overflow-y:auto}
+  .lead{padding:.7rem .9rem;border-bottom:1px solid var(--line);cursor:pointer;transition:background .15s;display:flex;justify-content:space-between;align-items:center;gap:.6rem}
+  .lead:hover{background:#f4f1fa}
+  .lead.active{background:linear-gradient(90deg,rgba(255,107,53,.08),transparent);border-left:3px solid var(--orange);padding-left:calc(.9rem - 3px)}
+  .lead .name{font-weight:700;font-size:.92rem;color:var(--ink)}
+  .lead .meta{font-size:.72rem;color:var(--muted);margin-top:2px}
+  .lead .badge{font-size:.62rem;font-weight:800;padding:.18rem .55rem;border-radius:50px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+  .badge-nuevo{background:#e3eaf5;color:#5566aa}
+  .badge-esperando_cualificacion{background:#fff3d6;color:#a67400}
+  .badge-video_enviado{background:#ffe0d1;color:#a3401a}
+  .badge-video_visto{background:#ffd4b8;color:#7a3210}
+  .badge-reunion_registrado{background:#dde9ff;color:#274686}
+  .badge-reunion_asistio{background:#c5dafc;color:#1e3a78}
+  .badge-agenda_1a1{background:#cdf3da;color:#1f6b3e}
+  .badge-descartado{background:#f4d2d2;color:#993339}
+
+  /* Timeline */
+  .timeline{max-height:540px;overflow-y:auto;padding-right:.5rem}
+  .tl-item{display:grid;grid-template-columns:90px 1fr;gap:.8rem;padding:.55rem 0;border-bottom:1px dashed var(--line);font-size:.85rem;align-items:start}
+  .tl-time{color:var(--muted);font-size:.72rem;font-weight:600;font-variant-numeric:tabular-nums;padding-top:2px}
+  .tl-event{display:flex;align-items:flex-start;gap:.5rem;flex-wrap:wrap}
+  .tl-type{font-weight:700;color:var(--purple);font-size:.82rem}
+  .tl-meta{color:var(--muted);font-size:.78rem}
+  .ev-tag{display:inline-block;font-size:.65rem;font-weight:800;padding:.12rem .45rem;border-radius:50px;text-transform:uppercase;letter-spacing:.4px;margin-right:.3rem}
+  .ev-tag.lead{background:rgba(49,27,146,.12);color:var(--purple)}
+  .ev-tag.msg{background:rgba(255,107,53,.15);color:var(--orange2)}
+  .ev-tag.video{background:rgba(46,158,91,.15);color:var(--green)}
+  .ev-tag.calendly{background:rgba(255,179,0,.18);color:#b9700c}
+  .ev-tag.state{background:rgba(136,147,165,.18);color:#566}
+  .ev-tag.profile{background:rgba(224,70,75,.13);color:var(--red)}
+
+  .empty{padding:2rem;text-align:center;color:var(--muted);font-size:.9rem}
+  .info{font-size:.78rem;color:var(--muted)}
+  .info kbd{background:#eee;padding:.1rem .4rem;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:.75rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--purple),var(--orange));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:1.2rem">📊</div>
+      <div>
+        <h1>Three Inmobiliaria — Monitor en vivo</h1>
+        <small id="lastUpdate">Conectando…</small>
+      </div>
+    </div>
+    <div class="live"><span class="dot"></span> En vivo · auto-refresco 3 s</div>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi"><b id="kpi-total">—</b><span>Leads totales</span></div>
+    <div class="kpi g"><b id="kpi-activos">—</b><span>Activos</span></div>
+    <div class="kpi y"><b id="kpi-conversion">—</b><span>% conversión</span></div>
+    <div class="kpi o"><b id="kpi-eventos">—</b><span>Eventos registrados</span></div>
+  </div>
+
+  <div class="panel">
+    <h2>Embudo de conversión <small>(% de leads únicos que llegaron a cada paso)</small></h2>
+    <div id="funnel"></div>
+  </div>
+
+  <div class="cols">
+    <div class="panel">
+      <h2>Leads <small id="lead-count">0</small></h2>
+      <div id="leads" class="leads-list">
+        <div class="empty">Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Línea de tiempo del lead <small id="selected-lead">—</small></h2>
+      <div id="timeline" class="timeline">
+        <div class="empty">Selecciona un lead a la izquierda para ver su recorrido.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const STAGES = [
+    { key: 'lead_created',          label: 'Creado',             tag: 'lead' },
+    { key: 'message_received',      label: '1ª respuesta',       tag: 'msg' },
+    { key: 'profile_set',           label: 'Cualificado',        tag: 'profile' },
+    { key: 'landing_view',          label: 'Abrió landing',      tag: 'lead' },
+    { key: 'video_play',            label: 'Le dio al play',     tag: 'video' },
+    { key: 'video_progress_25',     label: '25% vídeo',          tag: 'video' },
+    { key: 'video_progress_50',     label: '50% vídeo',          tag: 'video' },
+    { key: 'video_progress_75',     label: '75% vídeo',          tag: 'video' },
+    { key: 'video_complete',        label: 'Vídeo completo',     tag: 'video' },
+    { key: 'calendly_intent',       label: 'Clic en Calendly',   tag: 'calendly' },
+  ];
+
+  let selectedLeadId = null;
+  let lastTimelineLength = 0;
+
+  const $ = (id) => document.getElementById(id);
+
+  function fmtTime(ts) {
+    try {
+      const d = new Date(ts);
+      return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch { return ts; }
+  }
+  function fmtDateTime(ts) {
+    try {
+      const d = new Date(ts);
+      return d.toLocaleString('es-ES');
+    } catch { return ts; }
+  }
+
+  function eventTag(type) {
+    if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started') return 'state';
+    if (type === 'message_received') return 'msg';
+    if (type === 'profile_set') return 'profile';
+    if (type.startsWith('video_') || type === 'calendly_button_revealed') return 'video';
+    if (type.startsWith('calendly_')) return 'calendly';
+    if (type === 'landing_view') return 'lead';
+    return 'state';
+  }
+
+  function describe(ev) {
+    const m = ev.meta || {};
+    switch (ev.type) {
+      case 'lead_created':         return `creado · fuente ${m.fuente || '?'}`;
+      case 'pilot_started':        return `reset del piloto (nuevo /start)`;
+      case 'state_changed':        return `${m.from || '∅'} → ${m.to}`;
+      case 'profile_set':          return `perfil: ${m.perfil}`;
+      case 'message_received':     return m.texto ? `"${m.texto}"` : '';
+      case 'landing_view':         return `landing ${m.perfil || ''}`;
+      case 'video_play':           return 'play del vídeo';
+      case 'video_progress_25':    return 'llegó al 25%';
+      case 'video_progress_50':    return 'llegó al 50%';
+      case 'video_progress_75':    return 'llegó al 75%';
+      case 'video_complete':       return 'vió el vídeo entero';
+      case 'calendly_button_revealed': return 'se le mostró el botón';
+      case 'calendly_click':       return 'clic en botón de la landing';
+      case 'calendly_intent':      return `pulsó enlace ${m.tipo || ''}`;
+      case 'calendly_booked':      return 'reserva confirmada';
+      default:                     return JSON.stringify(m);
+    }
+  }
+
+  async function fetchJSON(url) {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.statusText);
+    return res.json();
+  }
+
+  async function refresh() {
+    try {
+      const [stats, leadsResp, statsActivity] = await Promise.all([
+        fetchJSON('/api/stats'),
+        fetchJSON('/api/leads'),
+        fetchJSON('/api/stats/activity'),
+      ]);
+
+      // KPIs
+      $('kpi-total').textContent = stats.total;
+      $('kpi-activos').textContent = stats.activos;
+      $('kpi-conversion').textContent = stats.tasaConversion;
+      $('kpi-eventos').textContent = statsActivity.totalEventos;
+
+      // Funnel
+      const total = stats.total || 1;
+      const counts = statsActivity.counts || {};
+      const funnelHtml = STAGES.map(s => {
+        const n = counts[s.key] || 0;
+        const pct = Math.min(100, Math.round((n / total) * 100));
+        return `<div class="funnel-row">
+          <span class="label"><span class="ev-tag ${s.tag}">${s.label}</span></span>
+          <div class="bar"><div style="width:${pct}%"></div></div>
+          <span class="num">${n}</span>
+        </div>`;
+      }).join('');
+      $('funnel').innerHTML = funnelHtml;
+
+      // Lista de leads (ordenados por updatedAt desc)
+      const leads = (leadsResp.leads || []).slice().sort((a,b) =>
+        new Date(b.updatedAt) - new Date(a.updatedAt)
+      );
+      $('lead-count').textContent = leads.length ? `${leads.length} totales` : '';
+
+      if (leads.length === 0) {
+        $('leads').innerHTML = `<div class="empty">Esperando actividad…<br><br>
+          <span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span></div>`;
+      } else {
+        const html = leads.map(l => {
+          const active = l.id === selectedLeadId ? 'active' : '';
+          const perfil = l.perfil && l.perfil !== 'sin_definir' ? ` · ${l.perfil}` : '';
+          return `<div class="lead ${active}" data-id="${l.id}">
+            <div>
+              <div class="name">${(l.nombre || 'Sin nombre').replace(/</g,'&lt;')}</div>
+              <div class="meta">${fmtTime(l.updatedAt)}${perfil}</div>
+            </div>
+            <span class="badge badge-${l.estado}">${l.estado.replace(/_/g,' ')}</span>
+          </div>`;
+        }).join('');
+        $('leads').innerHTML = html;
+
+        // Click handlers
+        document.querySelectorAll('.lead').forEach(el => {
+          el.addEventListener('click', () => {
+            selectedLeadId = el.dataset.id;
+            lastTimelineLength = 0;
+            renderLeads();
+            refreshTimeline();
+          });
+        });
+
+        // Auto-seleccionar el primero si no hay seleccionado
+        if (!selectedLeadId && leads[0]) {
+          selectedLeadId = leads[0].id;
+          renderLeads();
+        }
+      }
+
+      if (selectedLeadId) refreshTimeline();
+
+      $('lastUpdate').textContent = `Última actualización ${fmtDateTime(new Date().toISOString())}`;
+    } catch (err) {
+      $('lastUpdate').textContent = `❌ Error conectando: ${err.message}`;
+    }
+  }
+
+  function renderLeads() {
+    document.querySelectorAll('.lead').forEach(el => {
+      el.classList.toggle('active', el.dataset.id === selectedLeadId);
+    });
+  }
+
+  async function refreshTimeline() {
+    if (!selectedLeadId) return;
+    try {
+      const data = await fetchJSON(`/api/leads/${selectedLeadId}/activity`);
+      $('selected-lead').textContent = data.lead?.nombre ? `· ${data.lead.nombre}` : '';
+      const eventos = (data.eventos || []).slice().sort((a,b) => new Date(b.ts) - new Date(a.ts));
+
+      if (eventos.length === 0) {
+        $('timeline').innerHTML = `<div class="empty">Aún no hay eventos para este lead.</div>`;
+        return;
+      }
+
+      const html = eventos.map(ev => {
+        const tag = eventTag(ev.type);
+        return `<div class="tl-item">
+          <div class="tl-time">${fmtTime(ev.ts)}</div>
+          <div class="tl-event">
+            <span class="ev-tag ${tag}">${ev.type.replace(/_/g,' ')}</span>
+            <span class="tl-meta">${describe(ev)}</span>
+          </div>
+        </div>`;
+      }).join('');
+      $('timeline').innerHTML = html;
+      lastTimelineLength = eventos.length;
+    } catch (err) {
+      $('timeline').innerHTML = `<div class="empty">Error: ${err.message}</div>`;
+    }
+  }
+
+  // Arranque
+  refresh();
+  setInterval(refresh, 3000);
+</script>
+</body>
+</html>
