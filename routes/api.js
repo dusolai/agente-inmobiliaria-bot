@@ -114,13 +114,25 @@ router.get('/stats/activity', (req, res) => {
 router.get('/system/status', (req, res) => {
   const whatsapp = require('../services/whatsapp');
   const telegram = require('../services/telegram');
+  const zoom = require('../services/zoom');
   const config = require('../config/config');
+
+  const grupalUrl = config.landing.calendlyGrupalUrl;
+  const individualUrl = config.landing.calendlyIndividualUrl;
+  const grupalSet = Boolean(grupalUrl && grupalUrl !== '#');
+  const individualSet = Boolean(individualUrl && individualUrl !== '#');
+  const sharedUrl = grupalSet && individualSet && grupalUrl === individualUrl;
+
   res.json({
     whatsapp: { connected: whatsapp.isConfigured() },
     telegram: { enabled: telegram.isReady() },
+    zoom: { configured: zoom.isConfigured() },
     calendly: {
-      grupal: Boolean(config.landing.calendlyGrupalUrl && config.landing.calendlyGrupalUrl !== '#'),
-      individual: Boolean(config.landing.calendlyIndividualUrl && config.landing.calendlyIndividualUrl !== '#'),
+      grupal: grupalSet,
+      individual: individualSet,
+      // true cuando ambas variables apuntan al mismo enlace. Pasa en piloto
+      // con Calendly free (no permite eventos de grupo), pero conviene avisarlo.
+      sharedUrl,
     },
     backendPublicUrl: config.backendPublicUrl,
   });

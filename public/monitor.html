@@ -170,6 +170,7 @@
     <div class="status">
       <span class="stat" id="st-whatsapp"><span class="ico">·</span> WhatsApp</span>
       <span class="stat" id="st-telegram"><span class="ico">·</span> Telegram</span>
+      <span class="stat" id="st-zoom"><span class="ico">·</span> Zoom</span>
       <span class="stat" id="st-calendly-grupal"><span class="ico">·</span> Calendly grupal</span>
       <span class="stat" id="st-calendly-individual"><span class="ico">·</span> Calendly individual</span>
     </div>
@@ -422,10 +423,20 @@
       const s = await fetchJSON('/api/system/status');
       setStatus('st-whatsapp', s.whatsapp.connected ? 'WhatsApp conectado' : 'WhatsApp desconectado', s.whatsapp.connected ? 'ok' : 'ko');
       setStatus('st-telegram', s.telegram.enabled ? 'Telegram activo' : 'Telegram inactivo', s.telegram.enabled ? 'ok' : 'warn');
-      setStatus('st-calendly-grupal', s.calendly.grupal ? 'Calendly grupal' : 'Calendly grupal sin URL', s.calendly.grupal ? 'ok' : 'warn');
-      setStatus('st-calendly-individual', s.calendly.individual ? 'Calendly individual' : 'Calendly individual sin URL', s.calendly.individual ? 'ok' : 'warn');
+      setStatus('st-zoom', s.zoom && s.zoom.configured ? 'Zoom conectado' : 'Zoom no conectado (asistencia manual)', s.zoom && s.zoom.configured ? 'ok' : 'warn');
+
+      // Si grupal e individual apuntan al mismo enlace (típico en Calendly free
+      // porque no permite eventos de "Grupo"), marcamos en amarillo para
+      // recordar que en producción habrá que crear un evento grupal distinto.
+      if (s.calendly.sharedUrl) {
+        setStatus('st-calendly-grupal', 'Calendly grupal (mismo enlace que individual)', 'warn');
+        setStatus('st-calendly-individual', 'Calendly individual (mismo enlace que grupal)', 'warn');
+      } else {
+        setStatus('st-calendly-grupal', s.calendly.grupal ? 'Calendly grupal' : 'Calendly grupal sin URL', s.calendly.grupal ? 'ok' : 'warn');
+        setStatus('st-calendly-individual', s.calendly.individual ? 'Calendly individual' : 'Calendly individual sin URL', s.calendly.individual ? 'ok' : 'warn');
+      }
     } catch (e) {
-      ['st-whatsapp','st-telegram','st-calendly-grupal','st-calendly-individual'].forEach(id => setStatus(id, 'Sin datos', 'ko'));
+      ['st-whatsapp','st-telegram','st-zoom','st-calendly-grupal','st-calendly-individual'].forEach(id => setStatus(id, 'Sin datos', 'ko'));
     }
   }
 
