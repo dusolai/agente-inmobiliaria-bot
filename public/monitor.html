@@ -15,13 +15,23 @@
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5;min-height:100vh}
   .wrap{max-width:1280px;margin:0 auto;padding:20px 24px 60px}
 
-  header{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.2rem}
+  header{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem}
   .brand{display:flex;align-items:center;gap:.8rem}
   .brand h1{font-size:1.3rem;color:var(--purple);font-weight:900;letter-spacing:-.3px}
   .brand small{display:block;color:var(--muted);font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:1px}
   .live{display:inline-flex;align-items:center;gap:.4rem;background:#fff;border:1px solid var(--line);border-radius:50px;padding:.4rem 1rem;font-size:.85rem;color:var(--muted);font-weight:600}
   .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(46,158,91,.6);animation:pulse 1.6s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(46,158,91,.6)}70%{box-shadow:0 0 0 12px rgba(46,158,91,0)}100%{box-shadow:0 0 0 0 rgba(46,158,91,0)}}
+
+  /* Tabs */
+  nav.tabs{background:#fff;border:1px solid var(--line);border-radius:14px;padding:.4rem;display:inline-flex;gap:.25rem;margin-bottom:1.2rem;box-shadow:0 4px 14px rgba(49,27,146,.03);flex-wrap:wrap}
+  nav.tabs button{background:transparent;border:none;color:var(--muted);font-weight:700;padding:.55rem 1rem;border-radius:9px;cursor:pointer;font-size:.85rem;display:inline-flex;align-items:center;gap:.45rem;transition:all .15s}
+  nav.tabs button:hover{background:#f4f1fa;color:var(--purple)}
+  nav.tabs button.active{background:linear-gradient(135deg,var(--purple),var(--purple2));color:#fff;box-shadow:0 6px 18px rgba(49,27,146,.25)}
+  nav.tabs button .ic{font-size:.95rem}
+
+  .tab{display:none}
+  .tab.active{display:block}
 
   /* Status bar */
   .status{background:#fff;border:1px solid var(--line);border-radius:12px;padding:.7rem 1rem;margin-bottom:1.2rem;display:flex;flex-wrap:wrap;gap:.4rem 1.5rem;align-items:center;font-size:.85rem;box-shadow:0 4px 14px rgba(49,27,146,.03)}
@@ -30,9 +40,6 @@
   .stat.ok .ico{background:var(--green)}
   .stat.ko .ico{background:var(--red)}
   .stat.warn .ico{background:var(--yellow)}
-  .status .links{margin-left:auto;display:flex;gap:.6rem;flex-wrap:wrap}
-  .status .links a{color:var(--purple);text-decoration:none;font-weight:700;font-size:.8rem;background:#f4f1fa;padding:.3rem .7rem;border-radius:50px;border:1px solid var(--line)}
-  .status .links a:hover{background:#ebe5f7}
 
   /* KPI strip */
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem;margin-bottom:1.2rem}
@@ -74,12 +81,10 @@
   .badge-agenda_1a1{background:#cdf3da;color:#1f6b3e}
   .badge-descartado{background:#f4d2d2;color:#993339}
 
-  /* Lead header (selected) */
   .lead-head{display:flex;justify-content:space-between;align-items:start;gap:1rem;flex-wrap:wrap;margin-bottom:.9rem;padding-bottom:.7rem;border-bottom:1px solid var(--line)}
   .lead-head .who h3{font-size:1.1rem;color:var(--purple);font-weight:800;margin-bottom:.15rem}
   .lead-head .who small{color:var(--muted);font-size:.78rem}
 
-  /* Actions */
   .actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1rem}
   .btn{font-size:.78rem;font-weight:700;padding:.45rem .8rem;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--purple);cursor:pointer;transition:all .15s}
   .btn:hover{background:#f4f1fa;border-color:var(--purple)}
@@ -93,7 +98,6 @@
   .btn.green:hover{background:#cbe9d4}
   .btn:disabled{opacity:.55;cursor:not-allowed}
 
-  /* Timeline */
   .timeline{max-height:430px;overflow-y:auto;padding-right:.5rem}
   .tl-item{display:grid;grid-template-columns:90px 1fr;gap:.8rem;padding:.55rem 0;border-bottom:1px dashed var(--line);font-size:.85rem;align-items:start}
   .tl-time{color:var(--muted);font-size:.72rem;font-weight:600;font-variant-numeric:tabular-nums;padding-top:2px}
@@ -110,6 +114,25 @@
   .empty{padding:2rem;text-align:center;color:var(--muted);font-size:.9rem}
   .info{font-size:.78rem;color:var(--muted)}
   .info kbd{background:#eee;padding:.1rem .4rem;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:.75rem}
+
+  /* iframe panel */
+  .embed{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 6px 20px rgba(49,27,146,.04)}
+  .embed iframe{width:100%;height:78vh;border:0;display:block}
+
+  /* Links tab */
+  .link-group{margin-bottom:1.5rem}
+  .link-group h3{font-size:.78rem;color:var(--purple);font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:.7rem;display:flex;align-items:center;gap:.5rem}
+  .link-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:.7rem}
+  .link-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem;transition:all .15s}
+  .link-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(49,27,146,.08);border-color:rgba(49,27,146,.25)}
+  .link-card .lc-icon{font-size:1.4rem;flex:none}
+  .link-card .lc-body{flex:1;min-width:0}
+  .link-card .lc-name{font-weight:700;color:var(--purple);font-size:.92rem;margin-bottom:.15rem}
+  .link-card .lc-url{font-size:.72rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:Menlo,Consolas,monospace}
+  .link-card a{color:inherit;text-decoration:none;display:flex;justify-content:space-between;align-items:center;gap:.6rem;width:100%}
+  .copy-btn{background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--muted);font-size:.7rem;padding:.3rem .55rem;cursor:pointer;font-weight:700}
+  .copy-btn:hover{background:#f4f1fa;color:var(--purple);border-color:var(--purple)}
+
   .toast{position:fixed;bottom:24px;right:24px;background:var(--purple);color:#fff;padding:.8rem 1.2rem;border-radius:10px;font-weight:600;font-size:.9rem;box-shadow:0 10px 30px rgba(49,27,146,.3);opacity:0;transform:translateY(8px);transition:all .3s;pointer-events:none;z-index:1000}
   .toast.show{opacity:1;transform:translateY(0)}
 </style>
@@ -128,46 +151,170 @@
     <div class="live"><span class="dot"></span> En vivo · auto-refresco 3 s</div>
   </header>
 
-  <!-- Status del sistema -->
-  <div class="status">
-    <span class="stat" id="st-whatsapp"><span class="ico">·</span> WhatsApp</span>
-    <span class="stat" id="st-telegram"><span class="ico">·</span> Telegram</span>
-    <span class="stat" id="st-calendly-grupal"><span class="ico">·</span> Calendly grupal</span>
-    <span class="stat" id="st-calendly-individual"><span class="ico">·</span> Calendly individual</span>
-    <div class="links">
-      <a href="/" target="_blank">QR WhatsApp</a>
-      <a href="/test.html" target="_blank">Simulador de registro</a>
-      <a href="/api/leads" target="_blank">API leads</a>
+  <nav class="tabs">
+    <button class="active" data-tab="inicio"><span class="ic">📊</span> Inicio</button>
+    <button data-tab="whatsapp"><span class="ic">📱</span> WhatsApp</button>
+    <button data-tab="simulador"><span class="ic">🧪</span> Simulador</button>
+    <button data-tab="enlaces"><span class="ic">🔗</span> Enlaces</button>
+  </nav>
+
+  <!-- ─────────── TAB: INICIO ─────────── -->
+  <div id="tab-inicio" class="tab active">
+
+    <div class="status">
+      <span class="stat" id="st-whatsapp"><span class="ico">·</span> WhatsApp</span>
+      <span class="stat" id="st-telegram"><span class="ico">·</span> Telegram</span>
+      <span class="stat" id="st-calendly-grupal"><span class="ico">·</span> Calendly grupal</span>
+      <span class="stat" id="st-calendly-individual"><span class="ico">·</span> Calendly individual</span>
     </div>
-  </div>
 
-  <div class="kpis">
-    <div class="kpi"><b id="kpi-total">—</b><span>Leads totales</span></div>
-    <div class="kpi g"><b id="kpi-activos">—</b><span>Activos</span></div>
-    <div class="kpi y"><b id="kpi-conversion">—</b><span>% conversión</span></div>
-    <div class="kpi o"><b id="kpi-eventos">—</b><span>Eventos registrados</span></div>
-  </div>
-
-  <div class="panel">
-    <h2>Embudo de conversión <small>(% de leads únicos que llegaron a cada paso)</small></h2>
-    <div id="funnel"></div>
-  </div>
-
-  <div class="cols">
-    <div class="panel">
-      <h2>Leads <small id="lead-count">0</small></h2>
-      <div id="leads" class="leads-list">
-        <div class="empty">Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span></div>
-      </div>
+    <div class="kpis">
+      <div class="kpi"><b id="kpi-total">—</b><span>Leads totales</span></div>
+      <div class="kpi g"><b id="kpi-activos">—</b><span>Activos</span></div>
+      <div class="kpi y"><b id="kpi-conversion">—</b><span>% conversión</span></div>
+      <div class="kpi o"><b id="kpi-eventos">—</b><span>Eventos registrados</span></div>
     </div>
 
     <div class="panel">
-      <h2>Lead seleccionado</h2>
-      <div id="leadDetail">
-        <div class="empty">Selecciona un lead a la izquierda para ver su recorrido y actuar sobre él.</div>
+      <h2>Embudo de conversión <small>(% de leads únicos que llegaron a cada paso)</small></h2>
+      <div id="funnel"></div>
+    </div>
+
+    <div class="cols">
+      <div class="panel">
+        <h2>Leads <small id="lead-count">0</small></h2>
+        <div id="leads" class="leads-list">
+          <div class="empty">Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Lead seleccionado</h2>
+        <div id="leadDetail">
+          <div class="empty">Selecciona un lead a la izquierda para ver su recorrido y actuar sobre él.</div>
+        </div>
       </div>
     </div>
   </div>
+
+  <!-- ─────────── TAB: WHATSAPP ─────────── -->
+  <div id="tab-whatsapp" class="tab">
+    <div class="panel">
+      <h2>Vincular WhatsApp <small>escanea el QR con tu móvil</small></h2>
+      <p class="info" style="margin-bottom:.7rem">Abre WhatsApp en el móvil → <b>Ajustes → Dispositivos vinculados → Vincular un dispositivo</b> y apunta a este QR. Se refresca solo cada 20 s.</p>
+    </div>
+    <div class="embed">
+      <iframe id="iframe-wa" src="about:blank" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <!-- ─────────── TAB: SIMULADOR ─────────── -->
+  <div id="tab-simulador" class="tab">
+    <div class="panel">
+      <h2>Simulador de registro <small>crea un lead de prueba sin tocar el Excel</small></h2>
+      <p class="info">Lanza un alta manual de un lead para probar el flujo sin enviar por la campaña real.</p>
+    </div>
+    <div class="embed">
+      <iframe id="iframe-sim" src="about:blank" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <!-- ─────────── TAB: ENLACES ─────────── -->
+  <div id="tab-enlaces" class="tab">
+
+    <div class="panel">
+      <h2>Todas las URLs del proyecto <small>click en el icono para copiar</small></h2>
+
+      <div class="link-group">
+        <h3>🌐 Landings (lo que ve el lead)</h3>
+        <div class="link-list">
+          <div class="link-card"><a href="https://threeinmobiliaria.pages.dev/" target="_blank">
+            <span class="lc-icon">🏢</span>
+            <div class="lc-body"><div class="lc-name">Landing PROFESIONAL</div><div class="lc-url">threeinmobiliaria.pages.dev</div></div>
+          </a><button class="copy-btn" data-copy="https://threeinmobiliaria.pages.dev/">Copiar</button></div>
+
+          <div class="link-card"><a href="https://three-inmobiliaria-emprende.pages.dev/" target="_blank">
+            <span class="lc-icon">🚀</span>
+            <div class="lc-body"><div class="lc-name">Landing EMPRENDEDOR</div><div class="lc-url">three-inmobiliaria-emprende.pages.dev</div></div>
+          </a><button class="copy-btn" data-copy="https://three-inmobiliaria-emprende.pages.dev/">Copiar</button></div>
+        </div>
+      </div>
+
+      <div class="link-group">
+        <h3>🤖 Bot (canales)</h3>
+        <div class="link-list">
+          <div class="link-card"><a href="https://t.me/" target="_blank" id="tg-link">
+            <span class="lc-icon">📲</span>
+            <div class="lc-body"><div class="lc-name">Bot de Telegram</div><div class="lc-url" id="tg-username">Abre Telegram y busca tu bot</div></div>
+          </a></div>
+
+          <div class="link-card"><a href="#" data-internal="whatsapp">
+            <span class="lc-icon">📱</span>
+            <div class="lc-body"><div class="lc-name">Vincular WhatsApp (QR)</div><div class="lc-url">Pestaña "WhatsApp" de este panel</div></div>
+          </a></div>
+        </div>
+      </div>
+
+      <div class="link-group">
+        <h3>📅 Calendly</h3>
+        <div class="link-list">
+          <div class="link-card"><a href="https://calendly.com/arkaitzasr24/reunion-de-negocio" target="_blank">
+            <span class="lc-icon">📆</span>
+            <div class="lc-body"><div class="lc-name">Calendly · Reunión de negocio</div><div class="lc-url">calendly.com/arkaitzasr24/reunion-de-negocio</div></div>
+          </a><button class="copy-btn" data-copy="https://calendly.com/arkaitzasr24/reunion-de-negocio">Copiar</button></div>
+        </div>
+      </div>
+
+      <div class="link-group">
+        <h3>⚙️ Backend del agente (Seenode)</h3>
+        <div class="link-list">
+          <div class="link-card"><a href="/" target="_blank">
+            <span class="lc-icon">🔑</span>
+            <div class="lc-body"><div class="lc-name">QR de WhatsApp</div><div class="lc-url">/</div></div>
+          </a></div>
+          <div class="link-card"><a href="/health" target="_blank">
+            <span class="lc-icon">💚</span>
+            <div class="lc-body"><div class="lc-name">Health check</div><div class="lc-url">/health</div></div>
+          </a></div>
+          <div class="link-card"><a href="/api/leads" target="_blank">
+            <span class="lc-icon">👥</span>
+            <div class="lc-body"><div class="lc-name">API · Leads</div><div class="lc-url">/api/leads</div></div>
+          </a></div>
+          <div class="link-card"><a href="/api/activity" target="_blank">
+            <span class="lc-icon">📈</span>
+            <div class="lc-body"><div class="lc-name">API · Actividad</div><div class="lc-url">/api/activity</div></div>
+          </a></div>
+          <div class="link-card"><a href="/api/stats/activity" target="_blank">
+            <span class="lc-icon">📊</span>
+            <div class="lc-body"><div class="lc-name">API · Stats embudo</div><div class="lc-url">/api/stats/activity</div></div>
+          </a></div>
+          <div class="link-card"><a href="/api/system/status" target="_blank">
+            <span class="lc-icon">🛰️</span>
+            <div class="lc-body"><div class="lc-name">API · Status del sistema</div><div class="lc-url">/api/system/status</div></div>
+          </a></div>
+        </div>
+      </div>
+
+      <div class="link-group">
+        <h3>📚 Repositorios (GitHub)</h3>
+        <div class="link-list">
+          <div class="link-card"><a href="https://github.com/dusolai/agente-inmobiliaria-bot" target="_blank">
+            <span class="lc-icon">🐙</span>
+            <div class="lc-body"><div class="lc-name">agente-inmobiliaria-bot</div><div class="lc-url">github.com/dusolai/agente-inmobiliaria-bot</div></div>
+          </a></div>
+          <div class="link-card"><a href="https://github.com/Digga-coder/LANDING-THREE-INMOBILIARIA" target="_blank">
+            <span class="lc-icon">🐙</span>
+            <div class="lc-body"><div class="lc-name">LANDING-THREE-INMOBILIARIA</div><div class="lc-url">github.com/Digga-coder/LANDING-THREE-INMOBILIARIA</div></div>
+          </a></div>
+          <div class="link-card"><a href="https://github.com/dusolai/three-inmobiliaria-emprende" target="_blank">
+            <span class="lc-icon">🐙</span>
+            <div class="lc-body"><div class="lc-name">three-inmobiliaria-emprende</div><div class="lc-url">github.com/dusolai/three-inmobiliaria-emprende</div></div>
+          </a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div id="toast" class="toast"></div>
@@ -187,7 +334,7 @@
   ];
 
   let selectedLeadId = null;
-  let selectedLeadCache = null;
+  let currentTab = 'inicio';
 
   const $ = (id) => document.getElementById(id);
 
@@ -199,13 +346,8 @@
     toast._h = setTimeout(() => t.classList.remove('show'), 2200);
   }
 
-  function fmtTime(ts) {
-    try { return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
-    catch { return ts; }
-  }
-  function fmtDateTime(ts) {
-    try { return new Date(ts).toLocaleString('es-ES'); } catch { return ts; }
-  }
+  function fmtTime(ts) { try { return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return ts; } }
+  function fmtDateTime(ts) { try { return new Date(ts).toLocaleString('es-ES'); } catch { return ts; } }
   function eventTag(type) {
     if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started' || type === 'question_resent') return 'state';
     if (type === 'message_received') return 'msg';
@@ -265,6 +407,7 @@
   }
 
   async function refresh() {
+    if (currentTab !== 'inicio') return; // ahorra si no estamos viendo el dashboard
     try {
       const [stats, leadsResp, statsActivity] = await Promise.all([
         fetchJSON('/api/stats'),
@@ -334,7 +477,6 @@
 
   function renderActions(lead) {
     const s = lead.estado;
-    const cuali = s === 'esperando_cualificacion';
     return `<div class="actions">
       <button class="btn primary" data-act="resend">Reenviar cuestionario</button>
       <button class="btn green" data-act="mark-video-visto" ${s === 'video_enviado' ? '' : 'disabled'}>Marcar vídeo visto</button>
@@ -350,7 +492,6 @@
     try {
       const data = await fetchJSON(`/api/leads/${selectedLeadId}/activity`);
       const lead = data.lead;
-      selectedLeadCache = lead;
       const eventos = (data.eventos || []).slice().sort((a,b) => new Date(b.ts) - new Date(a.ts));
 
       const head = `<div class="lead-head">
@@ -400,7 +541,6 @@
         await fetchJSON(`/api/leads/${id}/state`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: 'reunion_registrado' }) });
         toast('Marcado como registró a reunión');
       } else if (act === 'mark-asistio') {
-        // Usamos el webhook que dispara el mensaje de cierre con el Calendly individual
         await fetch('/webhook/zoom-attendance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: id, attended: true }) });
         toast('Marcado como asistió · enviando cierre');
       } else if (act === 'descartar') {
@@ -419,6 +559,32 @@
       btn.disabled = false;
     }
   }
+
+  // ─── Tabs ──────────────────────────────────────────────
+  function switchTab(name) {
+    currentTab = name;
+    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === `tab-${name}`));
+    // cargar iframes solo cuando se entra a su tab
+    if (name === 'whatsapp') {
+      const fr = $('iframe-wa');
+      if (fr.src === 'about:blank' || !fr.src.includes(location.origin)) fr.src = '/';
+    }
+    if (name === 'simulador') {
+      const fr = $('iframe-sim');
+      if (fr.src === 'about:blank' || !fr.src.includes(location.origin)) fr.src = '/test.html';
+    }
+    if (name === 'inicio') refresh();
+  }
+  document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+  document.querySelectorAll('[data-internal]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); switchTab(a.dataset.internal); }));
+
+  // ─── Copiar al portapapeles ────────────────────────────
+  document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast('URL copiada'); }
+    catch { toast('No se pudo copiar'); }
+  }));
 
   // Arranque
   refreshStatus();
