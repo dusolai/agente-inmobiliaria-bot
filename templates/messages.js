@@ -90,7 +90,51 @@ function recordatorioVideo3({ nombre, enlaceVideo }) {
   );
 }
 
-// ─── C. Rama "Sí vio el video" (Respaldo) ────────────────────────
+// ─── C. Rama "Sí vio el video" — DOS OPCIONES (15-06) ────────────
+// Tras ver el vídeo corto, le ofrecemos VER la presentación completa de 25
+// minutos ya mismo (en caliente) o RESERVAR una sesión grupal para verla más
+// tarde. El usuario contesta 1 o 2.
+function mensajeOpcionesVerPresentacion({ nombre }) {
+  return (
+    `¡Genial, ${nombre}! 🎉\n\n` +
+    `El siguiente paso es la *presentación de negocio completa* (unos 25 min). ` +
+    `Puedes verla ya mismo o reservar para verla cuando te venga mejor:\n\n` +
+    `1️⃣ *Ver la presentación ahora* (te abrimos el enlace al instante)\n` +
+    `2️⃣ *Reservar una sesión grupal* para verla en el horario que te encaje\n\n` +
+    `Responde con 1 o 2 y te paso el enlace correspondiente.`
+  );
+}
+
+function mensajePresentacionVerAhora({ nombre, enlacePresentacion }) {
+  return (
+    `¡Perfecto, ${nombre}! 🚀\n\n` +
+    `Aquí tienes el enlace a la presentación de negocio:\n` +
+    `🎥 ${enlacePresentacion}\n\n` +
+    `Cuando termines de verla, te activamos el siguiente paso: una *reunión 1-a-1* ` +
+    `con Arkaitz para resolver dudas y diseñar tu plan de entrada.`
+  );
+}
+
+function mensajePresentacionReservar({ nombre, enlaceReunion }) {
+  return (
+    `¡Listo, ${nombre}! 📅\n\n` +
+    `Reserva tu plaza para la sesión grupal en el horario que te encaje:\n` +
+    `🔗 ${enlaceReunion}\n\n` +
+    `Tras la sesión te activamos la *reunión 1-a-1* con Arkaitz.`
+  );
+}
+
+// Reintento si la respuesta a la opción no se entiende
+function mensajeReintentarOpciones({ nombre }) {
+  return (
+    `Perdona ${nombre}, no te he entendido. 🙏\n\n` +
+    `Responde con un número:\n` +
+    `1️⃣ Ver la presentación ahora\n` +
+    `2️⃣ Reservar una sesión grupal para verla más tarde`
+  );
+}
+
+// (Legacy: se mantiene por compatibilidad pero ya no se usa directamente)
 function mensajeVideoVisto({ nombre, enlaceReunion }) {
   return (
     `¡Genial, ${nombre}! He visto que terminaste el video. 🎉\n\n` +
@@ -138,12 +182,20 @@ function mensajeCierre({ nombre, enlaceCalendly }) {
   );
 }
 
-// ─── F. Mensaje de Descarte ──────────────────────────────────────
+// ─── F. Mensaje de Desistimiento Final (4º intento) ──────────────
+// Pide al lead que comparta la razón para mejorar el sistema y deja la
+// puerta abierta a retomar en el futuro (reunión final 15-06).
 function mensajeDescarte({ nombre }) {
   return (
-    `Hola ${nombre}, entendemos que quizás no era el momento adecuado. 🙏\n\n` +
-    `Si en el futuro quieres retomar el tema, no dudes en contactarnos.\n\n` +
-    `¡Un saludo de parte de ${config.agent.empresaNombre}!`
+    `Hola ${nombre}, hemos intentado contactar contigo varias veces y entendemos ` +
+    `que quizás no era el momento adecuado. 🙏\n\n` +
+    `Antes de dar por cerrada tu petición, *¿te importaría compartirnos brevemente* ` +
+    `*el motivo?* Cualquier respuesta nos ayuda muchísimo a mejorar para ` +
+    `próximas personas.\n\n` +
+    `Y por supuesto, la puerta queda abierta: si más adelante quieres ` +
+    `retomar el tema, solo tienes que escribirnos.\n\n` +
+    `Un saludo y mucha suerte 🤝\n` +
+    `— ${config.agent.empresaNombre}`
   );
 }
 
@@ -156,6 +208,10 @@ module.exports = {
   recordatorioVideo1,
   recordatorioVideo2,
   recordatorioVideo3,
+  mensajeOpcionesVerPresentacion,
+  mensajePresentacionVerAhora,
+  mensajePresentacionReservar,
+  mensajeReintentarOpciones,
   mensajeVideoVisto,
   recordatorioReunion1,
   recordatorioReunion2,

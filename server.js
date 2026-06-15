@@ -29,6 +29,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Rutas ────────────────────────────────────────────────────────
 app.use('/webhook', require('./routes/webhook'));
+app.use('/webhook/zoom', require('./routes/zoomWebhook'));
 app.use('/api', require('./routes/api'));
 app.use('/tracking', require('./routes/tracking'));
 app.use('/r', require('./routes/redirector'));

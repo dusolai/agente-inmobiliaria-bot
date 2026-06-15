@@ -70,6 +70,15 @@ function enlaceLandingPorPerfil(perfil, leadId) {
  * @param {string} telefono – número sin sufijo (ej. "34666...")
  * @param {string} texto    – cuerpo del mensaje recibido
  */
+// Interpreta una respuesta numérica (1 o 2) para la opción Ver ahora / Reservar.
+function interpretarOpcionVerReservar(texto) {
+  const t = normalizar(texto);
+  const tokens = t.split(/\s+/);
+  if (tokens.includes('1') || /\b(ver(la)?\s+ahora|ahora|ya)\b/.test(t)) return 'ver_ahora';
+  if (tokens.includes('2') || /\b(reserv|agend|m[aá]s\s+tarde|despu[eé]s)\w*/.test(t)) return 'reservar';
+  return null;
+}
+
 async function handleIncoming(telefono, texto) {
   const lead = leadManager.getLeadByPhone(telefono);
   if (!lead) return; // mensaje de alguien que no es un lead conocido
@@ -77,35 +86,60 @@ async function handleIncoming(telefono, texto) {
   // Registramos toda la actividad inbound del lead, esté en el estado que esté
   activityLog.appendActivity(lead.id, 'message_received', { texto });
 
-  // Solo nos interesa la respuesta a la pregunta de filtrado
-  if (lead.estado !== LEAD_STATES.ESPERANDO_CUALIFICACION) return;
-
-  const perfil = interpretarRespuesta(texto);
-
-  if (!perfil) {
-    await messaging.sendTextMessage(
-      lead.telefono,
-      messages.mensajeReintentarCualificacion({ nombre: lead.nombre })
-    );
+  // ─── Fase A: respuesta a la pregunta de cualificación ──────────
+  if (lead.estado === LEAD_STATES.ESPERANDO_CUALIFICACION) {
+    const perfil = interpretarRespuesta(texto);
+    if (!perfil) {
+      await messaging.sendTextMessage(
+        lead.telefono,
+        messages.mensajeReintentarCualificacion({ nombre: lead.nombre })
+      );
+      return;
+    }
+    leadManager.updateLead(lead.id, { perfil });
+    activityLog.appendActivity(lead.id, 'profile_set', { perfil });
+    const result = leadManager.transitionState(lead.id, LEAD_STATES.VIDEO_ENVIADO);
+    if (result.error) {
+      console.error(`❌ [Flujo] No se pudo avanzar el lead ${lead.id}: ${result.error}`);
+      return;
+    }
+    const enlaceLanding = enlaceLandingPorPerfil(perfil, lead.id);
+    const texto2 = perfil === LEAD_PROFILES.PROFESIONAL
+      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding })
+      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
+    console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing enviada`);
+    await messaging.sendTextMessage(lead.telefono, texto2);
     return;
   }
 
-  // Guardar perfil y avanzar a "vídeo enviado"
-  leadManager.updateLead(lead.id, { perfil });
-  activityLog.appendActivity(lead.id, 'profile_set', { perfil });
-  const result = leadManager.transitionState(lead.id, LEAD_STATES.VIDEO_ENVIADO);
-  if (result.error) {
-    console.error(`❌ [Flujo] No se pudo avanzar el lead ${lead.id}: ${result.error}`);
+  // ─── Fase B: respuesta a la opción Ver ahora / Reservar ──────
+  if (lead.estado === LEAD_STATES.VIDEO_VISTO) {
+    const opcion = interpretarOpcionVerReservar(texto);
+    if (!opcion) {
+      await messaging.sendTextMessage(
+        lead.telefono,
+        messages.mensajeReintentarOpciones({ nombre: lead.nombre })
+      );
+      return;
+    }
+    if (opcion === 'ver_ahora') {
+      const base = config.backendPublicUrl.replace(/\/$/, '');
+      const enlacePresentacion = `${base}/r/presentacion?l=${encodeURIComponent(lead.id)}`;
+      activityLog.appendActivity(lead.id, 'eleccion_ver_ahora');
+      await messaging.sendTextMessage(
+        lead.telefono,
+        messages.mensajePresentacionVerAhora({ nombre: lead.nombre, enlacePresentacion })
+      );
+    } else {
+      const enlaceReunion = enlaceRedirectorCalendly(lead, 'grupal');
+      activityLog.appendActivity(lead.id, 'eleccion_reservar');
+      await messaging.sendTextMessage(
+        lead.telefono,
+        messages.mensajePresentacionReservar({ nombre: lead.nombre, enlaceReunion })
+      );
+    }
     return;
   }
-
-  const enlaceLanding = enlaceLandingPorPerfil(perfil, lead.id);
-  const texto2 = perfil === LEAD_PROFILES.PROFESIONAL
-    ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding })
-    : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
-
-  console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing enviada`);
-  await messaging.sendTextMessage(lead.telefono, texto2);
 }
 
 /**

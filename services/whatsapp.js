@@ -190,9 +190,24 @@ async function sendTextMessage(to, body) {
 const isConfigured = () => isReady;
 const getLatestQr = () => latestQrDataUrl;
 
+/**
+ * Envía "escribiendo…" al contacto (Baileys: presence 'composing').
+ */
+async function sendTypingAction(to) {
+  if (!sock || !isReady) return;
+  try {
+    const jid = `${to}@s.whatsapp.net`;
+    await sock.presenceSubscribe(jid).catch(() => {});
+    await sock.sendPresenceUpdate('composing', jid);
+  } catch (err) {
+    // El typing es opcional, no rompemos el flujo
+  }
+}
+
 module.exports = {
   initialize,
   sendTextMessage,
+  sendTypingAction,
   isConfigured,
   getLatestQr
 };

@@ -136,4 +136,74 @@ router.post('/zoom-attendance', async (req, res) => {
   }
 });
 
+/**
+ * POST /webhook/bulk-import
+ * Sube en lote leads desde el Excel consolidado (595 contactos).
+ *
+ * Body: {
+ *   leads: [ { nombre, telefono, email? }, ... ],
+ *   leadsPorDia?: 10,        // throttle: cuántos arrancar al día (default 10)
+ *   ignorarDuplicados?: true // si ya existe por teléfono, lo salta
+ * }
+ *
+ * Crea los leads como "nuevos" (estado nuevo) y los pone con fuente
+ * "excel_import". El scheduler de import (separado) los irá activando
+ * leadsPorDia por día. Para el piloto se puede activar manualmente desde el
+ * panel o lanzar todos con el flag `activarTodos: true`.
+ */
+router.post('/bulk-import', async (req, res) => {
+  try {
+    const { leads, leadsPorDia, ignorarDuplicados, activarTodos } = req.body || {};
+    if (!Array.isArray(leads) || leads.length === 0) {
+      return res.status(400).json({ error: 'leads debe ser un array no vacío' });
+    }
+
+    const ignorar = ignorarDuplicados !== false; // default true
+    const porDia = parseInt(leadsPorDia) || 10;
+
+    const resultado = { creados: 0, duplicados: 0, errores: 0, activados: 0, total: leads.length };
+    const creados = [];
+
+    for (const fila of leads) {
+      try {
+        if (!fila.telefono || !fila.nombre) { resultado.errores++; continue; }
+        const tel = String(fila.telefono).replace(/\s+/g, '');
+        if (ignorar && leadManager.getLeadByPhone(tel)) { resultado.duplicados++; continue; }
+        const lead = leadManager.createLead({
+          nombre: fila.nombre,
+          email: fila.email || '',
+          telefono: tel,
+          fuente: 'excel_import',
+        });
+        resultado.creados++;
+        creados.push(lead);
+      } catch (err) {
+        console.error(`❌ [BulkImport] Error en fila:`, err.message);
+        resultado.errores++;
+      }
+    }
+
+    // Activación: pasa de nuevo → esperando_cualificacion y envía el mensaje.
+    // Si activarTodos, lanzamos los X primeros (porDia) al instante.
+    const aActivar = activarTodos ? creados : creados.slice(0, porDia);
+    for (const lead of aActivar) {
+      try {
+        leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
+        const texto = messages.mensajeReactivacion({ nombre: lead.nombre });
+        // sin delay para el envío masivo (es la primera toma de contacto)
+        await messaging.sendTextMessage(lead.telefono, texto, { delaySeconds: 0 });
+        resultado.activados++;
+      } catch (err) {
+        console.error(`❌ [BulkImport] No pude activar ${lead.id}:`, err.message);
+      }
+    }
+
+    console.log(`📥 [BulkImport] ${resultado.creados} creados, ${resultado.duplicados} duplicados, ${resultado.activados} activados`);
+    res.json({ success: true, resultado });
+  } catch (err) {
+    console.error('❌ [Webhook] Error bulk-import:', err.message);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 module.exports = router;

@@ -48,17 +48,10 @@ router.post('/video-click', async (req, res) => {
     console.log(`🎥 [Tracking] Video visto por: ${lead.nombre}`);
     activityLog.appendActivity(lead.id, 'calendly_click', null, req.ip);
 
-    // 2. Enviar mensaje de respaldo con enlace a reunión grupal (opcional)
-    // URL del redirector propio: registra el clic y lleva al Calendly grupal
-    // con UTMs + prefill. Así medimos la actividad sin depender de webhooks.
-    const enlaceReunion = conversationFlow.enlaceRedirectorCalendly(
-      leadManager.getLeadById(lead.id),
-      'grupal'
-    );
-    const texto = messages.mensajeVideoVisto({
-      nombre: lead.nombre,
-      enlaceReunion,
-    });
+    // 2. Reunión final 15-06: en lugar de mandar el Calendly directo, le
+    //    ofrecemos DOS opciones (Ver ahora / Reservar). La respuesta del lead
+    //    (1 o 2) la procesa services/conversationFlow.js → handleIncoming().
+    const texto = messages.mensajeOpcionesVerPresentacion({ nombre: lead.nombre });
     await messaging.sendTextMessage(lead.telefono, texto);
 
     res.json({

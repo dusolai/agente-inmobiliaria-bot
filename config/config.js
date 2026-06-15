@@ -26,6 +26,12 @@ module.exports = {
     accountId: process.env.ZOOM_ACCOUNT_ID || '',
     clientId: process.env.ZOOM_CLIENT_ID || '',
     clientSecret: process.env.ZOOM_CLIENT_SECRET || '',
+    // Secret Token de las Event Subscriptions de la app Server-to-Server.
+    // Se usa para verificar la firma de los webhooks entrantes.
+    webhookSecretToken: process.env.ZOOM_WEBHOOK_SECRET_TOKEN || '',
+    // Si el lead estuvo al menos estos minutos en la sala, se considera
+    // que asistió y se le envía el cierre 1-a-1.
+    minutosAsistenciaValida: parseInt(process.env.ZOOM_MIN_MINUTES) || 20,
   },
 
   // URL pública del propio backend (la que se usa en los enlaces que envía el
@@ -51,6 +57,11 @@ module.exports = {
     // Compatibilidad con nombres antiguos
     calendlyUrl: process.env.CALENDLY_URL || '#',
     reunionGrupalUrl: process.env.REUNION_GRUPAL_URL || '#',
+
+    // URL del vídeo de presentación de negocio de 25 min (la que va después
+    // del primer vídeo corto). Si el lead elige "Ver ahora" tras el vídeo
+    // corto, le mandamos esta URL a través del redirector con tracking.
+    presentacionVideoUrl: process.env.PRESENTACION_VIDEO_URL || '#',
   },
 
   agent: {
@@ -58,8 +69,15 @@ module.exports = {
     expertoNombre: process.env.EXPERTO_NOMBRE || 'Nuestro Experto',
     // Reunión 22-05: recordatorios cada 24 h (antes 48)
     reminderIntervalHours: parseInt(process.env.REMINDER_INTERVAL_HOURS) || 24,
-    maxReminders: parseInt(process.env.MAX_REMINDERS) || 3,
+    // Reunión final 15-06: secuencia de 4 intentos (5 min, 24h, 48h, 72h)
+    // antes de desistir y pedir la razón.
+    maxReminders: parseInt(process.env.MAX_REMINDERS) || 4,
+    reminderIntervalsMinutes: (process.env.REMINDER_INTERVALS_MINUTES || '5,1440,2880,4320')
+      .split(',')
+      .map((s) => parseInt(s.trim()) || 0),
     // Reunión 22-05/Agente: el botón de agenda aparece tras 1 min de vídeo
     delayedButtonSeconds: parseInt(process.env.DELAYED_BUTTON_SECONDS) || 60,
+    // Delay del bot para simular escritura humana (segundos)
+    typingDelaySeconds: parseInt(process.env.TYPING_DELAY_SECONDS) || 10,
   },
 };

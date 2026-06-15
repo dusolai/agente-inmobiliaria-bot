@@ -152,4 +152,20 @@ function initialize() {
   pollLoop();
 }
 
-module.exports = { initialize, sendMessage, isReady, TG_PREFIX };
+/**
+ * Envía el indicador "escribiendo…" al chat. Telegram lo mantiene ~5s o
+ * hasta que enviemos el mensaje real.
+ */
+async function sendTypingAction(chatIdOrTg) {
+  if (!isConfigured) return;
+  const chatId = String(chatIdOrTg).startsWith(TG_PREFIX)
+    ? String(chatIdOrTg).slice(TG_PREFIX.length)
+    : String(chatIdOrTg);
+  try {
+    await axios.post(apiUrl('sendChatAction'), { chat_id: chatId, action: 'typing' });
+  } catch (err) {
+    // Silenciamos: el typing es opcional
+  }
+}
+
+module.exports = { initialize, sendMessage, sendTypingAction, isReady, TG_PREFIX };

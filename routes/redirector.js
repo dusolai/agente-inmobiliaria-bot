@@ -47,4 +47,30 @@ function _redirectorCalendly(req, res, tipo) {
 router.get('/grupal', (req, res) => _redirectorCalendly(req, res, 'grupal'));
 router.get('/individual', (req, res) => _redirectorCalendly(req, res, 'individual'));
 
+/**
+ * GET /r/presentacion?l=<leadId>
+ * Redirector al vídeo de presentación de negocio de 25 min.
+ * Registra el clic y redirige a la URL real (config.landing.presentacionVideoUrl).
+ */
+router.get('/presentacion', (req, res) => {
+  try {
+    const leadId = req.query.l || req.query.lead;
+    const baseUrl = config.landing.presentacionVideoUrl;
+
+    if (!baseUrl || baseUrl === '#') {
+      return res.status(503).send('Vídeo de presentación no configurado.');
+    }
+    if (leadId) {
+      const lead = leadManager.getLeadById(leadId);
+      if (lead) {
+        activityLog.appendActivity(lead.id, 'presentacion_intent', null, req.ip);
+      }
+    }
+    res.redirect(302, baseUrl);
+  } catch (err) {
+    console.error('❌ [Redirector] Error en /r/presentacion:', err.message);
+    res.status(500).send('Error interno');
+  }
+});
+
 module.exports = router;

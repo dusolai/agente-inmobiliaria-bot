@@ -14,19 +14,29 @@ const messages = require('../templates/messages');
  *  - Máximo 3 recordatorios antes de descartar
  */
 
-const REMINDER_INTERVAL_MS = config.agent.reminderIntervalHours * 60 * 60 * 1000;
 const MAX_REMINDERS = config.agent.maxReminders;
 
-// Mapeo de funciones de recordatorio por contador
+// Devuelve el intervalo en ms que se debe esperar antes del recordatorio
+// número `n` (0-indexado). Si hay menos entradas que MAX_REMINDERS, repite la
+// última (típico 72 h). Reunión final 15-06: [5min, 24h, 48h, 72h].
+function _intervaloMs(n) {
+  const arr = config.agent.reminderIntervalsMinutes || [];
+  const minutos = arr[n] != null ? arr[n] : (arr[arr.length - 1] != null ? arr[arr.length - 1] : config.agent.reminderIntervalHours * 60);
+  return minutos * 60 * 1000;
+}
+
+// Mapeo de funciones de recordatorio por contador (4 niveles)
 const videoReminders = [
   messages.recordatorioVideo1,
   messages.recordatorioVideo2,
   messages.recordatorioVideo3,
+  messages.recordatorioVideo3, // 4º reintento usa el mismo copy duro que el 3º
 ];
 
 const reunionReminders = [
   messages.recordatorioReunion1,
   messages.recordatorioReunion2,
+  messages.recordatorioReunion3,
   messages.recordatorioReunion3,
 ];
 
@@ -53,7 +63,7 @@ async function procesarRecordatoriosFase1() {
       ? new Date(fase1.ultimoEnvio).getTime()
       : new Date(lead.createdAt).getTime();
 
-    if (ahora - referencia < REMINDER_INTERVAL_MS) continue;
+    if (ahora - referencia < _intervaloMs(fase1.enviados)) continue;
 
     console.log(`🔔 [Scheduler] Recordatorio Cualificación #${fase1.enviados + 1} → ${lead.nombre}`);
     await messaging.sendTextMessage(
@@ -97,7 +107,7 @@ async function procesarRecordatoriosFase2() {
       ? new Date(fase2.ultimoEnvio).getTime()
       : new Date(lead.createdAt).getTime();
 
-    if (ahora - referencia < REMINDER_INTERVAL_MS) continue;
+    if (ahora - referencia < _intervaloMs(fase2.enviados)) continue;
 
     // Enviar recordatorio
     const idx = Math.min(fase2.enviados, videoReminders.length - 1);
@@ -145,7 +155,7 @@ async function procesarRecordatoriosFase3() {
       ? new Date(fase3.ultimoEnvio).getTime()
       : new Date(lead.reunionRegistradoAt || lead.updatedAt).getTime();
 
-    if (ahora - referencia < REMINDER_INTERVAL_MS) continue;
+    if (ahora - referencia < _intervaloMs(fase3.enviados)) continue;
 
     const idx = Math.min(fase3.enviados, reunionReminders.length - 1);
     const msgFn = reunionReminders[idx];
@@ -184,10 +194,10 @@ async function ejecutarCiclo() {
  * Arranca el cron job (cada hora).
  */
 function iniciar() {
-  console.log('🕐 [Scheduler] Programador de recordatorios iniciado (cada hora)');
+  console.log('🕐 [Scheduler] Programador de recordatorios iniciado (cada 5 min)');
 
-  // Ejecutar cada hora en punto
-  cron.schedule('0 * * * *', () => {
+  // Ejecutar cada 5 minutos para que el primer recordatorio (5 min) llegue a tiempo
+  cron.schedule('*/5 * * * *', () => {
     ejecutarCiclo().catch((err) => {
       console.error('❌ [Scheduler] Error en ciclo:', err.message);
     });

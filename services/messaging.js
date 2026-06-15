@@ -1,15 +1,18 @@
 /**
- * Dispatcher de mensajería.
+ * Dispatcher de mensajería con humanización.
  *
- * Decide a qué adaptador enviar (WhatsApp o Telegram) en función del
- * identificador del lead:
- *   - "tg:<chat_id>"  → Telegram
- *   - cualquier otro  → WhatsApp (número de teléfono)
+ * - Decide el canal (Telegram o WhatsApp) según el prefijo del lead:
+ *     "tg:<chat_id>"  → Telegram
+ *     cualquier otro  → WhatsApp (número de teléfono)
+ * - Antes de cada envío:
+ *     1) Envía indicador de "escribiendo…" al canal.
+ *     2) Espera `typingDelaySeconds` (default 10s; configurable por mensaje).
+ *     3) Envía el mensaje real.
  *
- * Así el resto del sistema (conversationFlow, scheduler, webhook, tracking)
- * no necesita saber por qué canal entra el lead.
+ * Esto simula una conversación humana — lo pidió Arkaitz en la reunión final.
  */
 
+const config = require('../config/config');
 const whatsapp = require('./whatsapp');
 const telegram = require('./telegram');
 
@@ -19,11 +22,42 @@ function esTelegram(telefono) {
   return typeof telefono === 'string' && telefono.startsWith(TG_PREFIX);
 }
 
-async function sendTextMessage(telefono, text) {
-  if (esTelegram(telefono)) {
-    return telegram.sendMessage(telefono, text);
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, Math.max(0, ms)));
+}
+
+/**
+ * Envía un mensaje de texto al lead, con un pequeño delay y el indicador de
+ * "escribiendo" antes para que parezca humano.
+ *
+ * @param {string} telefono            – identificador del lead
+ * @param {string} text                – texto del mensaje
+ * @param {object} [opts]
+ * @param {number} [opts.delaySeconds] – override del delay; null = sin delay
+ */
+async function sendTextMessage(telefono, text, opts = {}) {
+  const delaySeconds = opts.delaySeconds != null ? opts.delaySeconds : config.agent.typingDelaySeconds;
+  const conTipping = delaySeconds > 0;
+
+  try {
+    if (esTelegram(telefono)) {
+      if (conTipping) {
+        await telegram.sendTypingAction(telefono);
+        await sleep(delaySeconds * 1000);
+      }
+      return telegram.sendMessage(telefono, text);
+    }
+    if (conTipping) {
+      await whatsapp.sendTypingAction(telefono);
+      await sleep(delaySeconds * 1000);
+    }
+    return whatsapp.sendTextMessage(telefono, text);
+  } catch (err) {
+    // Si algo falla en el typing, no abortamos el envío del mensaje
+    console.error('⚠️  [Messaging] Error con typing, enviando directo:', err.message);
+    if (esTelegram(telefono)) return telegram.sendMessage(telefono, text);
+    return whatsapp.sendTextMessage(telefono, text);
   }
-  return whatsapp.sendTextMessage(telefono, text);
 }
 
 module.exports = { sendTextMessage, esTelegram, TG_PREFIX };
