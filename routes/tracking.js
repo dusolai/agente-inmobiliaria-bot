@@ -131,11 +131,18 @@ router.get('/calendly-booked', async (req, res) => {
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_REGISTRADO);
       console.log(`📅 [Tracking] Reserva confirmada vía Calendly: ${lead.nombre}`);
 
-      // Avisar al lead por WhatsApp/Telegram (opcional, agradable de tener)
+      // Avisar al lead por su canal (Telegram/WhatsApp lo decide messaging
+      // según el prefijo del teléfono) e incluir el enlace de la presentación
+      // ya, así no depende del email automático de Calendly.
       try {
+        const base = config.backendPublicUrl.replace(/\/$/, '');
+        const enlacePresentacion = `${base}/r/presentacion?l=${encodeURIComponent(lead.id)}`;
         await messaging.sendTextMessage(
           lead.telefono,
-          `¡Perfecto ${lead.nombre}! Tu reserva está confirmada. Te enviaremos un recordatorio antes de la reunión.`
+          messages.mensajeReservaConfirmada({
+            nombre: lead.nombre,
+            enlacePresentacion,
+          })
         );
       } catch (e) {
         console.error('No se pudo enviar la confirmación al lead:', e.message);

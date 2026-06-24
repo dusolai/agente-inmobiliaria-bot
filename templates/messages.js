@@ -110,6 +110,17 @@ function mensajePresentacionVerAhora({ nombre, enlacePresentacion }) {
   );
 }
 
+// Confirmación tras reservar en Calendly: le mandamos el enlace de la
+// presentación directo, así no depende solo del email recordatorio de Calendly.
+function mensajeReservaConfirmada({ nombre, enlacePresentacion }) {
+  return (
+    `¡Listo ${nombre}! 🙌 Tu hueco está reservado.\n\n` +
+    `Te dejo el enlace de la presentación aquí mismo para que lo tengas a mano:\n` +
+    `${enlacePresentacion}\n\n` +
+    `Te avisaré justo antes de tu hora con un recordatorio. Si necesitas cambiar el horario, lo gestionamos sin problema.`
+  );
+}
+
 function mensajePresentacionReservar({ nombre, enlaceReunion }) {
   return (
     `Perfecto ${nombre}, así con tranquilidad mejor 📅\n\n` +
@@ -198,6 +209,7 @@ module.exports = {
   mensajeOpcionesVerPresentacion,
   mensajePresentacionVerAhora,
   mensajePresentacionReservar,
+  mensajeReservaConfirmada,
   mensajeReintentarOpciones,
   mensajeVideoVisto,
   recordatorioReunion1,
