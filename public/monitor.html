@@ -104,6 +104,17 @@
   .btn.green:hover{background:#cbe9d4}
   .btn:disabled{opacity:.55;cursor:not-allowed}
 
+  .lead-toolbar{display:grid;grid-template-columns:1fr 130px;gap:.5rem;margin:.6rem 0 .8rem}
+  .lead-toolbar input,.lead-toolbar select{padding:.55rem .7rem;border:1px solid var(--line);border-radius:8px;font-size:.85rem;background:#fff;outline:none}
+  .lead-toolbar input:focus,.lead-toolbar select:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
+  .lead-pager{display:flex;justify-content:center;align-items:center;gap:.8rem;margin-top:.6rem;padding:.4rem;background:#f8fafc;border-radius:8px}
+  .lead-pager button{padding:.3rem .8rem;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;font-size:.85rem}
+  .lead-pager button:disabled{opacity:.4;cursor:not-allowed}
+  .lead-pager #pagInfo{font-size:.8rem;color:#475569;font-weight:600}
+  .lead .progress-mini{display:inline-block;width:34px;height:4px;background:#e2e8f0;border-radius:3px;margin-right:.4rem;vertical-align:middle;overflow:hidden}
+  .lead .progress-mini i{display:block;height:100%;background:#16a34a}
+  .lead .stale{color:#dc2626;font-weight:700} .lead .stale-dot{display:inline-block;width:8px;height:8px;background:#dc2626;border-radius:50%;margin-right:.3rem;animation:pulseDot 1.4s infinite}
+  @keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.35}}
   .video-summary{margin:1rem 0 1.2rem;padding:.9rem 1rem;background:#f8fafc;border:1px solid var(--line);border-radius:10px}
   .vs-title{font-weight:700;font-size:.85rem;margin-bottom:.6rem;color:#334155}
   .vs-row{display:grid;grid-template-columns:170px 1fr 110px;align-items:center;gap:.7rem;margin-bottom:.45rem;font-size:.8rem}
@@ -208,8 +219,22 @@
           <button data-f="agenda_1a1">Agenda 1a1</button>
           <button data-f="descartado">Descartados</button>
         </div>
+        <div class="lead-toolbar">
+          <input type="search" id="leadSearch" placeholder="🔍 Buscar nombre, teléfono, email…" autocomplete="off">
+          <select id="leadSort" title="Ordenar">
+            <option value="updatedAt">Reciente</option>
+            <option value="createdAt">Antiguo</option>
+            <option value="nombre">A-Z</option>
+            <option value="estado">Por estado</option>
+          </select>
+        </div>
         <div id="leads" class="leads-list">
           <div class="empty">Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span></div>
+        </div>
+        <div id="leadPager" class="lead-pager" style="display:none">
+          <button id="pagPrev">◀</button>
+          <span id="pagInfo">1 / 1</span>
+          <button id="pagNext">▶</button>
         </div>
       </div>
 
@@ -366,6 +391,10 @@
   let selectedLeadId = null;
   let currentTab = 'inicio';
   let leadFilter = ''; // '' = todos; o un estado concreto
+  let leadSearch = '';
+  let leadSort = 'updatedAt';
+  let leadPage = 1;
+  const LEADS_PER_PAGE = 30;
 
   const $ = (id) => document.getElementById(id);
 
@@ -521,25 +550,75 @@
         </div>`;
       }).join('');
 
-      const allLeads = (leadsResp.leads || []).slice().sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-      const leads = leadFilter ? allLeads.filter(l => l.estado === leadFilter) : allLeads;
-      $('lead-count').textContent = leadFilter
-        ? `${leads.length} de ${allLeads.length}`
-        : (allLeads.length ? `${allLeads.length} totales` : '');
+      let allLeads = (leadsResp.leads || []).slice();
+      // 1) Filtro por estado (tabs)
+      if (leadFilter) allLeads = allLeads.filter(l => l.estado === leadFilter);
+      // 2) Búsqueda libre (nombre, teléfono, email)
+      if (leadSearch) {
+        const q = leadSearch.toLowerCase();
+        allLeads = allLeads.filter(l =>
+          (l.nombre || '').toLowerCase().includes(q) ||
+          (l.telefono || '').toLowerCase().includes(q) ||
+          (l.email || '').toLowerCase().includes(q)
+        );
+      }
+      // 3) Orden
+      const ESTADO_ORDER = ['esperando_cualificacion','video_enviado','video_visto','reunion_registrado','reunion_asistio','agenda_1a1','descartado','nuevo'];
+      allLeads.sort((a,b) => {
+        if (leadSort === 'createdAt') return new Date(a.createdAt) - new Date(b.createdAt);
+        if (leadSort === 'nombre') return (a.nombre || '').localeCompare(b.nombre || '');
+        if (leadSort === 'estado') return ESTADO_ORDER.indexOf(a.estado) - ESTADO_ORDER.indexOf(b.estado);
+        return new Date(b.updatedAt) - new Date(a.updatedAt); // default: reciente
+      });
+
+      // 4) Paginación
+      const totalPages = Math.max(1, Math.ceil(allLeads.length / LEADS_PER_PAGE));
+      if (leadPage > totalPages) leadPage = totalPages;
+      const start = (leadPage - 1) * LEADS_PER_PAGE;
+      const leads = allLeads.slice(start, start + LEADS_PER_PAGE);
+
+      // Contador
+      const totalSinFiltrar = leadsResp.leads ? leadsResp.leads.length : 0;
+      $('lead-count').textContent = (leadFilter || leadSearch)
+        ? `${allLeads.length} de ${totalSinFiltrar}`
+        : (totalSinFiltrar ? `${totalSinFiltrar} totales` : '');
+
+      // Paginador
+      const pager = $('leadPager');
+      if (allLeads.length > LEADS_PER_PAGE) {
+        pager.style.display = 'flex';
+        $('pagInfo').textContent = `${leadPage} / ${totalPages}  ·  ${start + 1}-${Math.min(start + LEADS_PER_PAGE, allLeads.length)}`;
+        $('pagPrev').disabled = leadPage <= 1;
+        $('pagNext').disabled = leadPage >= totalPages;
+      } else {
+        pager.style.display = 'none';
+      }
 
       if (leads.length === 0) {
-        $('leads').innerHTML = `<div class="empty">Esperando actividad…<br><br>
-          <span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span></div>`;
-        $('leadDetail').innerHTML = `<div class="empty">Selecciona un lead a la izquierda para ver su recorrido y actuar sobre él.</div>`;
-        selectedLeadId = null;
+        const emptyMsg = (leadSearch || leadFilter)
+          ? `Sin coincidencias para ${leadSearch ? `"${leadSearch}"` : 'este filtro'}.`
+          : `Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span>`;
+        $('leads').innerHTML = `<div class="empty">${emptyMsg}</div>`;
+        if (!leadSearch && !leadFilter) {
+          $('leadDetail').innerHTML = `<div class="empty">Selecciona un lead a la izquierda para ver su recorrido y actuar sobre él.</div>`;
+          selectedLeadId = null;
+        }
       } else {
+        const now = Date.now();
         $('leads').innerHTML = leads.map(l => {
           const active = l.id === selectedLeadId ? 'active' : '';
           const perfil = l.perfil && l.perfil !== 'sin_definir' ? ` · ${l.perfil}` : '';
+          // "Stale": lleva > 24h sin movimiento y aún no está cerrado/descartado
+          const horasSinTocar = (now - new Date(l.updatedAt).getTime()) / 36e5;
+          const isStale = horasSinTocar > 24 && !['descartado','agenda_1a1'].includes(l.estado);
+          const stale = isStale ? `<span class="stale-dot" title="Lleva ${Math.round(horasSinTocar)}h sin actividad"></span>` : '';
+          // Mini barra de progreso por % máximo de video1 en el lead
+          const pct = Math.max(0, Math.min(100, l.videoProgressMax || 0));
+          const mini = pct > 0 ? `<span class="progress-mini" title="${pct}% del vídeo principal"><i style="width:${pct}%"></i></span>` : '';
           return `<div class="lead ${active}" data-id="${l.id}">
             <div>
-              <div class="name">${(l.nombre || 'Sin nombre').replace(/</g,'&lt;')}</div>
-              <div class="meta">${fmtTime(l.updatedAt)}${perfil}</div>
+              <div class="name">${stale}${(l.nombre || 'Sin nombre').replace(/</g,'&lt;')}</div>
+              <div class="meta">${mini}${fmtTime(l.updatedAt)}${perfil}</div>
             </div>
             <span class="badge badge-${l.estado}">${l.estado.replace(/_/g,' ')}</span>
           </div>`;
@@ -676,9 +755,24 @@
   // ─── Filtros de leads por fase ─────────────────────────
   document.querySelectorAll('#leadFilters button').forEach(b => b.addEventListener('click', () => {
     leadFilter = b.dataset.f;
+    leadPage = 1; // reset al cambiar filtro
     document.querySelectorAll('#leadFilters button').forEach(bb => bb.classList.toggle('active', bb.dataset.f === leadFilter));
     refresh();
   }));
+
+  // ─── Búsqueda, orden y paginación ──────────────────────
+  let searchDebounce = null;
+  $('leadSearch').addEventListener('input', (e) => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      leadSearch = e.target.value.trim();
+      leadPage = 1;
+      refresh();
+    }, 200);
+  });
+  $('leadSort').addEventListener('change', (e) => { leadSort = e.target.value; leadPage = 1; refresh(); });
+  $('pagPrev').addEventListener('click', () => { if (leadPage > 1) { leadPage--; selectedLeadId = null; refresh(); } });
+  $('pagNext').addEventListener('click', () => { leadPage++; selectedLeadId = null; refresh(); });
 
   // ─── Copiar al portapapeles ────────────────────────────
   document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async (e) => {

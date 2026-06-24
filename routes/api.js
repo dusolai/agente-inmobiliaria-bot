@@ -10,7 +10,23 @@ const activityLog = require('../services/activityLog');
 router.get('/leads', (req, res) => {
   const { estado, fuente } = req.query;
   const leads = leadManager.getAllLeads({ estado, fuente });
-  res.json({ total: leads.length, leads });
+  // Enriquecer cada lead con videoProgressMax (% máximo del vídeo principal)
+  // para mostrar mini barra en el panel sin tener que pedir actividad lead a lead.
+  const enriched = leads.map((l) => {
+    const events = activityLog.getActivityByLead(l.id) || [];
+    let pct = 0;
+    for (const ev of events) {
+      const isMain = !ev.meta || !ev.meta.videoId || ev.meta.videoId === 'video1';
+      if (!isMain) continue;
+      if (ev.type === 'video_complete') pct = Math.max(pct, 100);
+      else if (ev.type === 'video_progress_75') pct = Math.max(pct, 75);
+      else if (ev.type === 'video_progress_50') pct = Math.max(pct, 50);
+      else if (ev.type === 'video_progress_25') pct = Math.max(pct, 25);
+      else if (ev.type === 'video_play') pct = Math.max(pct, 5);
+    }
+    return Object.assign({}, l, { videoProgressMax: pct });
+  });
+  res.json({ total: enriched.length, leads: enriched });
 });
 
 /**
