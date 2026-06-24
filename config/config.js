@@ -51,8 +51,8 @@ module.exports = {
     landingEmprendedorUrl: process.env.LANDING_EMPRENDEDOR_URL || 'https://three-inmobiliaria-emprende.pages.dev/',
 
     // Dos integraciones de Calendly: grupal (genérica) e individual (post-cierre)
-    calendlyGrupalUrl: process.env.CALENDLY_GRUPAL_URL || process.env.REUNION_GRUPAL_URL || '#',
-    calendlyIndividualUrl: process.env.CALENDLY_INDIVIDUAL_URL || process.env.CALENDLY_URL || '#',
+    calendlyGrupalUrl: process.env.CALENDLY_GRUPAL_URL || process.env.REUNION_GRUPAL_URL || 'https://calendly.com/arkaitzasr24/presentacion-de-negocio-three-inmobiliaria',
+    calendlyIndividualUrl: process.env.CALENDLY_INDIVIDUAL_URL || process.env.CALENDLY_URL || 'https://calendly.com/arkaitzasr24/reunion-1-a-1-three-inmobiliaria',
 
     // Compatibilidad con nombres antiguos
     calendlyUrl: process.env.CALENDLY_URL || '#',
