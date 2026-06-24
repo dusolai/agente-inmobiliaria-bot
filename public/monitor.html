@@ -104,6 +104,14 @@
   .btn.green:hover{background:#cbe9d4}
   .btn:disabled{opacity:.55;cursor:not-allowed}
 
+  .video-summary{margin:1rem 0 1.2rem;padding:.9rem 1rem;background:#f8fafc;border:1px solid var(--line);border-radius:10px}
+  .vs-title{font-weight:700;font-size:.85rem;margin-bottom:.6rem;color:#334155}
+  .vs-row{display:grid;grid-template-columns:170px 1fr 110px;align-items:center;gap:.7rem;margin-bottom:.45rem;font-size:.8rem}
+  .vs-row:last-child{margin-bottom:0}
+  .vs-name{color:#475569}.vs-name small{color:#94a3b8;font-weight:400}
+  .vs-bar{height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden}
+  .vs-fill{height:100%;border-radius:6px;transition:width .3s ease}
+  .vs-pct{font-weight:700;text-align:right;font-size:.78rem}
   .timeline{max-height:430px;overflow-y:auto;padding-right:.5rem}
   .tl-item{display:grid;grid-template-columns:90px 1fr;gap:.8rem;padding:.55rem 0;border-bottom:1px dashed var(--line);font-size:.85rem;align-items:start}
   .tl-time{color:var(--muted);font-size:.72rem;font-weight:600;font-variant-numeric:tabular-nums;padding-top:2px}
@@ -390,11 +398,11 @@
       case 'profile_set':        return `perfil: ${m.perfil}`;
       case 'message_received':   return m.texto ? `"${m.texto}"` : '';
       case 'landing_view':       return `landing ${m.perfil || ''}`;
-      case 'video_play':         return 'play del vídeo';
-      case 'video_progress_25':  return 'llegó al 25%';
-      case 'video_progress_50':  return 'llegó al 50%';
-      case 'video_progress_75':  return 'llegó al 75%';
-      case 'video_complete':     return 'vió el vídeo entero';
+      case 'video_play':         return m.videoId ? `play (${m.videoId})` : 'play del vídeo';
+      case 'video_progress_25':  return m.videoId ? `25% (${m.videoId})` : 'llegó al 25%';
+      case 'video_progress_50':  return m.videoId ? `50% (${m.videoId})` : 'llegó al 50%';
+      case 'video_progress_75':  return m.videoId ? `75% (${m.videoId})` : 'llegó al 75%';
+      case 'video_complete':     return m.videoId ? `100% (${m.videoId})` : 'vió el vídeo entero';
       case 'calendly_button_revealed': return 'se le mostró el botón';
       case 'calendly_click':     return 'clic en botón de la landing';
       case 'calendly_intent':    return `pulsó enlace ${m.tipo || ''}`;
@@ -402,6 +410,53 @@
       case 'meeting_joined':     return m.duracionMinutos ? `entró a la reunión (${m.duracionMinutos} min)` : 'entró a la reunión';
       default:                   return JSON.stringify(m);
     }
+  }
+
+  // Agrupa los eventos por videoId y devuelve el máximo % alcanzado en cada uno.
+  function computeVideoProgress(eventos) {
+    const map = {};
+    const upd = (id, pct) => {
+      if (!id) return;
+      if (!map[id] || pct > map[id]) map[id] = pct;
+    };
+    for (const ev of eventos) {
+      const vid = (ev.meta && ev.meta.videoId) || (ev.type === 'video_play' && 'video1') || null;
+      switch (ev.type) {
+        case 'video_play':         upd(vid || 'video1', 1); break;
+        case 'video_progress_25':  upd(vid || 'video1', 25); break;
+        case 'video_progress_50':  upd(vid || 'video1', 50); break;
+        case 'video_progress_75':  upd(vid || 'video1', 75); break;
+        case 'video_complete':     upd(vid || 'video1', 100); break;
+      }
+    }
+    return map;
+  }
+
+  function renderVideoSummary(eventos) {
+    const map = computeVideoProgress(eventos);
+    const ids = Object.keys(map);
+    if (ids.length === 0) return '';
+    const friendly = (id) => ({
+      video1: 'Vídeo principal',
+      video2: 'Vídeo 2 (intro solución)',
+      video3: 'Vídeo 3 (beneficios)',
+      videoGeneral: 'Vídeo general',
+      videoPortugal: 'Vídeo Portugal',
+    }[id] || id);
+    return `<div class="video-summary">
+      <div class="vs-title">🎥 Visionado por vídeo</div>
+      ${ids.map(id => {
+        const pct = map[id] === 1 ? 0 : map[id]; // play sin progreso lo mostramos como 0
+        const realPct = map[id];
+        const label = realPct === 1 ? 'play, sin progreso' : `${realPct}%`;
+        const color = realPct >= 75 ? '#16a34a' : realPct >= 50 ? '#f59e0b' : realPct >= 25 ? '#f97316' : '#9ca3af';
+        return `<div class="vs-row">
+          <div class="vs-name">${friendly(id)} <small>(${id})</small></div>
+          <div class="vs-bar"><div class="vs-fill" style="width:${pct}%; background:${color}"></div></div>
+          <div class="vs-pct" style="color:${color}">${label}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
   }
 
   async function fetchJSON(url, opts={}) {
@@ -539,6 +594,8 @@
         <span class="badge badge-${lead.estado}">${lead.estado.replace(/_/g,' ')}</span>
       </div>${renderActions(lead)}`;
 
+      const videoSummary = renderVideoSummary(eventos);
+
       const timeline = eventos.length === 0
         ? `<div class="empty">Aún no hay eventos para este lead.</div>`
         : `<div class="timeline">${eventos.map(ev => `
@@ -550,7 +607,7 @@
               </div>
             </div>`).join('')}</div>`;
 
-      $('leadDetail').innerHTML = head + timeline;
+      $('leadDetail').innerHTML = head + videoSummary + timeline;
       bindActions();
     } catch (err) {
       $('leadDetail').innerHTML = `<div class="empty">Error: ${err.message}</div>`;
