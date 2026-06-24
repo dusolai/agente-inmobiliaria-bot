@@ -87,6 +87,9 @@ async function handleIncoming(telefono, texto) {
   activityLog.appendActivity(lead.id, 'message_received', { texto });
 
   // ─── Fase A: respuesta a la pregunta de cualificación ──────────
+  // Tras cualificar enviamos el Calendly grupal (no la landing). El lead se
+  // compromete reservando hueco; al confirmar reserva, /tracking/calendly-booked
+  // le envía el acceso al vídeo y le mueve al siguiente estado.
   if (lead.estado === LEAD_STATES.ESPERANDO_CUALIFICACION) {
     const perfil = interpretarRespuesta(texto);
     if (!perfil) {
@@ -103,43 +106,17 @@ async function handleIncoming(telefono, texto) {
       console.error(`❌ [Flujo] No se pudo avanzar el lead ${lead.id}: ${result.error}`);
       return;
     }
-    const enlaceLanding = enlaceLandingPorPerfil(perfil, lead.id);
+    const enlaceCalendly = enlaceRedirectorCalendly(lead, 'grupal');
     const texto2 = perfil === LEAD_PROFILES.PROFESIONAL
-      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding })
-      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
-    console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing enviada`);
+      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceCalendly })
+      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceCalendly });
+    console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → Calendly grupal enviado`);
     await messaging.sendTextMessage(lead.telefono, texto2);
     return;
   }
 
-  // ─── Fase B: respuesta a la opción Ver ahora / Reservar ──────
-  if (lead.estado === LEAD_STATES.VIDEO_VISTO) {
-    const opcion = interpretarOpcionVerReservar(texto);
-    if (!opcion) {
-      await messaging.sendTextMessage(
-        lead.telefono,
-        messages.mensajeReintentarOpciones({ nombre: lead.nombre })
-      );
-      return;
-    }
-    if (opcion === 'ver_ahora') {
-      const base = config.backendPublicUrl.replace(/\/$/, '');
-      const enlacePresentacion = `${base}/r/presentacion?l=${encodeURIComponent(lead.id)}`;
-      activityLog.appendActivity(lead.id, 'eleccion_ver_ahora');
-      await messaging.sendTextMessage(
-        lead.telefono,
-        messages.mensajePresentacionVerAhora({ nombre: lead.nombre, enlacePresentacion })
-      );
-    } else {
-      const enlaceReunion = enlaceRedirectorCalendly(lead, 'grupal');
-      activityLog.appendActivity(lead.id, 'eleccion_reservar');
-      await messaging.sendTextMessage(
-        lead.telefono,
-        messages.mensajePresentacionReservar({ nombre: lead.nombre, enlaceReunion })
-      );
-    }
-    return;
-  }
+  // (La antigua Fase B "Ver ahora / Reservar" se elimina: ahora hay un único
+  // camino — Calendly grupal → vídeo → 1-a-1 con Arkaitz.)
 }
 
 /**

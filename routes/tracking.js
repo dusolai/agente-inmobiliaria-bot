@@ -30,29 +30,30 @@ router.post('/video-click', async (req, res) => {
       return res.status(404).json({ error: 'Lead no encontrado' });
     }
 
-    // Solo transicionar si está en el estado correcto
-    if (lead.estado !== leadManager.LEAD_STATES.VIDEO_ENVIADO) {
-      return res.json({
-        success: true,
-        message: `Lead ya está en estado: ${lead.estado}`,
-        lead,
-      });
+    // Aceptamos el clic desde dos estados:
+    //  - VIDEO_VISTO: nuevo flujo (lead ya reservó grupal, ahora vio el vídeo)
+    //  - VIDEO_ENVIADO: flujo legacy (por si quedan leads del modelo antiguo)
+    if (lead.estado === leadManager.LEAD_STATES.VIDEO_VISTO) {
+      // Transición VIDEO_VISTO → REUNION_REGISTRADO (= "vio vídeo, pasa a 1-a-1")
+      const result = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_REGISTRADO);
+      if (result.error) return res.status(400).json({ error: result.error });
+      activityLog.appendActivity(lead.id, 'cta_1a1_click', null, req.ip);
+      console.log(`🎥→📞 [Tracking] CTA pulsado, 1-a-1 enviado: ${lead.nombre}`);
+
+      const enlace1a1 = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
+      await messaging.sendTextMessage(
+        lead.telefono,
+        messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 })
+      );
+    } else if (lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
+      // Legacy: avanza al siguiente estado y manda la rama antigua de opciones
+      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_VISTO);
+      activityLog.appendActivity(lead.id, 'calendly_click', null, req.ip);
+      const texto = messages.mensajeOpcionesVerPresentacion({ nombre: lead.nombre });
+      await messaging.sendTextMessage(lead.telefono, texto);
+    } else {
+      return res.json({ success: true, message: `Lead ya está en estado: ${lead.estado}`, lead });
     }
-
-    // 1. Transicionar a "video_visto"
-    const result = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_VISTO);
-    if (result.error) {
-      return res.status(400).json({ error: result.error });
-    }
-
-    console.log(`🎥 [Tracking] Video visto por: ${lead.nombre}`);
-    activityLog.appendActivity(lead.id, 'calendly_click', null, req.ip);
-
-    // 2. Reunión final 15-06: en lugar de mandar el Calendly directo, le
-    //    ofrecemos DOS opciones (Ver ahora / Reservar). La respuesta del lead
-    //    (1 o 2) la procesa services/conversationFlow.js → handleIncoming().
-    const texto = messages.mensajeOpcionesVerPresentacion({ nombre: lead.nombre });
-    await messaging.sendTextMessage(lead.telefono, texto);
 
     res.json({
       success: true,
@@ -126,27 +127,35 @@ router.get('/calendly-booked', async (req, res) => {
       return res.status(404).send('Lead no encontrado');
     }
 
-    // Solo transicionar si tiene sentido (evita carreras y dobles clics)
-    if (lead.estado === leadManager.LEAD_STATES.VIDEO_VISTO) {
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_REGISTRADO);
-      console.log(`📅 [Tracking] Reserva confirmada vía Calendly: ${lead.nombre}`);
-
-      // Avisar al lead por su canal (Telegram/WhatsApp lo decide messaging
-      // según el prefijo del teléfono) e incluir el enlace de la presentación
-      // ya, así no depende del email automático de Calendly.
-      try {
-        const base = config.backendPublicUrl.replace(/\/$/, '');
-        const enlacePresentacion = `${base}/r/presentacion?l=${encodeURIComponent(lead.id)}`;
+    // Dos caminos según el estado actual:
+    //  a) Lead en VIDEO_ENVIADO  → reservó la SESIÓN GRUPAL (vídeo grabado)
+    //      → transicionamos a VIDEO_VISTO y le mandamos el acceso a la landing
+    //  b) Lead en REUNION_REGISTRADO → reservó la 1-a-1 con Arkaitz (Zoom)
+    //      → transicionamos a REUNION_ASISTIO y mandamos confirmación
+    try {
+      if (lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
+        leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_VISTO);
+        console.log(`📅 [Tracking] Reserva GRUPAL confirmada: ${lead.nombre}`);
+        const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
         await messaging.sendTextMessage(
           lead.telefono,
-          messages.mensajeReservaConfirmada({
+          messages.mensajeAccesoVideoTrasReserva({
             nombre: lead.nombre,
-            enlacePresentacion,
+            enlaceLanding,
           })
         );
-      } catch (e) {
-        console.error('No se pudo enviar la confirmación al lead:', e.message);
+      } else if (lead.estado === leadManager.LEAD_STATES.REUNION_REGISTRADO) {
+        leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
+        console.log(`📅 [Tracking] Reserva 1-A-1 confirmada: ${lead.nombre}`);
+        await messaging.sendTextMessage(
+          lead.telefono,
+          `¡Listo ${lead.nombre}! Tu reunión con Arkaitz está reservada ✅\n\nNos vemos en Zoom a la hora que has elegido. Te llegará un recordatorio antes.`
+        );
+      } else {
+        console.log(`📅 [Tracking] Reserva recibida pero el estado es ${lead.estado} (lead ${lead.nombre})`);
       }
+    } catch (e) {
+      console.error('No se pudo procesar la reserva:', e.message);
     }
 
     res.set('Content-Type', 'text/html; charset=utf-8');

@@ -31,23 +31,46 @@ function mensajeReintentarCualificacion({ nombre }) {
 }
 
 // ─── A2. Ramas según el perfil ───────────────────────────────────
-function mensajeRamaProfesional({ nombre, enlaceLanding }) {
+// Tras cualificar, enviamos directamente el Calendly grupal — el lead se
+// compromete reservando hueco; a la hora reservada (o antes) le llega el
+// acceso a la presentación.
+function mensajeRamaProfesional({ nombre, enlaceCalendly }) {
   return (
     `¡Genial ${nombre}!\n\n` +
-    `Entonces te interesa la parte profesional. Estamos trabajando con agentes y agencias para llevarlo a otro nivel.\n\n` +
-    `Mira esto cuando puedas, está todo bastante claro:\n` +
-    `${enlaceLanding}\n\n` +
-    `Cuando lo veas hablamos y te cuento cómo lo están aplicando otros del sector 🎬`
+    `Tenemos una presentación de 25 min con todo lo que necesitas saber. Para que sea el momento perfecto, reserva tu hueco (slots cada 15 min):\n\n` +
+    `${enlaceCalendly}\n\n` +
+    `En cuanto reserves te paso el enlace al instante 🎬`
   );
 }
 
-function mensajeRamaEmprendedor({ nombre, enlaceLanding }) {
+function mensajeRamaEmprendedor({ nombre, enlaceCalendly }) {
   return (
     `Entendido ${nombre} 🚀\n\n` +
-    `Lo tuyo encaja con nuestro lado de colaboradores. Gente que genera ingresos en el sector inmobiliario sin dedicarse a ello a tiempo completo.\n\n` +
-    `Échale un ojo a esto, te lo explica todo:\n` +
+    `Lo que hacemos lo explicamos en una presentación de 25 min — va al grano. Reserva tu hueco aquí (slots cada 15 min):\n\n` +
+    `${enlaceCalendly}\n\n` +
+    `En cuanto reserves te paso el acceso al vídeo.`
+  );
+}
+
+// Justo después de reservar en Calendly grupal: enviamos el acceso a la
+// landing con el vídeo. Pueden verlo ya o esperar a su hora reservada.
+function mensajeAccesoVideoTrasReserva({ nombre, enlaceLanding }) {
+  return (
+    `¡Listo ${nombre}! Tu hueco está reservado ✅\n\n` +
+    `Aquí tienes el acceso a la presentación. Puedes verla ya mismo o a la hora que reservaste, como prefieras:\n` +
     `${enlaceLanding}\n\n` +
-    `Cuando termines el vídeo se activa el siguiente paso, ya verás.`
+    `Cuando termines el vídeo, en la propia página se activa el botón para reservar tu reunión 1 a 1 con Arkaitz 🎯`
+  );
+}
+
+// Tras ver el vídeo (CTA pulsado en la landing): enviamos el Calendly 1-a-1.
+function mensajeAcceso1a1({ nombre, enlace1a1 }) {
+  return (
+    `¡Bien ${nombre}! 🙌\n\n` +
+    `Último paso: una reunión 1 a 1 con Arkaitz por Zoom para ver tu caso y diseñar tu entrada al proyecto.\n\n` +
+    `Reserva el hueco que mejor te encaje:\n` +
+    `${enlace1a1}\n\n` +
+    `Los huecos vuelan, intenta cogerlo cuanto antes.`
   );
 }
 
@@ -202,6 +225,8 @@ module.exports = {
   mensajeReintentarCualificacion,
   mensajeRamaProfesional,
   mensajeRamaEmprendedor,
+  mensajeAccesoVideoTrasReserva,
+  mensajeAcceso1a1,
   mensajeBienvenida,
   recordatorioVideo1,
   recordatorioVideo2,
