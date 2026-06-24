@@ -1,200 +1,187 @@
 const config = require('../config/config');
 
 /**
- * Plantillas de mensajes para el Agente de WhatsApp.
- * Cada función recibe un objeto con las variables necesarias y devuelve el texto final.
+ * Plantillas de mensajes para el Agente de WhatsApp/Telegram.
+ * Tono: cercano, humano, como si fuera Arkaitz escribiendo desde su móvil.
+ * Reglas: frases cortas, sin asteriscos en negrita salvo opciones 1/2,
+ * un emoji máximo (a veces ninguno), variar arranques y muletillas.
  */
 
-// ─── A. Mensaje de Reactivación con pregunta de filtrado (29-05) ──
-// Inicia la conversación, personaliza con el nombre y segmenta al lead.
+// ─── A. Mensaje inicial — pregunta de filtrado ────────────────────
 function mensajeReactivacion({ nombre }) {
   return (
-    `Hola ${nombre}, ¿qué tal? 👋\n\n` +
-    `Hace un tiempo pediste información sobre nuestro proyecto inmobiliario y justo ahora estamos reabriendo nuevas plazas.\n\n` +
-    `Antes de enviarte la información, quería preguntarte algo rápido para pasarte directamente a lo que más te encaje:\n\n` +
-    `*¿Actualmente trabajas en el sector inmobiliario o estás buscando una oportunidad adicional para generar un sobresueldo?*\n\n` +
-    `Responde con el número:\n` +
-    `1️⃣ Soy agente / trabajo en una inmobiliaria\n` +
-    `2️⃣ Busco una oportunidad para generar un sobresueldo`
+    `Hey ${nombre}, ¿qué tal? 👋\n\n` +
+    `Soy del equipo de Three Inmobiliaria. Hace un tiempo te interesaste por el proyecto y justo ahora estamos reabriendo plazas.\n\n` +
+    `Antes de mandarte info quería preguntarte una cosa rápida, así te paso lo que de verdad te encaje y no perdemos tiempo:\n\n` +
+    `¿Trabajas en el sector inmobiliario o más bien estás buscando un sobresueldo / forma de generar ingresos extra?\n\n` +
+    `1️⃣ Soy agente o trabajo en una inmobiliaria\n` +
+    `2️⃣ Busco un sobresueldo / ingreso extra\n\n` +
+    `Contéstame con el número que toque 🙂`
   );
 }
 
 // Re-pregunta si la respuesta no se entiende
 function mensajeReintentarCualificacion({ nombre }) {
   return (
-    `Perdona ${nombre}, no te he entendido. 🙏\n\n` +
-    `Para enviarte la información correcta, responde con un número:\n` +
-    `1️⃣ Soy agente / trabajo en una inmobiliaria\n` +
-    `2️⃣ Busco una oportunidad para generar un sobresueldo`
+    `Perdona ${nombre}, igual no me he explicado bien.\n\n` +
+    `Solo necesito que me digas un número para mandarte la info correcta:\n\n` +
+    `1 → si trabajas en el sector inmobiliario\n` +
+    `2 → si buscas generar ingresos extra`
   );
 }
 
 // ─── A2. Ramas según el perfil ───────────────────────────────────
 function mensajeRamaProfesional({ nombre, enlaceLanding }) {
   return (
-    `¡Genial, ${nombre}! 🙌\n\n` +
-    `Creo que te puede interesar más la parte profesional: estamos trabajando con agentes y agencias inmobiliarias.\n\n` +
-    `Aquí tienes toda la información:\n` +
-    `👉 ${enlaceLanding}\n\n` +
-    `Cuando la veas, te explico también cómo lo están aplicando otros profesionales del sector. 🎬`
+    `¡Genial ${nombre}!\n\n` +
+    `Entonces te interesa la parte profesional. Estamos trabajando con agentes y agencias para llevarlo a otro nivel.\n\n` +
+    `Mira esto cuando puedas, está todo bastante claro:\n` +
+    `${enlaceLanding}\n\n` +
+    `Cuando lo veas hablamos y te cuento cómo lo están aplicando otros del sector 🎬`
   );
 }
 
 function mensajeRamaEmprendedor({ nombre, enlaceLanding }) {
   return (
-    `¡Perfecto, ${nombre}! 🚀\n\n` +
-    `Lo que más te encaja es nuestro modelo de emprendedores y colaboradores que generan ingresos dentro del sector inmobiliario *sin necesidad de dedicarse profesionalmente a ello*.\n\n` +
-    `Te dejo aquí toda la información:\n` +
-    `👉 ${enlaceLanding}\n\n` +
-    `Échale un vistazo al vídeo y, al terminar, se activará el siguiente paso. 🎬`
+    `Entendido ${nombre} 🚀\n\n` +
+    `Lo tuyo encaja con nuestro lado de colaboradores. Gente que genera ingresos en el sector inmobiliario sin dedicarse a ello a tiempo completo.\n\n` +
+    `Échale un ojo a esto, te lo explica todo:\n` +
+    `${enlaceLanding}\n\n` +
+    `Cuando termines el vídeo se activa el siguiente paso, ya verás.`
   );
 }
 
 // ─── A0. (Legacy) Mensaje de Bienvenida directo a vídeo ───────────
 function mensajeBienvenida({ nombre, enlaceVideo }) {
   return (
-    `¡Hola ${nombre}! 👋 Soy el asistente de ${config.agent.empresaNombre}.\n\n` +
-    `Hemos recibido tu solicitud. Para ver si podemos ayudarte, es necesario que veas este breve video explicativo sobre nuestro método. 🎬\n\n` +
-    `Míralo aquí ahora:\n` +
-    `👉 ${enlaceVideo}\n\n` +
-    `⚠️ Importante: solo las personas que vean el video completo recibirán el enlace para poder inscribirse en la presentación privada por Zoom.\n\n` +
-    `Al final del video se activará la opción para continuar. ¡Saludos!`
+    `Hola ${nombre} 👋\n\n` +
+    `Soy del equipo de ${config.agent.empresaNombre}. Tenemos pendiente tu solicitud.\n\n` +
+    `Antes de seguir, échale un vistazo a este vídeo corto — te resume cómo funciona todo:\n` +
+    `${enlaceVideo}\n\n` +
+    `Al final del vídeo se desbloquea el siguiente paso. Cualquier cosa, me escribes.`
   );
 }
 
-// ─── B. Rama "NO vio el video" (Recordatorios cada 48h) ──────────
+// ─── B. Rama "NO vio el video" — Recordatorios ───────────────────
 function recordatorioVideo1({ nombre, enlaceVideo }) {
   return (
-    `Hola ${nombre}, noté que no has podido terminar el video aún. 👀\n\n` +
-    `Hay un punto clave sobre la oportunidad inmobiliaria que te interesa mucho. Tienes que verlo hasta el final para desbloquear el siguiente paso.\n\n` +
-    `👇 Aquí tienes el acceso:\n` +
+    `Oye ${nombre}, vi que no llegaste a terminar el vídeo 👀\n\n` +
+    `Hay una parte hacia el final que es la que de verdad explica de qué va esto. Si te interesa el tema, merece la pena verlo hasta el final.\n\n` +
+    `Te lo dejo otra vez por si lo perdiste:\n` +
     `${enlaceVideo}`
   );
 }
 
 function recordatorioVideo2({ nombre, enlaceVideo }) {
   return (
-    `${nombre}, el acceso al video explicativo caducará pronto. ⏳\n\n` +
-    `Si realmente quieres conocer esta oportunidad, este es el primer paso indispensable.\n` +
-    `¿Puedes verlo hoy?\n\n` +
-    `🎥 ${enlaceVideo}`
+    `${nombre}, una cosa: el acceso al vídeo lo vamos a cerrar pronto.\n\n` +
+    `Si te sigue interesando, es literalmente el primer paso. ¿Puedes verlo hoy?\n\n` +
+    `${enlaceVideo}`
   );
 }
 
 function recordatorioVideo3({ nombre, enlaceVideo }) {
   return (
-    `${nombre}, este es tu último recordatorio. 🔔\n\n` +
-    `El acceso a la información del proyecto se cerrará pronto. No queremos que pierdas esta oportunidad.\n\n` +
-    `Último acceso:\n` +
-    `👉 ${enlaceVideo}`
+    `${nombre}, último aviso por mi parte 🔔\n\n` +
+    `Vamos a cerrar las plazas en breve. Si todavía te interesa entrar:\n` +
+    `${enlaceVideo}\n\n` +
+    `Si no es el momento, no pasa nada, ignora este mensaje.`
   );
 }
 
-// ─── C. Rama "Sí vio el video" — DOS OPCIONES (15-06) ────────────
-// Tras ver el vídeo corto, le ofrecemos VER la presentación completa de 25
-// minutos ya mismo (en caliente) o RESERVAR una sesión grupal para verla más
-// tarde. El usuario contesta 1 o 2.
+// ─── C. Rama "Sí vio el video" — DOS OPCIONES ────────────────────
 function mensajeOpcionesVerPresentacion({ nombre }) {
   return (
-    `¡Genial, ${nombre}! 🎉\n\n` +
-    `El siguiente paso es la *presentación de negocio completa* (unos 25 min). ` +
-    `Puedes verla ya mismo o reservar para verla cuando te venga mejor:\n\n` +
-    `1️⃣ *Ver la presentación ahora* (te abrimos el enlace al instante)\n` +
-    `2️⃣ *Reservar una sesión grupal* para verla en el horario que te encaje\n\n` +
-    `Responde con 1 o 2 y te paso el enlace correspondiente.`
+    `¡Bien ${nombre}! 🙌\n\n` +
+    `El siguiente paso es la presentación completa del modelo de negocio (unos 25 min). Va al grano.\n\n` +
+    `¿Cómo lo prefieres?\n\n` +
+    `1️⃣ Verla ahora — te paso el enlace al momento\n` +
+    `2️⃣ Reservarla para luego — eliges hueco y te aviso\n\n` +
+    `Solo dime 1 o 2 👌`
   );
 }
 
 function mensajePresentacionVerAhora({ nombre, enlacePresentacion }) {
   return (
-    `¡Perfecto, ${nombre}! 🚀\n\n` +
-    `Aquí tienes el enlace a la presentación de negocio:\n` +
-    `🎥 ${enlacePresentacion}\n\n` +
-    `Cuando termines de verla, te activamos el siguiente paso: una *reunión 1-a-1* ` +
-    `con Arkaitz para resolver dudas y diseñar tu plan de entrada.`
+    `Genial ${nombre}, vamos al lío 🚀\n\n` +
+    `Aquí lo tienes:\n` +
+    `${enlacePresentacion}\n\n` +
+    `Tómatelo con calma, son 25 min. Cuando termines te activamos una reunión 1 a 1 con Arkaitz para resolver dudas y ver tu plan de entrada.`
   );
 }
 
 function mensajePresentacionReservar({ nombre, enlaceReunion }) {
   return (
-    `¡Listo, ${nombre}! 📅\n\n` +
-    `Reserva tu plaza para la sesión grupal en el horario que te encaje:\n` +
-    `🔗 ${enlaceReunion}\n\n` +
-    `Tras la sesión te activamos la *reunión 1-a-1* con Arkaitz.`
+    `Perfecto ${nombre}, así con tranquilidad mejor 📅\n\n` +
+    `Reserva el hueco que mejor te encaje:\n` +
+    `${enlaceReunion}\n\n` +
+    `Te mandaré un recordatorio justo antes para que no se te pase. Y al terminar, abrimos la reunión 1 a 1 con Arkaitz.`
   );
 }
 
 // Reintento si la respuesta a la opción no se entiende
 function mensajeReintentarOpciones({ nombre }) {
   return (
-    `Perdona ${nombre}, no te he entendido. 🙏\n\n` +
-    `Responde con un número:\n` +
-    `1️⃣ Ver la presentación ahora\n` +
-    `2️⃣ Reservar una sesión grupal para verla más tarde`
+    `Perdona ${nombre}, no te pillé.\n\n` +
+    `1 → la veo ahora\n` +
+    `2 → me la reservo para luego`
   );
 }
 
-// (Legacy: se mantiene por compatibilidad pero ya no se usa directamente)
+// Legacy (compat)
 function mensajeVideoVisto({ nombre, enlaceReunion }) {
   return (
-    `¡Genial, ${nombre}! He visto que terminaste el video. 🎉\n\n` +
-    `Por si se cerró la página antes de reservar, aquí tienes el enlace directo a la Sesión Grupal de Estrategia:\n\n` +
-    `Reserva tu plaza aquí:\n` +
-    `📅 ${enlaceReunion}\n\n` +
-    `Las plazas son limitadas y se asignan por orden de inscripción.`
+    `¡Genial ${nombre}! Vi que terminaste el vídeo 🎉\n\n` +
+    `Por si se te cerró antes de reservar, te dejo el enlace directo:\n` +
+    `${enlaceReunion}\n\n` +
+    `Las plazas vuelan, te aviso.`
   );
 }
 
-// ─── D. Rama "NO asistió a la reunión" (Recordatorios cada 48h) ──
+// ─── D. Rama "NO asistió a la reunión" — Recordatorios ───────────
 function recordatorioReunion1({ nombre, enlaceReunion }) {
   return (
-    `Hola ${nombre}, te echamos de menos en la sesión de ayer. 😔\n\n` +
-    `Hubo preguntas muy interesantes. No quiero que pierdas la oportunidad, ¿te va bien agendar para la próxima?\n\n` +
-    `🗓 ${enlaceReunion}`
+    `Hey ${nombre}, te echamos en falta en la sesión 😔\n\n` +
+    `Salió chula, mucha gente preguntando cosas interesantes. ¿Te apetece coger hueco para la próxima?\n\n` +
+    `${enlaceReunion}`
   );
 }
 
 function recordatorioReunion2({ nombre, enlaceReunion }) {
   return (
-    `${nombre}, ¿sigues interesado en el proyecto inmobiliario? 🤔\n\n` +
-    `He visto que no pudiste sumarte. Intenta reservar con tiempo aquí:\n` +
-    `🔗 ${enlaceReunion}\n\n` +
-    `Si ya no te interesa, ignora este mensaje.`
+    `${nombre}, ¿te sigue cuadrando lo del proyecto? Cuéntame.\n\n` +
+    `Si quieres reagendar, aquí tienes:\n` +
+    `${enlaceReunion}\n\n` +
+    `Y si ahora mismo no es el momento, dímelo y te dejo en paz, sin problema.`
   );
 }
 
 function recordatorioReunion3({ nombre, enlaceReunion }) {
   return (
-    `${nombre}, última oportunidad de reagendar tu sesión grupal. 📌\n\n` +
-    `Después de este mensaje no podremos insistir más.\n\n` +
-    `🗓 ${enlaceReunion}`
+    `${nombre}, te escribo por última vez por aquí 📌\n\n` +
+    `Si quieres entrar, este es el momento:\n` +
+    `${enlaceReunion}\n\n` +
+    `Si no, lo dejamos estar y todo bien por mi parte.`
   );
 }
 
-// ─── E. Rama "Sí asistió a la reunión" (Cierre grupal → individual) ─
-// Tras la sesión grupal, al interesado se le ofrece una reunión individual (29-05).
+// ─── E. Cierre tras asistir a la reunión (envío 1-a-1) ───────────
 function mensajeCierre({ nombre, enlaceCalendly }) {
   return (
-    `¡Hola ${nombre}! Gracias por participar en la sesión de hoy. 🙌\n\n` +
-    `Ya tienes toda la información. Si quieres dar el paso e iniciar en el proyecto, puedes reservar una *reunión individual* para verlo en detalle.\n\n` +
-    `Agenda tu hueco personal aquí (plazas limitadas):\n` +
-    `✅ ${enlaceCalendly}`
+    `¡${nombre}! Mil gracias por sumarte hoy 🙌\n\n` +
+    `Ya tienes una idea bastante completa del proyecto. Si te ves dentro y quieres dar el paso, te toca una reunión 1 a 1 conmigo para verlo a tu caso concreto.\n\n` +
+    `Agenda aquí tu hueco (van por orden, intenta cogerlo cuanto antes):\n` +
+    `${enlaceCalendly}`
   );
 }
 
-// ─── F. Mensaje de Desistimiento Final (4º intento) ──────────────
-// Pide al lead que comparta la razón para mejorar el sistema y deja la
-// puerta abierta a retomar en el futuro (reunión final 15-06).
+// ─── F. Mensaje de desistimiento final ───────────────────────────
 function mensajeDescarte({ nombre }) {
   return (
-    `Hola ${nombre}, hemos intentado contactar contigo varias veces y entendemos ` +
-    `que quizás no era el momento adecuado. 🙏\n\n` +
-    `Antes de dar por cerrada tu petición, *¿te importaría compartirnos brevemente* ` +
-    `*el motivo?* Cualquier respuesta nos ayuda muchísimo a mejorar para ` +
-    `próximas personas.\n\n` +
-    `Y por supuesto, la puerta queda abierta: si más adelante quieres ` +
-    `retomar el tema, solo tienes que escribirnos.\n\n` +
-    `Un saludo y mucha suerte 🤝\n` +
+    `Hola ${nombre}, te he escrito varias veces y no ha habido manera, así que entiendo que ahora mismo no es tu momento — todo bien.\n\n` +
+    `Antes de cerrarte el contacto, ¿te importaría decirme en una línea qué te ha frenado? No para insistir, solo para que mejoremos cómo lo planteamos a la próxima persona.\n\n` +
+    `Y si más adelante quieres retomarlo, me escribes y seguimos donde lo dejamos.\n\n` +
+    `Un abrazo,\n` +
     `— ${config.agent.empresaNombre}`
   );
 }
