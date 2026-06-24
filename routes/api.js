@@ -65,12 +65,17 @@ router.put('/leads/:id/state', (req, res) => {
 
 /**
  * DELETE /api/leads/:id
- * Elimina un lead.
+ * Elimina un lead. Si se pasa ?wipeActivity=1 también borra todos sus
+ * eventos del activity log (útil para empezar de cero en pruebas).
  */
 router.delete('/leads/:id', (req, res) => {
   const deleted = leadManager.deleteLead(req.params.id);
   if (!deleted) return res.status(404).json({ error: 'Lead no encontrado' });
-  res.json({ success: true });
+  let eventosEliminados = 0;
+  if (req.query.wipeActivity === '1') {
+    eventosEliminados = activityLog.deleteActivityByLead(req.params.id);
+  }
+  res.json({ success: true, eventosEliminados });
 });
 
 /**

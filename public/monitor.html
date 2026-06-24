@@ -721,9 +721,15 @@
         await fetchJSON(`/api/leads/${id}/state`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: 'descartado' }) });
         toast('Lead descartado');
       } else if (act === 'eliminar') {
-        if (!confirm('¿Eliminar este lead del sistema? No se puede deshacer.')) { btn.disabled = false; return; }
-        await fetchJSON(`/api/leads/${id}`, { method: 'DELETE' });
-        toast('Lead eliminado');
+        if (!confirm('¿Eliminar este lead del sistema?\n\nNo se puede deshacer.')) { btn.disabled = false; return; }
+        // Preguntar también si queremos borrar su registro de actividad
+        // (útil para empezar de cero en pruebas).
+        const wipe = confirm('¿Borrar también el REGISTRO DE ACTIVIDAD de este lead?\n\n' +
+          '• Aceptar → empieza de cero en pruebas (se borra todo su historial)\n' +
+          '• Cancelar → conserva el log pero elimina el lead');
+        const url = wipe ? `/api/leads/${id}?wipeActivity=1` : `/api/leads/${id}`;
+        const resp = await fetchJSON(url, { method: 'DELETE' });
+        toast(wipe ? `Lead + ${resp.eventosEliminados || 0} eventos eliminados` : 'Lead eliminado');
         selectedLeadId = null;
       }
       await refresh();

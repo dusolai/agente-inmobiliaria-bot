@@ -118,9 +118,21 @@ function getStats() {
   };
 }
 
+// Borra del archivo todos los eventos asociados a un leadId.
+// Útil para "empezar de cero" en pruebas tras eliminar el lead.
+function deleteActivityByLead(leadId) {
+  const all = readAll();
+  const filtered = all.filter((ev) => ev.leadId !== leadId);
+  const eliminados = all.length - filtered.length;
+  ensureFile();
+  fs.writeFileSync(ACTIVITY_FILE, JSON.stringify(filtered, null, 2), 'utf-8');
+  return eliminados;
+}
+
 module.exports = {
   appendActivity,
   getActivityByLead,
   getRecentActivity,
   getStats,
+  deleteActivityByLead,
 };
