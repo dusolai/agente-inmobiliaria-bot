@@ -68,8 +68,19 @@
                 
                 msgDiv.style.display = 'block';
                 if (response.ok && data.success) {
-                    msgDiv.className = 'success';
-                    msgDiv.textContent = '✅ Registro simulado con éxito. El bot debería enviar el WhatsApp en breve.';
+                    // Reflejar el resultado REAL del envío de WhatsApp, no solo
+                    // que el lead se creó (antes decía "éxito" aunque no saliera).
+                    const wa = data.whatsapp || {};
+                    if (wa.success === false) {
+                        msgDiv.className = 'error';
+                        msgDiv.textContent = '⚠️ Lead creado, pero el WhatsApp FALLÓ: ' + (wa.error || 'error desconocido');
+                    } else if (wa.mode === 'development') {
+                        msgDiv.className = 'error';
+                        msgDiv.textContent = '⚠️ Lead creado, pero WhatsApp NO está vinculado (escanea el QR en la raíz del backend). El mensaje no se ha enviado.';
+                    } else {
+                        msgDiv.className = 'success';
+                        msgDiv.textContent = '✅ Registro OK y WhatsApp enviado. Debería llegarte en unos segundos.';
+                    }
                     document.getElementById('registroForm').reset();
                 } else {
                     msgDiv.className = 'error';
