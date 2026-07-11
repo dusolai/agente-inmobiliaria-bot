@@ -503,6 +503,7 @@
       case 'profile_set':        return `perfil: ${m.perfil}`;
       case 'message_received':   return m.texto ? `"${m.texto}"` : '';
       case 'message_sent':       return `🤖 bot${m.ok === false ? ' ⚠️ NO ENTREGADO' : ''}: "${m.preview || ''}"`;
+      case 'llm_reply':          return `🧠 respuesta generada por IA (${m.proveedor || '?'})`;
       case 'opt_out':            return `🛑 pidió la BAJA: "${m.texto || ''}"`;
       case 'lead_activated':     return `activado del import (${m.activadosHoy || '?'}/${m.cupo || '?'} hoy)`;
       case 'landing_view':       return `landing ${m.perfil || ''}`;

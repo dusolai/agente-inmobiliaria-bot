@@ -123,9 +123,14 @@ async function handleIncoming(telefono, texto) {
   if (lead.estado === LEAD_STATES.ESPERANDO_CUALIFICACION) {
     const perfil = interpretarRespuesta(texto);
     if (!perfil) {
+      // Fuera de guion ("¿esto qué es?", "¿cuánto cuesta?"...): el LLM
+      // responde en contexto y reconduce al 1/2. Sin LLM configurado (o si
+      // falla), se repite la pregunta como siempre.
+      const responder = require('./responder');
+      const respuestaLlm = await responder.responder(lead, texto);
       await messaging.sendTextMessage(
         lead.telefono,
-        messages.mensajeReintentarCualificacion({ nombre: lead.nombre })
+        respuestaLlm || messages.mensajeReintentarCualificacion({ nombre: lead.nombre })
       );
       return;
     }
@@ -145,8 +150,18 @@ async function handleIncoming(telefono, texto) {
     return;
   }
 
-  // (La antigua Fase B "Ver ahora / Reservar" se elimina: ahora hay un único
-  // camino — Calendly grupal → vídeo → 1-a-1 con Arkaitz.)
+  // ─── Resto de estados: respuesta conversacional con LLM ─────────
+  // El lead ya está dentro del embudo (reserva, landing, 1-a-1...) y
+  // escribe algo. El LLM contesta su duda y le recuerda su siguiente paso
+  // con el enlace que le toca. Sin LLM configurado, silencio como antes
+  // (el mensaje aparece en "Sin responder" del CRM para atenderlo a mano).
+  const responder = require('./responder');
+  const respuestaLlm = await responder.responder(lead, texto);
+  if (respuestaLlm) {
+    await messaging.sendTextMessage(lead.telefono, respuestaLlm);
+  } else {
+    console.log(`💬 [Flujo] ${lead.nombre} (${lead.estado}) escribió y no hay respuesta automática — revisar "Sin responder" en el CRM`);
+  }
 }
 
 /**
