@@ -60,6 +60,25 @@
   .funnel-row .bar > div{height:100%;background:linear-gradient(90deg,var(--purple),var(--orange));border-radius:10px;transition:width .4s ease}
   .funnel-row .num{text-align:right;font-weight:800;color:var(--purple);font-size:.9rem}
 
+  /* Panel "En directo" */
+  .live-row{display:grid;grid-template-columns:170px 92px 150px 1fr 52px 76px;gap:.6rem;align-items:center;padding:.45rem 0;border-bottom:1px dashed var(--line);font-size:.85rem}
+  .live-row:last-child{border-bottom:none}
+  .live-row .lr-name{font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lr-perfil{font-size:.62rem;font-weight:800;padding:.18rem .5rem;border-radius:50px;text-transform:uppercase;letter-spacing:.4px;text-align:center;white-space:nowrap}
+  .lr-perfil.profesional{background:rgba(49,27,146,.12);color:var(--purple)}
+  .lr-perfil.emprendedor{background:rgba(255,107,53,.15);color:var(--orange2)}
+  .lr-perfil.sin_definir{background:#eee;color:var(--muted)}
+  .lr-video{font-weight:600;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .live-row .bar{height:14px;background:#eee;border-radius:8px;overflow:hidden}
+  .live-row .bar > div{height:100%;background:linear-gradient(90deg,var(--green),#7ed99a);border-radius:8px;transition:width .4s ease}
+  .live-row .lr-pct{font-weight:800;color:var(--green);text-align:right;font-size:.8rem}
+  .live-row .lr-hace{color:var(--muted);font-size:.72rem;text-align:right;font-variant-numeric:tabular-nums}
+  .live-dot{display:inline-block;width:8px;height:8px;background:var(--green);border-radius:50%;margin-right:.35rem;animation:pulseDot 1.4s infinite;vertical-align:middle}
+  @media (max-width:880px){.live-row{grid-template-columns:1fr 80px 60px;row-gap:.2rem}.live-row .lr-video,.live-row .lr-hace{display:none}}
+
+  /* Doble mini-barra VSL/webinar en la lista de leads */
+  .lead .progress-mini.pm-web i{background:var(--purple)}
+
   /* Cols */
   .cols{display:grid;grid-template-columns:340px 1fr;gap:1.2rem}
   @media (max-width:880px){.cols{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
@@ -202,6 +221,11 @@
     </div>
 
     <div class="panel">
+      <h2><span><span class="live-dot"></span>En directo</span> <small>quién está viendo qué vídeo (últimos 10 min)</small></h2>
+      <div id="live"><div class="empty">Nadie está viendo los vídeos ahora mismo.</div></div>
+    </div>
+
+    <div class="panel">
       <h2>Embudo de conversión <small>(% de leads únicos que llegaron a cada paso)</small></h2>
       <div id="funnel"></div>
     </div>
@@ -308,10 +332,15 @@
       <div class="link-group">
         <h3>📅 Calendly</h3>
         <div class="link-list">
-          <div class="link-card"><a href="https://calendly.com/arkaitzasr24/reunion-de-negocio" target="_blank">
+          <div class="link-card"><a href="https://calendly.com/arkaitzasr24/presentacion-de-negocio-three-inmobiliaria" target="_blank">
             <span class="lc-icon">📆</span>
-            <div class="lc-body"><div class="lc-name">Calendly · Reunión de negocio</div><div class="lc-url">calendly.com/arkaitzasr24/reunion-de-negocio</div></div>
-          </a><button class="copy-btn" data-copy="https://calendly.com/arkaitzasr24/reunion-de-negocio">Copiar</button></div>
+            <div class="lc-body"><div class="lc-name">Calendly · GRUPAL (presentación)</div><div class="lc-url">calendly.com/arkaitzasr24/presentacion-de-negocio-three-inmobiliaria</div></div>
+          </a><button class="copy-btn" data-copy="https://calendly.com/arkaitzasr24/presentacion-de-negocio-three-inmobiliaria">Copiar</button></div>
+
+          <div class="link-card"><a href="https://calendly.com/arkaitzasr24/reunion-1-a-1-three-inmobiliaria" target="_blank">
+            <span class="lc-icon">🎯</span>
+            <div class="lc-body"><div class="lc-name">Calendly · 1-A-1 (Arkaitz)</div><div class="lc-url">calendly.com/arkaitzasr24/reunion-1-a-1-three-inmobiliaria</div></div>
+          </a><button class="copy-btn" data-copy="https://calendly.com/arkaitzasr24/reunion-1-a-1-three-inmobiliaria">Copiar</button></div>
         </div>
       </div>
 
@@ -370,23 +399,38 @@
 <div id="toast" class="toast"></div>
 
 <script>
+  // Orden real del embudo actual: cualificación → reserva grupal → landing
+  // (VSL → webinar, cada uno con su progreso) → AGENDAR → 1-a-1.
   const STAGES = [
-    { key: 'lead_created',                 label: 'Creado',                tag: 'lead' },
-    { key: 'message_received',             label: '1ª respuesta',          tag: 'msg' },
-    { key: 'profile_set',                  label: 'Cualificado',           tag: 'profile' },
-    { key: 'landing_view',                 label: 'Abrió landing',         tag: 'lead' },
-    { key: 'video_play',                   label: 'Le dio al play',        tag: 'video' },
-    { key: 'video_progress_25',            label: '25% vídeo',             tag: 'video' },
-    { key: 'video_progress_50',            label: '50% vídeo',             tag: 'video' },
-    { key: 'video_progress_75',            label: '75% vídeo',             tag: 'video' },
-    { key: 'video_complete',               label: 'Vídeo completo',        tag: 'video' },
-    { key: 'calendly_intent_grupal',       label: 'Clic Calendly grupal',  tag: 'calendly' },
-    { key: 'state_reunion_registrado',     label: 'Reservó grupal',        tag: 'state' },
-    { key: 'meeting_joined',               label: 'Entró a la reunión',    tag: 'state' },
-    { key: 'state_reunion_asistio',        label: 'Asistió grupal',        tag: 'state' },
-    { key: 'calendly_intent_individual',   label: 'Clic Calendly 1-a-1',   tag: 'calendly' },
-    { key: 'state_agenda_1a1',             label: 'Reservó 1-a-1',         tag: 'state' },
+    { key: 'lead_created',                     label: 'Creado',                     tag: 'lead' },
+    { key: 'message_received',                 label: '1ª respuesta',               tag: 'msg' },
+    { key: 'profile_set',                      label: 'Cualificado',                tag: 'profile' },
+    { key: 'calendly_intent_grupal',           label: 'Clic Calendly grupal',       tag: 'calendly' },
+    { key: 'state_video_visto',                label: 'Reservó grupal',             tag: 'state' },
+    { key: 'landing_view',                     label: 'Abrió landing',              tag: 'lead' },
+    { key: 'video_play__video1',               label: '▶ Play VSL',                 tag: 'video' },
+    { key: 'video_progress_50__video1',        label: '50% VSL',                    tag: 'video' },
+    { key: 'webinar_unlocked',                 label: '90% VSL · webinar abierto',  tag: 'video' },
+    { key: 'video_play__videoWebinar',         label: '▶ Play webinar',             tag: 'video' },
+    { key: 'video_progress_50__videoWebinar',  label: '50% webinar',                tag: 'video' },
+    { key: 'calendly_button_revealed',         label: '90% webinar · botón visible', tag: 'video' },
+    { key: 'cta_1a1_click',                    label: 'Pulsó AGENDAR',              tag: 'calendly' },
+    { key: 'calendly_intent_individual',       label: 'Clic Calendly 1-a-1',        tag: 'calendly' },
+    { key: 'state_reunion_asistio',            label: 'Reservó 1-a-1',              tag: 'state' },
+    { key: 'meeting_joined',                   label: 'Entró al Zoom',              tag: 'state' },
   ];
+
+  // Nombre legible de cada vídeo de las landings (id del <video>)
+  function nombreVideo(id) {
+    return ({
+      video1: 'VSL',
+      videoWebinar: 'Webinar',
+      videoVikingo: 'Extra · Vikingo',
+      videoPortugal: 'Extra · Portugal',
+      videoGeneral: 'Extra · Presentación',
+      video2: 'Clip decorativo', video3: 'Clip decorativo', video4: 'Clip decorativo',
+    }[id] || id);
+  }
 
   let selectedLeadId = null;
   let currentTab = 'inicio';
@@ -431,8 +475,12 @@
       case 'video_progress_25':  return m.videoId ? `25% (${m.videoId})` : 'llegó al 25%';
       case 'video_progress_50':  return m.videoId ? `50% (${m.videoId})` : 'llegó al 50%';
       case 'video_progress_75':  return m.videoId ? `75% (${m.videoId})` : 'llegó al 75%';
+      case 'video_progress_90':  return m.videoId ? `90% (${m.videoId})` : 'llegó al 90%';
       case 'video_complete':     return m.videoId ? `100% (${m.videoId})` : 'vió el vídeo entero';
-      case 'calendly_button_revealed': return 'se le mostró el botón';
+      case 'webinar_unlocked':   return 'desbloqueó el webinar (90% del VSL)';
+      case 'extras_unlocked':    return 'desbloqueó los vídeos extra';
+      case 'cta_1a1_click':      return 'pulsó AGENDAR → se le envió el 1-a-1';
+      case 'calendly_button_revealed': return 'se le mostró el botón de agendar';
       case 'calendly_click':     return 'clic en botón de la landing';
       case 'calendly_intent':    return `pulsó enlace ${m.tipo || ''}`;
       case 'calendly_booked':    return 'reserva confirmada';
@@ -455,6 +503,7 @@
         case 'video_progress_25':  upd(vid || 'video1', 25); break;
         case 'video_progress_50':  upd(vid || 'video1', 50); break;
         case 'video_progress_75':  upd(vid || 'video1', 75); break;
+        case 'video_progress_90':  upd(vid || 'video1', 90); break;
         case 'video_complete':     upd(vid || 'video1', 100); break;
       }
     }
@@ -463,15 +512,14 @@
 
   function renderVideoSummary(eventos) {
     const map = computeVideoProgress(eventos);
-    const ids = Object.keys(map);
+    // El VSL y el webinar primero, los extras después
+    const ORDEN = ['video1', 'videoWebinar', 'videoVikingo', 'videoPortugal', 'videoGeneral'];
+    const ids = Object.keys(map).sort((a, b) => {
+      const ia = ORDEN.indexOf(a), ib = ORDEN.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
     if (ids.length === 0) return '';
-    const friendly = (id) => ({
-      video1: 'Vídeo principal',
-      video2: 'Vídeo 2 (intro solución)',
-      video3: 'Vídeo 3 (beneficios)',
-      videoGeneral: 'Vídeo general',
-      videoPortugal: 'Vídeo Portugal',
-    }[id] || id);
+    const friendly = nombreVideo;
     return `<div class="video-summary">
       <div class="vs-title">🎥 Visionado por vídeo</div>
       ${ids.map(id => {
@@ -527,16 +575,47 @@
   async function refresh() {
     if (currentTab !== 'inicio') return; // ahorra si no estamos viendo el dashboard
     try {
-      const [stats, leadsResp, statsActivity] = await Promise.all([
+      const [stats, leadsResp, statsActivity, live] = await Promise.all([
         fetchJSON('/api/stats'),
         fetchJSON('/api/leads'),
         fetchJSON('/api/stats/activity'),
+        fetchJSON('/api/live?minutes=10'),
       ]);
 
       $('kpi-total').textContent = stats.total;
       $('kpi-activos').textContent = stats.activos;
       $('kpi-conversion').textContent = stats.tasaConversion;
       $('kpi-eventos').textContent = statsActivity.totalEventos;
+
+      // ── Panel "En directo": quién está viendo qué vídeo ahora mismo ──
+      const viendo = (live && live.viendo) || [];
+      if (viendo.length === 0) {
+        $('live').innerHTML = '<div class="empty">Nadie está viendo los vídeos ahora mismo.</div>';
+      } else {
+        $('live').innerHTML = viendo.map(v => {
+          const vid = v.videoId;
+          const pct = vid ? (v.progreso && v.progreso[vid]) || 0 : 0;
+          const videoLbl = vid ? nombreVideo(vid) : (v.lastType === 'landing_view' ? 'Abrió la landing' : '—');
+          const perfil = v.perfil || 'sin_definir';
+          const perfilLbl = perfil === 'profesional' ? '🟣 Profesional' : perfil === 'emprendedor' ? '🟠 Emprende' : '—';
+          const hace = v.haceSegundos < 60 ? `hace ${v.haceSegundos}s` : `hace ${Math.round(v.haceSegundos / 60)} min`;
+          return `<div class="live-row" data-id="${v.leadId}" style="cursor:pointer" title="Clic para ver el lead">
+            <span class="lr-name">${(v.nombre || 'Sin nombre').replace(/</g,'&lt;')}</span>
+            <span class="lr-perfil ${perfil}">${perfilLbl}</span>
+            <span class="lr-video">🎬 ${videoLbl}</span>
+            <div class="bar"><div style="width:${Math.min(100, pct)}%"></div></div>
+            <span class="lr-pct">${pct > 0 ? pct + '%' : '·'}</span>
+            <span class="lr-hace">${hace}</span>
+          </div>`;
+        }).join('');
+        document.querySelectorAll('.live-row').forEach(el => {
+          el.addEventListener('click', () => {
+            selectedLeadId = el.dataset.id;
+            renderLeads();
+            refreshLeadDetail();
+          });
+        });
+      }
 
       const total = stats.total || 1;
       const counts = statsActivity.counts || {};
@@ -612,9 +691,12 @@
           const horasSinTocar = (now - new Date(l.updatedAt).getTime()) / 36e5;
           const isStale = horasSinTocar > 24 && !['descartado','agenda_1a1'].includes(l.estado);
           const stale = isStale ? `<span class="stale-dot" title="Lleva ${Math.round(horasSinTocar)}h sin actividad"></span>` : '';
-          // Mini barra de progreso por % máximo de video1 en el lead
-          const pct = Math.max(0, Math.min(100, l.videoProgressMax || 0));
-          const mini = pct > 0 ? `<span class="progress-mini" title="${pct}% del vídeo principal"><i style="width:${pct}%"></i></span>` : '';
+          // Mini barras: verde = VSL, morada = webinar
+          const pv = Math.max(0, Math.min(100, l.progresoVsl || l.videoProgressMax || 0));
+          const pw = Math.max(0, Math.min(100, l.progresoWebinar || 0));
+          const mini = (pv > 0 || pw > 0)
+            ? `<span class="progress-mini" title="VSL: ${pv}%"><i style="width:${pv}%"></i></span><span class="progress-mini pm-web" title="Webinar: ${pw}%"><i style="width:${pw}%"></i></span>`
+            : '';
           return `<div class="lead ${active}" data-id="${l.id}">
             <div>
               <div class="name">${stale}${(l.nombre || 'Sin nombre').replace(/</g,'&lt;')}</div>

@@ -86,6 +86,14 @@ function getStats() {
     if (!leadsPorTipo.has(e.type)) leadsPorTipo.set(e.type, new Set());
     leadsPorTipo.get(e.type).add(e.leadId);
 
+    // Desglose por vídeo (VSL vs webinar vs extras): claves tipo
+    // "video_play__video1", "video_progress_50__videoWebinar", etc.
+    if (e.meta && e.meta.videoId && /^(video_play|video_progress_\d+|video_complete)$/.test(e.type)) {
+      const kv = `${e.type}__${e.meta.videoId}`;
+      if (!leadsPorTipo.has(kv)) leadsPorTipo.set(kv, new Set());
+      leadsPorTipo.get(kv).add(e.leadId);
+    }
+
     // Distinguimos por subtipo de Calendly (grupal vs individual)
     if (e.type === 'calendly_intent' && e.meta && e.meta.tipo === 'grupal') {
       leadsCalGrupal.add(e.leadId);
@@ -118,6 +126,68 @@ function getStats() {
   };
 }
 
+// % que representa cada tipo de evento de vídeo
+function _pctDeEvento(type) {
+  if (type === 'video_play') return 1;
+  if (type === 'video_complete') return 100;
+  const m = type.match(/^video_progress_(\d+)$/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/**
+ * Progreso de vídeo agregado de TODOS los leads en una sola pasada del log.
+ * Devuelve { leadId: { videoId: pctMax } }. Evita que /api/leads relea el
+ * fichero una vez por lead (con cientos de leads era inviable).
+ */
+function getVideoProgressByLead() {
+  const map = {};
+  for (const e of readAll()) {
+    const pct = _pctDeEvento(e.type);
+    if (pct === null) continue;
+    // Eventos antiguos sin videoId corresponden al vídeo principal
+    const vid = (e.meta && e.meta.videoId) || 'video1';
+    const porVideo = map[e.leadId] || (map[e.leadId] = {});
+    if (!porVideo[vid] || pct > porVideo[vid]) porVideo[vid] = pct;
+  }
+  return map;
+}
+
+/**
+ * Actividad "en directo": leads con eventos de landing en los últimos
+ * `windowMinutes`. Para cada uno devuelve el último evento, el vídeo en el
+ * que está y el progreso alcanzado dentro de la ventana.
+ */
+function getLiveActivity(windowMinutes = 10) {
+  const desde = Date.now() - windowMinutes * 60 * 1000;
+  const EVENTOS_LANDING = /^(landing_view|video_play|video_progress_\d+|video_complete|webinar_unlocked|extras_unlocked|calendly_button_revealed)$/;
+  const porLead = new Map();
+
+  for (const e of readAll()) {
+    if (!EVENTOS_LANDING.test(e.type)) continue;
+    const ts = new Date(e.ts).getTime();
+    if (isNaN(ts) || ts < desde) continue;
+
+    let info = porLead.get(e.leadId);
+    if (!info) {
+      info = { leadId: e.leadId, lastTs: 0, lastType: null, videoId: null, progreso: {} };
+      porLead.set(e.leadId, info);
+    }
+
+    const vid = e.meta && e.meta.videoId;
+    const pct = _pctDeEvento(e.type);
+    if (vid && pct !== null) {
+      if (!info.progreso[vid] || pct > info.progreso[vid]) info.progreso[vid] = pct;
+    }
+    if (ts >= info.lastTs) {
+      info.lastTs = ts;
+      info.lastType = e.type;
+      if (vid) info.videoId = vid;
+    }
+  }
+
+  return Array.from(porLead.values()).sort((a, b) => b.lastTs - a.lastTs);
+}
+
 // Borra del archivo todos los eventos asociados a un leadId.
 // Útil para "empezar de cero" en pruebas tras eliminar el lead.
 function deleteActivityByLead(leadId) {
@@ -134,5 +204,7 @@ module.exports = {
   getActivityByLead,
   getRecentActivity,
   getStats,
+  getVideoProgressByLead,
+  getLiveActivity,
   deleteActivityByLead,
 };

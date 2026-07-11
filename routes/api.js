@@ -10,23 +10,40 @@ const activityLog = require('../services/activityLog');
 router.get('/leads', (req, res) => {
   const { estado, fuente } = req.query;
   const leads = leadManager.getAllLeads({ estado, fuente });
-  // Enriquecer cada lead con videoProgressMax (% máximo del vídeo principal)
-  // para mostrar mini barra en el panel sin tener que pedir actividad lead a lead.
+  // Enriquecer cada lead con su progreso por vídeo (VSL y webinar) leyendo el
+  // log UNA sola vez, no una vez por lead (aguanta cientos de leads).
+  const progresoPorLead = activityLog.getVideoProgressByLead();
   const enriched = leads.map((l) => {
-    const events = activityLog.getActivityByLead(l.id) || [];
-    let pct = 0;
-    for (const ev of events) {
-      const isMain = !ev.meta || !ev.meta.videoId || ev.meta.videoId === 'video1';
-      if (!isMain) continue;
-      if (ev.type === 'video_complete') pct = Math.max(pct, 100);
-      else if (ev.type === 'video_progress_75') pct = Math.max(pct, 75);
-      else if (ev.type === 'video_progress_50') pct = Math.max(pct, 50);
-      else if (ev.type === 'video_progress_25') pct = Math.max(pct, 25);
-      else if (ev.type === 'video_play') pct = Math.max(pct, 5);
-    }
-    return Object.assign({}, l, { videoProgressMax: pct });
+    const prog = progresoPorLead[l.id] || {};
+    return Object.assign({}, l, {
+      videoProgressMax: prog.video1 || 0, // compat con versiones previas del panel
+      progresoVsl: prog.video1 || 0,
+      progresoWebinar: prog.videoWebinar || 0,
+    });
   });
   res.json({ total: enriched.length, leads: enriched });
+});
+
+/**
+ * GET /api/live?minutes=10
+ * Leads con actividad en la landing en los últimos N minutos: en qué vídeo
+ * están, % alcanzado y hace cuánto fue su último evento. Para el panel
+ * "En directo" del CRM cuando hay varios leads viendo vídeos a la vez.
+ */
+router.get('/live', (req, res) => {
+  const minutes = Math.max(1, Math.min(120, parseInt(req.query.minutes, 10) || 10));
+  const ahora = Date.now();
+  const leadsById = new Map(leadManager.getAllLeads().map((l) => [l.id, l]));
+  const viendo = activityLog.getLiveActivity(minutes).map((v) => {
+    const lead = leadsById.get(v.leadId);
+    return Object.assign({}, v, {
+      nombre: lead ? lead.nombre : '(lead desconocido)',
+      perfil: lead ? lead.perfil : null,
+      estado: lead ? lead.estado : null,
+      haceSegundos: Math.max(0, Math.round((ahora - v.lastTs) / 1000)),
+    });
+  });
+  res.json({ minutes, total: viendo.length, viendo });
 });
 
 /**
