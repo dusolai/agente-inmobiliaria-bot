@@ -46,6 +46,20 @@ function _guardarEstadoActivacion(st) {
   fs.writeFileSync(ACTIVATION_FILE, JSON.stringify(st, null, 2), 'utf-8');
 }
 
+// ¿Está listo el canal por el que se enviaría a este lead?
+// (WhatsApp para teléfonos normales, Telegram para los "tg:")
+function _canalListo(telefono) {
+  const esTg = typeof telefono === 'string' && telefono.startsWith('tg:');
+  if (esTg) return require('./telegram').isReady();
+  return require('./whatsapp').isConfigured();
+}
+
+// ¿El mensaje salió DE VERDAD? false = error de envío; 'development' = el
+// cliente no estaba conectado (se "envió" solo al log, no llegó a nadie).
+function _envioOk(res) {
+  return Boolean(res) && res.success !== false && res.mode !== 'development';
+}
+
 async function procesarActivacionDiaria() {
   const cupo = parseInt(process.env.LEADS_POR_DIA, 10) || 10;
   if (cupo <= 0) return;
@@ -75,9 +89,31 @@ async function procesarActivacionDiaria() {
   if (nuevos.length === 0) return;
   const lead = nuevos[nuevos.length - 1];
 
+  // Si el canal está desconectado, NO activamos: no gastamos el cupo del día
+  // en un envío que no saldría. La activación se reanuda sola al reconectar.
+  if (!_canalListo(lead.telefono)) {
+    console.log('⏸️  [Activación] Canal desconectado — en pausa, reintenta al reconectar');
+    return;
+  }
+
+  // Enviamos ANTES de avanzar el lead: solo si el mensaje sale de verdad
+  // contamos el cupo y lo pasamos a esperando_cualificacion. Si no sale
+  // (desconexión justo ahora), el lead se queda en la cola para el próximo
+  // ciclo / día siguiente.
+  const personalizer = require('./personalizer');
+  const texto = await personalizer.personalizarMensaje(
+    messages.mensajeReactivacion({ nombre: lead.nombre }),
+    lead
+  );
+  const envio = await messaging.sendTextMessage(lead.telefono, texto, { delaySeconds: 0 });
+  if (!_envioOk(envio)) {
+    console.warn(`⚠️  [Activación] Envío a ${lead.nombre} no salió — sigue en la cola (no cuenta cupo)`);
+    return;
+  }
+
   const result = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
   if (result.error) {
-    console.error(`❌ [Activación] No pude activar ${lead.nombre}: ${result.error}`);
+    console.error(`❌ [Activación] Enviado pero no pude avanzar a ${lead.nombre}: ${result.error}`);
     return;
   }
   // Baseline de recordatorios = ahora (no createdAt, que puede ser de hace
@@ -88,15 +124,6 @@ async function procesarActivacionDiaria() {
       fase1: { enviados: 0, ultimoEnvio: new Date().toISOString() },
     },
   });
-
-  // Con ANTHROPIC_API_KEY, cada mensaje inicial se reescribe con un LLM
-  // para que no haya dos envíos iguales (anti-baneo).
-  const personalizer = require('./personalizer');
-  const texto = await personalizer.personalizarMensaje(
-    messages.mensajeReactivacion({ nombre: lead.nombre }),
-    lead
-  );
-  await messaging.sendTextMessage(lead.telefono, texto, { delaySeconds: 0 });
   activityLog.appendActivity(lead.id, 'lead_activated', { cupo, activadosHoy: st.activadosHoy + 1 });
 
   st.activadosHoy++;
@@ -149,9 +176,10 @@ async function procesarRecordatoriosFase1() {
     const fase1 = (lead.recordatorios && lead.recordatorios.fase1) || { enviados: 0, ultimoEnvio: null };
 
     if (fase1.enviados >= MAX_REMINDERS) {
+      const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+      if (!_envioOk(envio)) continue; // canal caído: no descartamos todavía
       console.log(`🗑  [Scheduler] Descartando lead (no respondió la cualificación): ${lead.nombre}`);
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
-      await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
       continue;
     }
 
@@ -162,10 +190,11 @@ async function procesarRecordatoriosFase1() {
     if (ahora - referencia < _intervaloMs(fase1.enviados)) continue;
 
     console.log(`🔔 [Scheduler] Recordatorio Cualificación #${fase1.enviados + 1} → ${lead.nombre}`);
-    await messaging.sendTextMessage(
+    const envio = await messaging.sendTextMessage(
       lead.telefono,
       messages.mensajeReactivacion({ nombre: lead.nombre })
     );
+    if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
 
     leadManager.updateLead(lead.id, {
       recordatorios: {
@@ -195,9 +224,10 @@ async function procesarRecordatoriosFase2() {
 
     // ¿Ya alcanzó el máximo de recordatorios?
     if (fase2.enviados >= MAX_REMINDERS) {
+      const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+      if (!_envioOk(envio)) continue; // canal caído: no descartamos todavía
       console.log(`🗑  [Scheduler] Descartando lead (máx recordatorios Fase 2): ${lead.nombre}`);
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
-      await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
       continue;
     }
 
@@ -214,10 +244,11 @@ async function procesarRecordatoriosFase2() {
     const enlaceCalendly = conversationFlow.enlaceRedirectorCalendly(lead, 'grupal');
 
     console.log(`🔔 [Scheduler] Recordatorio Grupal #${fase2.enviados + 1} → ${lead.nombre}`);
-    await messaging.sendTextMessage(
+    const envio = await messaging.sendTextMessage(
       lead.telefono,
       msgFn({ nombre: lead.nombre, enlaceCalendly })
     );
+    if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
 
     // Actualizar contadores
     leadManager.updateLead(lead.id, {
@@ -247,9 +278,10 @@ async function procesarRecordatoriosFase2B() {
     const fase2b = (lead.recordatorios && lead.recordatorios.fase2b) || { enviados: 0, ultimoEnvio: null };
 
     if (fase2b.enviados >= MAX_REMINDERS) {
+      const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+      if (!_envioOk(envio)) continue; // canal caído: no descartamos todavía
       console.log(`🗑  [Scheduler] Descartando lead (máx recordatorios Fase 2B): ${lead.nombre}`);
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
-      await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
       continue;
     }
 
@@ -282,10 +314,11 @@ async function procesarRecordatoriosFase2B() {
     const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
 
     console.log(`🔔 [Scheduler] Recordatorio Funnel (${etapa}) #${fase2b.enviados + 1} → ${lead.nombre}`);
-    await messaging.sendTextMessage(
+    const envio = await messaging.sendTextMessage(
       lead.telefono,
       msgFn({ nombre: lead.nombre, enlaceLanding, etapa })
     );
+    if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
 
     leadManager.updateLead(lead.id, {
       recordatorios: {
@@ -312,9 +345,10 @@ async function procesarRecordatoriosFase3() {
     const fase3 = recordatorios.fase3;
 
     if (fase3.enviados >= MAX_REMINDERS) {
+      const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+      if (!_envioOk(envio)) continue; // canal caído: no descartamos todavía
       console.log(`🗑  [Scheduler] Descartando lead (máx recordatorios Fase 3): ${lead.nombre}`);
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
-      await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
       continue;
     }
 
@@ -329,10 +363,11 @@ async function procesarRecordatoriosFase3() {
 
     console.log(`🔔 [Scheduler] Recordatorio 1-a-1 #${fase3.enviados + 1} → ${lead.nombre}`);
     const enlace1a1 = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
-    await messaging.sendTextMessage(
+    const envio = await messaging.sendTextMessage(
       lead.telefono,
       msgFn({ nombre: lead.nombre, enlace1a1 })
     );
+    if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
 
     leadManager.updateLead(lead.id, {
       recordatorios: {
