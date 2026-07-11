@@ -89,7 +89,12 @@ function esOptOut(texto) {
 
 async function handleIncoming(telefono, texto) {
   const lead = leadManager.getLeadByPhone(telefono);
-  if (!lead) return; // mensaje de alguien que no es un lead conocido
+  if (!lead) {
+    // No es un lead conocido: no respondemos, pero lo dejamos dicho en el
+    // log para que "no responde" nunca sea un misterio.
+    console.log(`🤷 [Flujo] Mensaje de ${telefono} SIN lead asociado — ignorado: "${String(texto).slice(0, 50)}"`);
+    return;
+  }
 
   // Registramos toda la actividad inbound del lead, esté en el estado que esté
   activityLog.appendActivity(lead.id, 'message_received', { texto });

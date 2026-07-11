@@ -87,14 +87,26 @@ async function initialize() {
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-        
-        console.log(`❌ [WhatsApp] Conexión cerrada (código: ${statusCode}). Error: ${lastDisconnect?.error?.message || 'ninguno'}. Reconectar: ${shouldReconnect}`);
-        
+
+        // Nombres de los códigos de cierre de Baileys, para que el log de
+        // Seenode diga QUÉ pasó y no solo un número.
+        const RAZONES = {
+          401: 'SESIÓN CERRADA (loggedOut): el móvil desvinculó este dispositivo o WhatsApp revocó la sesión',
+          408: 'timeout de conexión',
+          411: 'desajuste multidispositivo',
+          428: 'conexión perdida (red)',
+          440: 'CONFLICTO: OTRA instancia del bot está usando esta misma sesión (¿dos contenedores en Seenode?)',
+          500: 'error interno de WhatsApp',
+          503: 'servicio no disponible',
+          515: 'reinicio requerido tras vincular (normal justo después de escanear el QR)',
+        };
+        console.log(`❌ [WhatsApp] Conexión cerrada (código ${statusCode}: ${RAZONES[statusCode] || 'desconocido'}). Error: ${lastDisconnect?.error?.message || 'ninguno'}. Reconectar: ${shouldReconnect}`);
+
         isReady = false;
-        
+
         if (shouldReconnect) {
           retryCount++;
-          
+
           if (retryCount > MAX_RETRIES) {
             console.log(`⚠️ [WhatsApp] Demasiados reintentos (${retryCount}). Esperando 5 minutos antes de reintentar...`);
             latestQr = null;
@@ -105,8 +117,10 @@ async function initialize() {
             }, 5 * 60 * 1000); // 5 minutos
             return;
           }
-          
-          const delay = Math.min(10000 * Math.pow(2, retryCount - 1), 120000);
+
+          // El 515 tras escanear el QR es un reinicio obligatorio y esperado:
+          // reconectamos al instante para no perder los primeros mensajes.
+          const delay = statusCode === 515 ? 500 : Math.min(10000 * Math.pow(2, retryCount - 1), 120000);
           console.log(`🔄 Reintento ${retryCount}/${MAX_RETRIES} en ${delay/1000}s...`);
           setTimeout(() => initialize(), delay);
         } else {
@@ -140,9 +154,17 @@ async function initialize() {
           if (!msg.message || msg.key.fromMe) continue;
 
           const jid = msg.key.remoteJid || '';
-          if (!jid.endsWith('@s.whatsapp.net')) continue; // ignorar grupos/estados
+          // Chats directos: @s.whatsapp.net (clásico) o @lid (cuentas con
+          // identificador enlazado — WhatsApp lo usa cada vez más). Ignorar
+          // grupos (@g.us) y estados (@broadcast).
+          const esDirecto = jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
+          if (!esDirecto) continue;
 
-          const telefono = jid.replace('@s.whatsapp.net', '');
+          // Con @lid el remoteJid NO es el número: el teléfono real viene en
+          // remoteJidAlt / senderPn. Nos quedamos con solo los dígitos.
+          const jidReal = String(msg.key.remoteJidAlt || msg.key.senderPn || jid);
+          const telefono = jidReal.split('@')[0].split(':')[0].replace(/[^\d]/g, '');
+
           const m = msg.message;
           const texto =
             m.conversation ||
@@ -153,6 +175,10 @@ async function initialize() {
             '';
 
           if (!texto) continue;
+
+          // Log SIEMPRE: si un mensaje no genera respuesta, que al menos el
+          // log de Seenode diga que llegó y de quién.
+          console.log(`📥 [WhatsApp] Mensaje de ${telefono} (jid ${jid}): "${texto.slice(0, 60)}"`);
 
           const conversationFlow = require('./conversationFlow');
           await conversationFlow.handleIncoming(telefono, texto);
