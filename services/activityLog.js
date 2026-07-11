@@ -29,10 +29,20 @@ function ensureFile() {
   if (!fs.existsSync(ACTIVITY_FILE)) fs.writeFileSync(ACTIVITY_FILE, '[]', 'utf-8');
 }
 
+// Caché por mtime: el panel consulta varias veces por segundo y con cientos
+// de leads no podemos parsear el fichero entero en cada petición. Solo se
+// relee cuando el fichero cambió (este proceso es el único escritor).
+let _cache = null;
+let _cacheMtime = 0;
+
 function readAll() {
   ensureFile();
   try {
-    return JSON.parse(fs.readFileSync(ACTIVITY_FILE, 'utf-8'));
+    const mtime = fs.statSync(ACTIVITY_FILE).mtimeMs;
+    if (_cache && mtime === _cacheMtime) return _cache;
+    _cache = JSON.parse(fs.readFileSync(ACTIVITY_FILE, 'utf-8'));
+    _cacheMtime = mtime;
+    return _cache;
   } catch (e) {
     console.error('❌ [Activity] Error leyendo activity.json, reiniciando:', e.message);
     return [];
@@ -188,6 +198,39 @@ function getLiveActivity(windowMinutes = 10) {
   return Array.from(porLead.values()).sort((a, b) => b.lastTs - a.lastTs);
 }
 
+/**
+ * Datos para la bandeja "necesitan atención" del CRM, en una sola pasada:
+ *  - ultimoRecibido / ultimoEnviado por lead → detectar mensajes SIN RESPONDER
+ *    (el lead escribió después del último mensaje del bot)
+ *  - última señal "caliente" (terminó webinar / pulsó agendar) por lead
+ * Devuelve { leadId: { recibidoTs, recibidoTexto, enviadoTs, calienteTs, calienteTipo } }
+ */
+function getInboxData() {
+  const map = {};
+  const info = (id) => map[id] || (map[id] = {
+    recibidoTs: null, recibidoTexto: null, enviadoTs: null,
+    calienteTs: null, calienteTipo: null, optOut: false,
+  });
+
+  for (const e of readAll()) {
+    if (e.type === 'message_received') {
+      const i = info(e.leadId);
+      i.recibidoTs = e.ts;
+      i.recibidoTexto = (e.meta && e.meta.texto) || '';
+    } else if (e.type === 'message_sent') {
+      info(e.leadId).enviadoTs = e.ts;
+    } else if (e.type === 'opt_out') {
+      info(e.leadId).optOut = true;
+    } else if (e.type === 'calendly_button_revealed' || e.type === 'cta_1a1_click' || e.type === 'calendly_intent') {
+      const i = info(e.leadId);
+      i.calienteTs = e.ts;
+      i.calienteTipo = e.type === 'calendly_button_revealed' ? 'termino_webinar'
+        : e.type === 'cta_1a1_click' ? 'pulso_agendar' : 'abrio_calendly';
+    }
+  }
+  return map;
+}
+
 // Borra del archivo todos los eventos asociados a un leadId.
 // Útil para "empezar de cero" en pruebas tras eliminar el lead.
 function deleteActivityByLead(leadId) {
@@ -206,5 +249,6 @@ module.exports = {
   getStats,
   getVideoProgressByLead,
   getLiveActivity,
+  getInboxData,
   deleteActivityByLead,
 };

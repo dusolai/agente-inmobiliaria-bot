@@ -40,8 +40,14 @@ router.post('/new-lead', async (req, res) => {
     // 3. Enviar mensaje de reactivación con la pregunta de filtrado.
     //    La respuesta del lead la procesa services/conversationFlow.js y, según
     //    su perfil, recibe la landing profesional o emprendedor con el vídeo.
-    const texto = messages.mensajeReactivacion({ nombre });
-    const waResult = await messaging.sendTextMessage(telefono, texto);
+    //    Con ANTHROPIC_API_KEY definida, el mensaje se reescribe con un LLM
+    //    para que cada envío sea único (anti-baneo).
+    const personalizer = require('../services/personalizer');
+    const texto = await personalizer.personalizarMensaje(
+      messages.mensajeReactivacion({ nombre }),
+      lead
+    );
+    const waResult = await messaging.sendTextMessage(lead.telefono, texto);
 
     console.log(`🆕 [Webhook] Nuevo lead: ${nombre} (${telefono}) — pregunta de filtrado enviada`);
 
@@ -248,11 +254,15 @@ router.post('/bulk-import', async (req, res) => {
 
     // Activación: pasa de nuevo → esperando_cualificacion y envía el mensaje.
     // Si activarTodos, lanzamos los X primeros (porDia) al instante.
+    const personalizer = require('../services/personalizer');
     const aActivar = activarTodos ? creados : creados.slice(0, porDia);
     for (const lead of aActivar) {
       try {
         leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
-        const texto = messages.mensajeReactivacion({ nombre: lead.nombre });
+        const texto = await personalizer.personalizarMensaje(
+          messages.mensajeReactivacion({ nombre: lead.nombre }),
+          lead
+        );
         // sin delay para el envío masivo (es la primera toma de contacto)
         await messaging.sendTextMessage(lead.telefono, texto, { delaySeconds: 0 });
         resultado.activados++;

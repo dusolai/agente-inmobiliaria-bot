@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 const leadManager = require('../services/leadManager');
 const activityLog = require('../services/activityLog');
 
@@ -44,6 +46,66 @@ router.get('/live', (req, res) => {
     });
   });
   res.json({ minutes, total: viendo.length, viendo });
+});
+
+/**
+ * GET /api/inbox
+ * Bandeja de trabajo del CRM para operar cientos de leads a la vez:
+ *  - sinResponder: leads cuyo último mensaje es SUYO (el bot no contestó) —
+ *    hay que atenderlos a mano
+ *  - calientes: terminaron el webinar o pulsaron agendar y AÚN no tienen
+ *    reserva 1-a-1 → llamar/escribir ya
+ *  - importQueue: estado de la cola de activación diaria del import masivo
+ */
+router.get('/inbox', (req, res) => {
+  const ahora = Date.now();
+  const inbox = activityLog.getInboxData();
+  const leads = leadManager.getAllLeads();
+
+  const sinResponder = [];
+  const calientes = [];
+  let enCola = 0;
+
+  for (const l of leads) {
+    if (l.estado === 'nuevo') enCola++;
+    if (l.estado === 'descartado') continue;
+    const i = inbox[l.id];
+    if (!i) continue;
+
+    // Sin responder: escribió después del último mensaje del bot (y no fue baja)
+    if (i.recibidoTs && !i.optOut && (!i.enviadoTs || new Date(i.recibidoTs) > new Date(i.enviadoTs))) {
+      sinResponder.push({
+        leadId: l.id, nombre: l.nombre, telefono: l.telefono, estado: l.estado,
+        texto: i.recibidoTexto, ts: i.recibidoTs,
+        haceMin: Math.round((ahora - new Date(i.recibidoTs).getTime()) / 60000),
+      });
+    }
+
+    // Caliente: señal de máximo interés en las últimas 48h y sin reserva 1-a-1 aún
+    const sigueAbierto = l.estado === 'video_visto' || l.estado === 'reunion_registrado';
+    if (i.calienteTs && sigueAbierto && (ahora - new Date(i.calienteTs).getTime()) < 48 * 3600 * 1000) {
+      calientes.push({
+        leadId: l.id, nombre: l.nombre, telefono: l.telefono, estado: l.estado,
+        tipo: i.calienteTipo, ts: i.calienteTs,
+        haceMin: Math.round((ahora - new Date(i.calienteTs).getTime()) / 60000),
+      });
+    }
+  }
+
+  sinResponder.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  calientes.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+
+  // Estado de la cola de activación (fichero que mantiene el scheduler)
+  let importQueue = { enCola, activadosHoy: 0, cupo: parseInt(process.env.LEADS_POR_DIA, 10) || 10, ultimaActivacion: null };
+  try {
+    const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+    const st = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'activation.json'), 'utf-8'));
+    const hoy = new Date().toISOString().slice(0, 10);
+    importQueue.activadosHoy = st.fecha === hoy ? st.activadosHoy : 0;
+    importQueue.ultimaActivacion = st.ultimaActivacion;
+  } catch (e) { /* sin fichero aún = sin activaciones */ }
+
+  res.json({ sinResponder, calientes, importQueue });
 });
 
 /**

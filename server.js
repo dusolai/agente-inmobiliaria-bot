@@ -42,7 +42,7 @@ function requireAdmin(req, res, next) {
 
 app.use((req, res, next) => {
   const p = req.path;
-  const esPanel = p === '/monitor.html' || p === '/test.html' || p === '/crm' || p.startsWith('/admin');
+  const esPanel = p === '/monitor.html' || p === '/test.html' || p === '/qr' || p === '/crm' || p.startsWith('/admin');
   const esApiPrivada = p.startsWith('/api/') && p !== '/api/config';
   if (esPanel || esApiPrivada) return requireAdmin(req, res, next);
   next();
@@ -76,8 +76,15 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ─── Ruta principal (Generación Visual de QR) ─────────────────────
+// ─── Ruta principal → CRM ─────────────────────────────────────────
+// La raíz lleva al panel (lo que se usa a diario). El QR de WhatsApp
+// vive en /qr y también dentro del CRM, pestaña "WhatsApp".
 app.get('/', (req, res) => {
+  res.redirect('/monitor.html');
+});
+
+// ─── /qr (Generación Visual de QR de WhatsApp) ────────────────────
+app.get('/qr', (req, res) => {
   const whatsapp = require('./services/whatsapp');
   
   if (whatsapp.isConfigured()) {
@@ -95,7 +102,7 @@ app.get('/', (req, res) => {
     return res.send(`
       <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
         <h2>⏳ Generando el código QR de WhatsApp...</h2>
-        <p>Esto puede tardar unos segundos. Por favor, <a href="/">refresca la página</a> en 10 segundos.</p>
+        <p>Esto puede tardar unos segundos. Por favor, <a href="/qr">refresca la página</a> en 10 segundos.</p>
       </div>
     `);
   }
@@ -114,7 +121,7 @@ app.get('/', (req, res) => {
         <img src="${qrDataUrl}" alt="WhatsApp QR Code" width="300" height="300" />
       </div>
       <p style="color: #555; font-size: 0.9em; margin-top: 20px;">La página se refresca automáticamente cada 20 segundos.</p>
-      <p><a href="/" style="padding: 10px 20px; background: #3498db; color: white; border-radius: 5px; text-decoration: none;">Refrescar código</a></p>
+      <p><a href="/qr" style="padding: 10px 20px; background: #3498db; color: white; border-radius: 5px; text-decoration: none;">Refrescar código</a></p>
     </body>
     </html>
   `);
@@ -137,16 +144,26 @@ app.listen(config.port, () => {
 ╚══════════════════════════════════════════════════════╝
   `);
 
-  // ─── Iniciar scheduler de recordatorios ─────────────────────────
-  const scheduler = require('./services/scheduler');
-  scheduler.iniciar();
+  // ─── Restaurar desde Postgres ANTES de arrancar los servicios ────
+  // Tras un redeploy el disco viene vacío: si hay DATABASE_URL, backupDb
+  // recupera leads, actividad y la sesión de WhatsApp desde la última copia.
+  // Solo después arrancan el scheduler y Baileys (que leen esos ficheros).
+  const backupDb = require('./services/backupDb');
+  backupDb
+    .iniciar()
+    .catch((err) => console.error('⚠️  [BackupDB] Error en el arranque:', err.message))
+    .finally(() => {
+      // ─── Iniciar scheduler de recordatorios ─────────────────────
+      const scheduler = require('./services/scheduler');
+      scheduler.iniciar();
 
-  // ─── Iniciar cliente de WhatsApp (Baileys) ───────────────────────
-  const whatsapp = require('./services/whatsapp');
-  whatsapp.initialize();
+      // ─── Iniciar cliente de WhatsApp (Baileys) ───────────────────
+      const whatsapp = require('./services/whatsapp');
+      whatsapp.initialize();
 
-  // ─── Iniciar adaptador de Telegram (modo piloto) ─────────────────
-  // Si TELEGRAM_BOT_TOKEN está vacío, el adaptador se salta solo.
-  const telegram = require('./services/telegram');
-  telegram.initialize();
+      // ─── Iniciar adaptador de Telegram (modo piloto) ─────────────
+      // Si TELEGRAM_BOT_TOKEN está vacío, el adaptador se salta solo.
+      const telegram = require('./services/telegram');
+      telegram.initialize();
+    });
 });

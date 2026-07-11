@@ -59,10 +59,19 @@ function ensureDataDir() {
   }
 }
 
+// Caché por mtime: evita parsear el fichero entero en cada petición del
+// panel (con cientos de leads era un parse de cientos de KB varias veces
+// por segundo). Solo se relee si el fichero cambió.
+let _cache = null;
+let _cacheMtime = 0;
+
 function readLeads() {
   ensureDataDir();
-  const raw = fs.readFileSync(LEADS_FILE, 'utf-8');
-  return JSON.parse(raw);
+  const mtime = fs.statSync(LEADS_FILE).mtimeMs;
+  if (_cache && mtime === _cacheMtime) return _cache;
+  _cache = JSON.parse(fs.readFileSync(LEADS_FILE, 'utf-8'));
+  _cacheMtime = mtime;
+  return _cache;
 }
 
 function writeLeads(leads) {

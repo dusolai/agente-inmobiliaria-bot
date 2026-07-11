@@ -89,11 +89,14 @@ async function procesarActivacionDiaria() {
     },
   });
 
-  await messaging.sendTextMessage(
-    lead.telefono,
+  // Con ANTHROPIC_API_KEY, cada mensaje inicial se reescribe con un LLM
+  // para que no haya dos envíos iguales (anti-baneo).
+  const personalizer = require('./personalizer');
+  const texto = await personalizer.personalizarMensaje(
     messages.mensajeReactivacion({ nombre: lead.nombre }),
-    { delaySeconds: 0 }
+    lead
   );
+  await messaging.sendTextMessage(lead.telefono, texto, { delaySeconds: 0 });
   activityLog.appendActivity(lead.id, 'lead_activated', { cupo, activadosHoy: st.activadosHoy + 1 });
 
   st.activadosHoy++;

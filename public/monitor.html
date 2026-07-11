@@ -42,13 +42,32 @@
   .stat.warn .ico{background:var(--yellow)}
 
   /* KPI strip */
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem;margin-bottom:1.2rem}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:.9rem;margin-bottom:1.2rem}
+  @media (max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}}
   .kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1rem 1.1rem;border-top:4px solid var(--purple)}
   .kpi b{display:block;font-size:1.9rem;font-weight:900;color:var(--purple);line-height:1}
   .kpi span{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
   .kpi.o{border-top-color:var(--orange)} .kpi.o b{color:var(--orange)}
   .kpi.g{border-top-color:var(--green)} .kpi.g b{color:var(--green)}
   .kpi.y{border-top-color:var(--yellow)} .kpi.y b{color:#b9700c}
+  .kpi.r{border-top-color:var(--red)} .kpi.r b{color:var(--red)}
+  .kpi.r.alerta{background:#fef2f2;animation:pulseKpi 1.6s infinite}
+  @keyframes pulseKpi{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 4px rgba(224,70,75,.15)}}
+
+  /* Bandeja "Necesitan atención" */
+  .atencion{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin-bottom:1.2rem}
+  @media (max-width:880px){.atencion{grid-template-columns:1fr}}
+  .at-row{display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center;padding:.5rem .2rem;border-bottom:1px dashed var(--line);cursor:pointer;font-size:.85rem}
+  .at-row:last-child{border-bottom:none}
+  .at-row:hover{background:#faf8ff}
+  .at-row .at-nombre{font-weight:700;color:var(--ink)}
+  .at-row .at-txt{color:#475569;font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px}
+  .at-row .at-hace{color:var(--muted);font-size:.72rem;white-space:nowrap;text-align:right}
+  .at-row .at-badge{font-size:.62rem;font-weight:800;padding:.15rem .5rem;border-radius:50px;text-transform:uppercase}
+  .at-badge.hot{background:#fee2e2;color:#b91c1c}
+  .at-badge.msg{background:#fff3d6;color:#a67400}
+  .at-vacio{padding:1rem;text-align:center;color:var(--muted);font-size:.82rem}
+  .lead-filters button small{font-weight:800;opacity:.75;margin-left:.25rem}
 
   /* Funnel */
   .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1.2rem 1.3rem;margin-bottom:1.2rem;box-shadow:0 6px 20px rgba(49,27,146,.04)}
@@ -216,8 +235,21 @@
     <div class="kpis">
       <div class="kpi"><b id="kpi-total">—</b><span>Leads totales</span></div>
       <div class="kpi g"><b id="kpi-activos">—</b><span>Activos</span></div>
+      <div class="kpi r" id="kpi-inbox-card"><b id="kpi-inbox">—</b><span>Sin responder</span></div>
+      <div class="kpi o"><b id="kpi-cola">—</b><span>Cola import · hoy</span></div>
       <div class="kpi y"><b id="kpi-conversion">—</b><span>% conversión</span></div>
-      <div class="kpi o"><b id="kpi-eventos">—</b><span>Eventos registrados</span></div>
+      <div class="kpi"><b id="kpi-eventos">—</b><span>Eventos registrados</span></div>
+    </div>
+
+    <div class="atencion">
+      <div class="panel" style="margin-bottom:0">
+        <h2>💬 Sin responder <small>el lead escribió y el bot no supo contestar — atiéndelo tú</small></h2>
+        <div id="inboxMsgs"><div class="at-vacio">Nada pendiente 👌</div></div>
+      </div>
+      <div class="panel" style="margin-bottom:0">
+        <h2>🔥 Leads calientes <small>terminaron el webinar o pulsaron agendar y aún no reservaron — llámalos</small></h2>
+        <div id="inboxHot"><div class="at-vacio">Ninguno ahora mismo</div></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -347,9 +379,9 @@
       <div class="link-group">
         <h3>⚙️ Backend del agente (Seenode)</h3>
         <div class="link-list">
-          <div class="link-card"><a href="/" target="_blank">
+          <div class="link-card"><a href="/qr" target="_blank">
             <span class="lc-icon">🔑</span>
-            <div class="lc-body"><div class="lc-name">QR de WhatsApp</div><div class="lc-url">/</div></div>
+            <div class="lc-body"><div class="lc-name">QR de WhatsApp</div><div class="lc-url">/qr</div></div>
           </a></div>
           <div class="link-card"><a href="/health" target="_blank">
             <span class="lc-icon">💚</span>
@@ -578,17 +610,57 @@
   async function refresh() {
     if (currentTab !== 'inicio') return; // ahorra si no estamos viendo el dashboard
     try {
-      const [stats, leadsResp, statsActivity, live] = await Promise.all([
+      const [stats, leadsResp, statsActivity, live, inbox] = await Promise.all([
         fetchJSON('/api/stats'),
         fetchJSON('/api/leads'),
         fetchJSON('/api/stats/activity'),
         fetchJSON('/api/live?minutes=10'),
+        fetchJSON('/api/inbox'),
       ]);
 
       $('kpi-total').textContent = stats.total;
       $('kpi-activos').textContent = stats.activos;
       $('kpi-conversion').textContent = stats.tasaConversion;
       $('kpi-eventos').textContent = statsActivity.totalEventos;
+
+      // ── KPIs de bandeja y cola de import ──
+      const nPend = (inbox.sinResponder || []).length;
+      $('kpi-inbox').textContent = nPend;
+      $('kpi-inbox-card').classList.toggle('alerta', nPend > 0);
+      const q = inbox.importQueue || {};
+      $('kpi-cola').textContent = `${q.enCola || 0} · ${q.activadosHoy || 0}/${q.cupo || 0}`;
+
+      // ── Contadores por estado en los filtros ──
+      const porEstado = stats.porEstado || {};
+      document.querySelectorAll('#leadFilters button').forEach(btn => {
+        const f = btn.dataset.f;
+        const n = f === '' ? stats.total : (porEstado[f] || 0);
+        const base = btn.textContent.replace(/\s*\d+$/, '').trim();
+        btn.innerHTML = `${base} <small>${n}</small>`;
+      });
+
+      // ── Bandeja: sin responder ──
+      const irAlLead = (id) => { selectedLeadId = id; renderLeads(); refreshLeadDetail(); };
+      const hace = (min) => min < 60 ? `hace ${min} min` : min < 1440 ? `hace ${Math.round(min/60)} h` : `hace ${Math.round(min/1440)} d`;
+      const esc = (s) => String(s || '').replace(/</g, '&lt;');
+      const msgs = (inbox.sinResponder || []).slice(0, 12);
+      $('inboxMsgs').innerHTML = msgs.length === 0
+        ? '<div class="at-vacio">Nada pendiente 👌</div>'
+        : msgs.map(m => `<div class="at-row" data-id="${m.leadId}">
+            <div><span class="at-nombre">${esc(m.nombre)}</span> <span class="at-badge msg">${esc(m.estado).replace(/_/g,' ')}</span><div class="at-txt">"${esc(m.texto)}"</div></div>
+            <div class="at-hace">${hace(m.haceMin)}</div>
+          </div>`).join('') + ((inbox.sinResponder.length > 12) ? `<div class="at-vacio">…y ${inbox.sinResponder.length - 12} más</div>` : '');
+
+      // ── Bandeja: calientes ──
+      const TIPO_HOT = { termino_webinar: '✅ terminó el webinar', pulso_agendar: '🎯 pulsó AGENDAR', abrio_calendly: '📅 abrió Calendly' };
+      const hots = (inbox.calientes || []).slice(0, 12);
+      $('inboxHot').innerHTML = hots.length === 0
+        ? '<div class="at-vacio">Ninguno ahora mismo</div>'
+        : hots.map(h => `<div class="at-row" data-id="${h.leadId}">
+            <div><span class="at-nombre">${esc(h.nombre)}</span> <span class="at-badge hot">${TIPO_HOT[h.tipo] || h.tipo}</span><div class="at-txt">${esc(h.telefono)} · ${esc(h.estado).replace(/_/g,' ')}</div></div>
+            <div class="at-hace">${hace(h.haceMin)}</div>
+          </div>`).join('') + ((inbox.calientes.length > 12) ? `<div class="at-vacio">…y ${inbox.calientes.length - 12} más</div>` : '');
+      document.querySelectorAll('.at-row').forEach(el => el.addEventListener('click', () => irAlLead(el.dataset.id)));
 
       // ── Panel "En directo": quién está viendo qué vídeo ahora mismo ──
       const viendo = (live && live.viendo) || [];
@@ -832,7 +904,7 @@
     // cargar iframes solo cuando se entra a su tab
     if (name === 'whatsapp') {
       const fr = $('iframe-wa');
-      if (fr.src === 'about:blank' || !fr.src.includes(location.origin)) fr.src = '/';
+      if (fr.src === 'about:blank' || !fr.src.includes(location.origin)) fr.src = '/qr';
     }
     if (name === 'simulador') {
       const fr = $('iframe-sim');
