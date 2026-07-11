@@ -18,6 +18,22 @@ const telegram = require('./telegram');
 
 const TG_PREFIX = telegram.TG_PREFIX || 'tg:';
 
+// Deja constancia en el CRM de cada mensaje que sale (y de si salió bien).
+// require perezoso para evitar ciclos de dependencia en el arranque.
+function _registrarEnvio(telefono, text, resultado) {
+  try {
+    const leadManager = require('./leadManager');
+    const activityLog = require('./activityLog');
+    const lead = leadManager.getLeadByPhone(telefono);
+    if (!lead) return;
+    activityLog.appendActivity(lead.id, 'message_sent', {
+      preview: String(text).slice(0, 120),
+      ok: resultado ? resultado.success !== false : null,
+      modo: resultado && resultado.mode ? resultado.mode : undefined,
+    });
+  } catch (e) { /* el registro nunca debe romper un envío */ }
+}
+
 function esTelegram(telefono) {
   return typeof telefono === 'string' && telefono.startsWith(TG_PREFIX);
 }
@@ -40,23 +56,30 @@ async function sendTextMessage(telefono, text, opts = {}) {
   const conTipping = delaySeconds > 0;
 
   try {
+    let resultado;
     if (esTelegram(telefono)) {
       if (conTipping) {
         await telegram.sendTypingAction(telefono);
         await sleep(delaySeconds * 1000);
       }
-      return telegram.sendMessage(telefono, text);
+      resultado = await telegram.sendMessage(telefono, text);
+    } else {
+      if (conTipping) {
+        await whatsapp.sendTypingAction(telefono);
+        await sleep(delaySeconds * 1000);
+      }
+      resultado = await whatsapp.sendTextMessage(telefono, text);
     }
-    if (conTipping) {
-      await whatsapp.sendTypingAction(telefono);
-      await sleep(delaySeconds * 1000);
-    }
-    return whatsapp.sendTextMessage(telefono, text);
+    _registrarEnvio(telefono, text, resultado);
+    return resultado;
   } catch (err) {
     // Si algo falla en el typing, no abortamos el envío del mensaje
     console.error('⚠️  [Messaging] Error con typing, enviando directo:', err.message);
-    if (esTelegram(telefono)) return telegram.sendMessage(telefono, text);
-    return whatsapp.sendTextMessage(telefono, text);
+    const resultado = esTelegram(telefono)
+      ? await telegram.sendMessage(telefono, text)
+      : await whatsapp.sendTextMessage(telefono, text);
+    _registrarEnvio(telefono, text, resultado);
+    return resultado;
   }
 }
 

@@ -79,12 +79,37 @@ function interpretarOpcionVerReservar(texto) {
   return null;
 }
 
+// Palabras de baja: si el lead pide que paremos, paramos — en cualquier estado.
+// Evita denuncias de spam (aceleran el baneo del número) y cumple RGPD.
+const OPTOUT_REGEX = /\b(baja|stop|unsubscribe|no me interesa|no interesa|no quiero|dejame en paz|dejadme en paz|no molestar|no molestes|borrame|borradme)\b/;
+
+function esOptOut(texto) {
+  return OPTOUT_REGEX.test(normalizar(texto));
+}
+
 async function handleIncoming(telefono, texto) {
   const lead = leadManager.getLeadByPhone(telefono);
   if (!lead) return; // mensaje de alguien que no es un lead conocido
 
   // Registramos toda la actividad inbound del lead, esté en el estado que esté
   activityLog.appendActivity(lead.id, 'message_received', { texto });
+
+  // ─── Opt-out: prioridad absoluta sobre cualquier fase ───────────
+  if (esOptOut(texto) && lead.estado !== LEAD_STATES.DESCARTADO) {
+    const result = leadManager.transitionState(lead.id, LEAD_STATES.DESCARTADO);
+    if (result.error) {
+      // Estado terminal sin transición válida: forzamos el descarte igualmente
+      leadManager.updateLead(lead.id, { estado: LEAD_STATES.DESCARTADO, descartadoAt: new Date().toISOString() });
+    }
+    activityLog.appendActivity(lead.id, 'opt_out', { texto });
+    console.log(`🛑 [Flujo] ${lead.nombre} pidió la baja → descartado`);
+    await messaging.sendTextMessage(
+      lead.telefono,
+      `Entendido ${lead.nombre}, no te escribimos más. Si algún día quieres retomarlo, aquí estaremos. Un abrazo.`,
+      { delaySeconds: 0 }
+    );
+    return;
+  }
 
   // ─── Fase A: respuesta a la pregunta de cualificación ──────────
   // Tras cualificar enviamos el Calendly grupal (no la landing). El lead se

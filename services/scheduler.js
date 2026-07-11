@@ -1,4 +1,6 @@
 const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
 const config = require('../config/config');
 const leadManager = require('./leadManager');
 const messaging = require('./messaging');
@@ -9,6 +11,8 @@ const messages = require('../templates/messages');
 /**
  * Scheduler de Recordatorios Automáticos.
  * Recorre los leads cada 5 min y hace follow-up según el estado:
+ *  - Fase 0 (nuevo): activación diaria del import masivo — LEADS_POR_DIA
+ *    leads al día, espaciados con intervalos aleatorios en horario laboral
  *  - Fase 1 (esperando_cualificacion): reenvía la pregunta de filtrado
  *  - Fase 2 (video_enviado): no reservó el grupal → reenvía el Calendly grupal
  *  - Fase 2B (video_visto): entró al funnel y lo dejó a medias → reenvía la
@@ -18,6 +22,85 @@ const messages = require('../templates/messages');
  */
 
 const MAX_REMINDERS = config.agent.maxReminders;
+
+// ─── Fase 0: activación diaria del import masivo ──────────────────
+// Los leads de /webhook/bulk-import se crean en estado "nuevo". Esta fase
+// los va activando poco a poco: cupo diario, horario laboral y espaciado
+// aleatorio entre envíos, para no disparar los filtros antispam de WhatsApp.
+// Config por env: LEADS_POR_DIA (10), ACTIVACION_HORA_INICIO (10),
+// ACTIVACION_HORA_FIN (20). Horas en la zona del servidor (poner
+// TZ=Europe/Madrid en Seenode para que coincidan con España).
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const ACTIVATION_FILE = path.join(DATA_DIR, 'activation.json');
+
+function _leerEstadoActivacion() {
+  try {
+    return JSON.parse(fs.readFileSync(ACTIVATION_FILE, 'utf-8'));
+  } catch (e) {
+    return { fecha: null, activadosHoy: 0, ultimaActivacion: null };
+  }
+}
+
+function _guardarEstadoActivacion(st) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(ACTIVATION_FILE, JSON.stringify(st, null, 2), 'utf-8');
+}
+
+async function procesarActivacionDiaria() {
+  const cupo = parseInt(process.env.LEADS_POR_DIA, 10) || 10;
+  if (cupo <= 0) return;
+
+  const horaInicio = parseInt(process.env.ACTIVACION_HORA_INICIO, 10) || 10;
+  const horaFin = parseInt(process.env.ACTIVACION_HORA_FIN, 10) || 20;
+  const ahora = new Date();
+  const hora = ahora.getHours();
+  if (hora < horaInicio || hora >= horaFin) return;
+
+  let st = _leerEstadoActivacion();
+  const hoy = ahora.toISOString().slice(0, 10);
+  if (st.fecha !== hoy) st = { fecha: hoy, activadosHoy: 0, ultimaActivacion: null };
+  if (st.activadosHoy >= cupo) return;
+
+  // Espaciado: repartimos el cupo por la ventana horaria, con jitter ±30%
+  // para que los envíos no caigan a intervalos exactos (patrón de bot).
+  const intervaloMin = Math.max(5, Math.floor(((horaFin - horaInicio) * 60) / cupo));
+  if (st.ultimaActivacion) {
+    const minDesdeUltima = (Date.now() - new Date(st.ultimaActivacion).getTime()) / 60000;
+    const objetivo = intervaloMin * (0.7 + Math.random() * 0.6);
+    if (minDesdeUltima < objetivo) return;
+  }
+
+  // El más antiguo primero (getAllLeads ordena por creación descendente)
+  const nuevos = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.NUEVO });
+  if (nuevos.length === 0) return;
+  const lead = nuevos[nuevos.length - 1];
+
+  const result = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
+  if (result.error) {
+    console.error(`❌ [Activación] No pude activar ${lead.nombre}: ${result.error}`);
+    return;
+  }
+  // Baseline de recordatorios = ahora (no createdAt, que puede ser de hace
+  // días por el import) para que la fase 1 no dispare al instante.
+  leadManager.updateLead(lead.id, {
+    recordatorios: {
+      ...lead.recordatorios,
+      fase1: { enviados: 0, ultimoEnvio: new Date().toISOString() },
+    },
+  });
+
+  await messaging.sendTextMessage(
+    lead.telefono,
+    messages.mensajeReactivacion({ nombre: lead.nombre }),
+    { delaySeconds: 0 }
+  );
+  activityLog.appendActivity(lead.id, 'lead_activated', { cupo, activadosHoy: st.activadosHoy + 1 });
+
+  st.activadosHoy++;
+  st.ultimaActivacion = new Date().toISOString();
+  _guardarEstadoActivacion(st);
+  console.log(`🚀 [Activación] ${lead.nombre} activado (${st.activadosHoy}/${cupo} hoy, quedan ${nuevos.length - 1} en cola)`);
+}
 
 // Devuelve el intervalo en ms que se debe esperar antes del recordatorio
 // número `n` (0-indexado). Si hay menos entradas que MAX_REMINDERS, repite la
@@ -265,6 +348,7 @@ async function procesarRecordatoriosFase3() {
  */
 async function ejecutarCiclo() {
   console.log(`\n⏰ [Scheduler] Ciclo de recordatorios — ${new Date().toLocaleString()}`);
+  await procesarActivacionDiaria();
   await procesarRecordatoriosFase1();
   await procesarRecordatoriosFase2();
   await procesarRecordatoriosFase2B();

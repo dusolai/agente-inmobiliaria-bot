@@ -16,6 +16,38 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ─── Protección del CRM y la API (ADMIN_TOKEN) ────────────────────
+// Con ADMIN_TOKEN definido en Seenode, el panel y la API de leads piden
+// usuario/contraseña (Basic auth: cualquier usuario + el token). Quedan
+// públicos solo los endpoints que necesitan las landings y los webhooks:
+// /tracking, /webhook, /r, /health, /api/config y la raíz (QR).
+// Sin ADMIN_TOKEN no se protege nada (compatible con el comportamiento actual).
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+if (!ADMIN_TOKEN) {
+  console.warn('⚠️  ADMIN_TOKEN no configurado: el CRM y /api/leads quedan PÚBLICOS. Configúralo en Seenode.');
+}
+
+function requireAdmin(req, res, next) {
+  if (!ADMIN_TOKEN) return next();
+  const hdr = req.headers.authorization || '';
+  if (hdr.startsWith('Basic ')) {
+    const decoded = Buffer.from(hdr.slice(6), 'base64').toString('utf-8');
+    const idx = decoded.indexOf(':');
+    const pass = idx >= 0 ? decoded.slice(idx + 1) : decoded;
+    if (pass === ADMIN_TOKEN) return next();
+  }
+  res.set('WWW-Authenticate', 'Basic realm="CRM Three Inmobiliaria"');
+  return res.status(401).send('Autenticación requerida');
+}
+
+app.use((req, res, next) => {
+  const p = req.path;
+  const esPanel = p === '/monitor.html' || p === '/test.html' || p === '/crm' || p.startsWith('/admin');
+  const esApiPrivada = p.startsWith('/api/') && p !== '/api/config';
+  if (esPanel || esApiPrivada) return requireAdmin(req, res, next);
+  next();
+});
+
 // ─── /admin redirige al panel CRM en vivo ─────────────────────────
 // IMPORTANTE: este redirect debe ir ANTES del static middleware, porque si no
 // express.static encuentra public/admin/index.html (panel antiguo) y lo sirve

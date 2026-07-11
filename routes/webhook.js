@@ -57,6 +57,69 @@ router.post('/new-lead', async (req, res) => {
 });
 
 /**
+ * POST /webhook/calendly
+ * Webhook oficial de Calendly (suscripción `invitee.created`, plan Standard).
+ * Es la fuente FIABLE de "reservó": el redirect a /tracking/calendly-booked
+ * solo funciona si el lead espera en la página de confirmación; si cierra la
+ * pestaña antes, el bot no se enteraba. Con esto, Calendly nos avisa siempre.
+ *
+ * El lead se identifica por el utm_content=lead_<id> que ya viaja en todos
+ * los enlaces que enviamos (payload.tracking.utm_content). Es idempotente
+ * con el redirect: el segundo aviso encuentra el estado ya avanzado y no hace
+ * nada (la máquina de estados lo bloquea).
+ *
+ * Cómo suscribirlo (una vez): Calendly → Integrations → Webhooks → añadir
+ * https://<backend>/webhook/calendly con el evento "Invitee Created".
+ */
+router.post('/calendly', async (req, res) => {
+  try {
+    const { event, payload } = req.body || {};
+    if (event !== 'invitee.created') {
+      return res.json({ ok: true, ignored: event || 'sin evento' });
+    }
+
+    const tracking = (payload && payload.tracking) || {};
+    const leadId = conversationFlow.leadIdDesdeUtm(tracking.utm_content);
+    if (!leadId) {
+      console.log('📅 [CalendlyWebhook] Reserva sin utm_content de lead (tráfico externo), ignorada');
+      return res.json({ ok: true, ignored: 'sin lead' });
+    }
+
+    const lead = leadManager.getLeadById(leadId);
+    if (!lead) return res.json({ ok: true, ignored: 'lead no encontrado' });
+
+    const nombreEvento = (payload.scheduled_event && payload.scheduled_event.name) || null;
+    activityLog.appendActivity(lead.id, 'calendly_booked', { via: 'webhook', evento: nombreEvento });
+
+    if (lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
+      // Reservó el GRUPAL → le llega el acceso a la landing
+      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_VISTO);
+      const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
+      await messaging.sendTextMessage(
+        lead.telefono,
+        messages.mensajeAccesoVideoTrasReserva({ nombre: lead.nombre, enlaceLanding })
+      );
+      console.log(`📅 [CalendlyWebhook] Reserva GRUPAL de ${lead.nombre} → landing enviada`);
+    } else if (lead.estado === leadManager.LEAD_STATES.REUNION_REGISTRADO) {
+      // Reservó el 1-A-1 → confirmación
+      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
+      await messaging.sendTextMessage(
+        lead.telefono,
+        `¡Listo ${lead.nombre}! Tu reunión con Arkaitz está reservada ✅\n\nNos vemos en Zoom a la hora que has elegido. Te llegará un recordatorio antes.`
+      );
+      console.log(`📅 [CalendlyWebhook] Reserva 1-A-1 de ${lead.nombre} confirmada`);
+    } else {
+      console.log(`📅 [CalendlyWebhook] Reserva de ${lead.nombre} con estado ${lead.estado} (ya procesada por el redirect, no-op)`);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ [CalendlyWebhook] Error:', err.message);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+/**
  * POST /webhook/zoom-attendance
  * Recibe datos de asistencia a una reunión grupal de Zoom.
  * Body: { meetingId, participants: [{ email, nombre }] }

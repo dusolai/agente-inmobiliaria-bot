@@ -453,8 +453,8 @@
   function fmtTime(ts) { try { return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return ts; } }
   function fmtDateTime(ts) { try { return new Date(ts).toLocaleString('es-ES'); } catch { return ts; } }
   function eventTag(type) {
-    if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started' || type === 'question_resent' || type === 'meeting_joined') return 'state';
-    if (type === 'message_received') return 'msg';
+    if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started' || type === 'question_resent' || type === 'meeting_joined' || type === 'lead_activated' || type === 'opt_out') return 'state';
+    if (type === 'message_received' || type === 'message_sent') return 'msg';
     if (type === 'profile_set') return 'profile';
     if (type.startsWith('video_') || type === 'calendly_button_revealed') return 'video';
     if (type.startsWith('calendly_')) return 'calendly';
@@ -470,6 +470,9 @@
       case 'state_changed':      return `${m.from || '∅'} → ${m.to}`;
       case 'profile_set':        return `perfil: ${m.perfil}`;
       case 'message_received':   return m.texto ? `"${m.texto}"` : '';
+      case 'message_sent':       return `🤖 bot${m.ok === false ? ' ⚠️ NO ENTREGADO' : ''}: "${m.preview || ''}"`;
+      case 'opt_out':            return `🛑 pidió la BAJA: "${m.texto || ''}"`;
+      case 'lead_activated':     return `activado del import (${m.activadosHoy || '?'}/${m.cupo || '?'} hoy)`;
       case 'landing_view':       return `landing ${m.perfil || ''}`;
       case 'video_play':         return m.videoId ? `play (${m.videoId})` : 'play del vídeo';
       case 'video_progress_25':  return m.videoId ? `25% (${m.videoId})` : 'llegó al 25%';

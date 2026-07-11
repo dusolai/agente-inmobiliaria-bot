@@ -20,7 +20,7 @@ const path = require('path');
  *  - reminder_sent             (meta: { fase, n })
  */
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const ACTIVITY_FILE = path.join(DATA_DIR, 'activity.json');
 const MAX_ENTRIES_IN_MEMORY = 10000; // protección por si el archivo se hace enorme
 

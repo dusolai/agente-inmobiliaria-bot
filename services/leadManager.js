@@ -3,7 +3,9 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const activityLog = require('./activityLog');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// DATA_DIR permite apuntar los datos a un disco persistente (Seenode) para
+// que un redeploy no borre los leads. Sin la variable, ./data como siempre.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 
 // ─── Perfiles de lead (segmentación por la pregunta de filtrado) ──

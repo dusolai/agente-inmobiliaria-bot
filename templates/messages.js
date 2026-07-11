@@ -8,16 +8,38 @@ const config = require('../config/config');
  */
 
 // ─── A. Mensaje inicial — pregunta de filtrado ────────────────────
-function mensajeReactivacion({ nombre }) {
-  return (
+// Varias redacciones del mismo mensaje, elegidas al azar: cientos de envíos
+// con texto idéntico es el patrón que los filtros antispam de WhatsApp
+// detectan primero. Mismo contenido, distinta forma.
+const VARIANTES_REACTIVACION = [
+  ({ nombre }) =>
     `Hey ${nombre}, ¿qué tal? 👋\n\n` +
     `Soy del equipo de Three Inmobiliaria. Hace un tiempo te interesaste por el proyecto y justo ahora estamos reabriendo plazas.\n\n` +
     `Antes de mandarte info quería preguntarte una cosa rápida, así te paso lo que de verdad te encaje y no perdemos tiempo:\n\n` +
     `¿Trabajas en el sector inmobiliario o más bien estás buscando un sobresueldo / forma de generar ingresos extra?\n\n` +
     `1️⃣ Soy agente o trabajo en una inmobiliaria\n` +
     `2️⃣ Busco un sobresueldo / ingreso extra\n\n` +
-    `Contéstame con el número que toque 🙂`
-  );
+    `Contéstame con el número que toque 🙂`,
+  ({ nombre }) =>
+    `Hola ${nombre}, ¿cómo va todo?\n\n` +
+    `Te escribo de Three Inmobiliaria — en su día dejaste tus datos interesándote por el proyecto y ahora mismo estamos abriendo plazas otra vez.\n\n` +
+    `Para pasarte justo la info que te encaje, dime una cosa:\n\n` +
+    `1️⃣ Trabajo en el sector inmobiliario\n` +
+    `2️⃣ Busco generar un ingreso extra\n\n` +
+    `Respóndeme con el 1 o el 2 y te lo mando 👌`,
+  ({ nombre }) =>
+    `¡Buenas ${nombre}! 👋\n\n` +
+    `Del equipo de Three Inmobiliaria. Retomamos contactos de gente que se interesó por el proyecto porque acabamos de reabrir plazas.\n\n` +
+    `Una pregunta rápida antes de mandarte nada, para no hacerte perder el tiempo:\n\n` +
+    `¿Eres del sector inmobiliario, o lo tuyo es más buscar un sobresueldo?\n\n` +
+    `1️⃣ Soy agente / trabajo en inmobiliaria\n` +
+    `2️⃣ Busco un ingreso extra\n\n` +
+    `Con el número me vale 🙂`,
+];
+
+function mensajeReactivacion({ nombre }) {
+  const variante = VARIANTES_REACTIVACION[Math.floor(Math.random() * VARIANTES_REACTIVACION.length)];
+  return variante({ nombre });
 }
 
 // Re-pregunta si la respuesta no se entiende
