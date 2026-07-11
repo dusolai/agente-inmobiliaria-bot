@@ -33,7 +33,10 @@ async function initialize() {
     const pino = pinoModule.default;
     const logger = pino({ level: 'warn' });
     
-    const authDir = path.join(process.cwd(), 'auth_info');
+    // WA_AUTH_DIR permite apuntar la sesión a un disco persistente de Seenode
+    // para que el número NO se desvincule en cada redeploy. Sin la variable,
+    // usa ./auth_info como hasta ahora.
+    const authDir = process.env.WA_AUTH_DIR || path.join(process.cwd(), 'auth_info');
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     
     // Obtenemos dinámicamente la ultimísima versión de WhatsApp Web para evitar Error 405 (versiones baneadas)
@@ -176,7 +179,9 @@ async function sendTextMessage(to, body) {
   }
 
   try {
-    const jid = `${to}@s.whatsapp.net`;
+    // Solo dígitos en el JID: un teléfono con espacios/+/guiones haría que
+    // el mensaje se "enviara" a una dirección inexistente sin dar error.
+    const jid = `${String(to).replace(/[^\d]/g, '')}@s.whatsapp.net`;
     await sock.sendMessage(jid, { text: body });
     
     console.log(`✅ [WhatsApp] Mensaje enviado a ${to}`);
@@ -196,7 +201,7 @@ const getLatestQr = () => latestQrDataUrl;
 async function sendTypingAction(to) {
   if (!sock || !isReady) return;
   try {
-    const jid = `${to}@s.whatsapp.net`;
+    const jid = `${String(to).replace(/[^\d]/g, '')}@s.whatsapp.net`;
     await sock.presenceSubscribe(jid).catch(() => {});
     await sock.sendPresenceUpdate('composing', jid);
   } catch (err) {

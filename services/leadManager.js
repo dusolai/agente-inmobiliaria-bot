@@ -37,6 +37,16 @@ const VALID_TRANSITIONS = {
   [LEAD_STATES.DESCARTADO]: [],
 };
 
+// ─── Normalización de teléfono ────────────────────────────────────
+// Deja solo dígitos: quita espacios, +, guiones, puntos y paréntesis.
+// "34 667 55 00 70" y "+34-667.550.070" → "34667550070".
+// Los identificadores de Telegram ("tg:<chat_id>") se devuelven tal cual.
+function normalizarTelefono(telefono) {
+  const t = String(telefono || '').trim();
+  if (t.startsWith('tg:')) return t;
+  return t.replace(/[^\d]/g, '');
+}
+
 // ─── Persistencia ─────────────────────────────────────────────────
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -67,7 +77,7 @@ function createLead({ nombre, email, telefono, fuente = 'formulario' }) {
     id: uuidv4(),
     nombre: nombre || 'Sin nombre',
     email: email || '',
-    telefono: telefono || '',
+    telefono: normalizarTelefono(telefono),
     fuente,
     perfil: LEAD_PROFILES.SIN_DEFINIR,
     estado: LEAD_STATES.NUEVO,
@@ -115,7 +125,10 @@ function getLeadById(id) {
 
 function getLeadByPhone(telefono) {
   const leads = readLeads();
-  return leads.find((l) => l.telefono === telefono) || null;
+  // Comparamos normalizado por ambos lados: así un lead antiguo guardado con
+  // espacios sigue encontrándose cuando WhatsApp entrega el número limpio.
+  const buscado = normalizarTelefono(telefono);
+  return leads.find((l) => normalizarTelefono(l.telefono) === buscado) || null;
 }
 
 function updateLead(id, updates) {
@@ -213,6 +226,7 @@ module.exports = {
   LEAD_STATES,
   LEAD_PROFILES,
   VALID_TRANSITIONS,
+  normalizarTelefono,
   createLead,
   getAllLeads,
   getLeadById,
