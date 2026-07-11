@@ -173,8 +173,17 @@ async function procesarRecordatoriosFase2B() {
 
     if (ahora - referencia < _intervaloMs(fase2b.enviados)) continue;
 
-    // ¿Dónde lo dejó? Lo deducimos de los eventos que reporta la landing.
     const actividad = activityLog.getActivityByLead(lead.id);
+
+    // Si tiene actividad reciente en la landing es que sigue dentro viendo
+    // los vídeos — no le interrumpimos con un recordatorio a mitad.
+    const EVENTOS_LANDING = /^(landing_view|video_play|video_progress|video_complete|webinar_unlocked|extras_unlocked|calendly_button_revealed)/;
+    const ultimoEventoLanding = actividad
+      .filter((e) => EVENTOS_LANDING.test(e.type))
+      .reduce((max, e) => Math.max(max, new Date(e.ts).getTime()), 0);
+    if (ultimoEventoLanding && ahora - ultimoEventoLanding < 30 * 60 * 1000) continue;
+
+    // ¿Dónde lo dejó? Lo deducimos de los eventos que reporta la landing.
     let etapa = 'inicio';
     if (actividad.some((e) => e.type === 'webinar_unlocked')) {
       etapa = 'webinar';
