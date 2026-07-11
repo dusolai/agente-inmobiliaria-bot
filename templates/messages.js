@@ -112,6 +112,104 @@ function recordatorioVideo3({ nombre, enlaceVideo }) {
   );
 }
 
+// ─── B2. Recordatorios "no reservó el grupal" (estado video_enviado) ─
+// El lead recibió el Calendly grupal tras cualificar pero no ha reservado.
+// Se le reenvía el enlace de reserva, NO la landing (aún no le toca).
+function recordatorioGrupal1({ nombre, enlaceCalendly }) {
+  return (
+    `Oye ${nombre}, vi que no llegaste a reservar tu hueco para la presentación 👀\n\n` +
+    `Es el primer paso y son dos clics. Te dejo el enlace otra vez:\n` +
+    `${enlaceCalendly}`
+  );
+}
+
+function recordatorioGrupal2({ nombre, enlaceCalendly }) {
+  return (
+    `${nombre}, una cosa: estamos cerrando los huecos de esta semana.\n\n` +
+    `Si te sigue interesando, reserva el tuyo hoy:\n` +
+    `${enlaceCalendly}`
+  );
+}
+
+function recordatorioGrupal3({ nombre, enlaceCalendly }) {
+  return (
+    `${nombre}, último aviso por mi parte 🔔\n\n` +
+    `Vamos a cerrar plazas en breve. Si quieres entrar, reserva aquí:\n` +
+    `${enlaceCalendly}\n\n` +
+    `Si no es el momento, no pasa nada, ignora este mensaje.`
+  );
+}
+
+// ─── B3. Recordatorios "entró al funnel y lo dejó a medias" ───────
+// Estado video_visto: reservó el grupal y tiene la landing, pero no ha
+// llegado a pulsar el botón de agendar. La etapa se deduce del registro
+// de actividad del lead:
+//   'inicio'  → no llegó a darle al play al primer vídeo
+//   'vsl'     → empezó el vídeo corto pero no lo terminó
+//   'webinar' → desbloqueó el webinar pero no llegó al final
+function _lineaEtapaFunnel(etapa) {
+  if (etapa === 'webinar') {
+    return 'empezaste el webinar pero te quedaste a mitad — justo al final está lo importante';
+  }
+  if (etapa === 'vsl') {
+    return 'no llegaste a terminar el primer vídeo';
+  }
+  return 'aún no has entrado a ver la presentación';
+}
+
+function recordatorioFunnel1({ nombre, enlaceLanding, etapa }) {
+  return (
+    `Oye ${nombre}, vi que ${_lineaEtapaFunnel(etapa)} 👀\n\n` +
+    `Retomas justo donde lo dejaste. Te dejo el acceso otra vez:\n` +
+    `${enlaceLanding}`
+  );
+}
+
+function recordatorioFunnel2({ nombre, enlaceLanding, etapa }) {
+  return (
+    `${nombre}, el acceso a la presentación lo vamos a cerrar pronto.\n\n` +
+    `Vi que ${_lineaEtapaFunnel(etapa)}. ¿Puedes terminarla hoy?\n` +
+    `${enlaceLanding}`
+  );
+}
+
+function recordatorioFunnel3({ nombre, enlaceLanding, etapa }) {
+  return (
+    `${nombre}, último aviso por mi parte 🔔\n\n` +
+    `Vamos a cerrar el acceso en breve. Lo tienes aquí:\n` +
+    `${enlaceLanding}\n\n` +
+    `Si no es el momento, no pasa nada, ignora este mensaje.`
+  );
+}
+
+// ─── D2. Recordatorios "no reservó el 1-a-1" (reunion_registrado) ─
+// El lead terminó el webinar y pulsó agendar (se le envió el enlace del
+// 1-a-1) pero no ha reservado. Se le reenvía el enlace individual.
+function recordatorio1a1Primero({ nombre, enlace1a1 }) {
+  return (
+    `Oye ${nombre}, vi que no llegaste a reservar tu reunión 1 a 1 con Arkaitz 👀\n\n` +
+    `Es el último paso. Coge tu hueco aquí:\n` +
+    `${enlace1a1}`
+  );
+}
+
+function recordatorio1a1Segundo({ nombre, enlace1a1 }) {
+  return (
+    `${nombre}, los huecos de la agenda de Arkaitz van volando.\n\n` +
+    `Si quieres ver tu caso con él, reserva hoy:\n` +
+    `${enlace1a1}`
+  );
+}
+
+function recordatorio1a1Tercero({ nombre, enlace1a1 }) {
+  return (
+    `${nombre}, te escribo por última vez por aquí 📌\n\n` +
+    `Si quieres dar el paso, este es el momento:\n` +
+    `${enlace1a1}\n\n` +
+    `Si no, lo dejamos estar y todo bien por mi parte.`
+  );
+}
+
 // ─── C. Rama "Sí vio el video" — DOS OPCIONES ────────────────────
 function mensajeOpcionesVerPresentacion({ nombre }) {
   return (
@@ -228,6 +326,15 @@ module.exports = {
   mensajeAccesoVideoTrasReserva,
   mensajeAcceso1a1,
   mensajeBienvenida,
+  recordatorioGrupal1,
+  recordatorioGrupal2,
+  recordatorioGrupal3,
+  recordatorioFunnel1,
+  recordatorioFunnel2,
+  recordatorioFunnel3,
+  recordatorio1a1Primero,
+  recordatorio1a1Segundo,
+  recordatorio1a1Tercero,
   recordatorioVideo1,
   recordatorioVideo2,
   recordatorioVideo3,

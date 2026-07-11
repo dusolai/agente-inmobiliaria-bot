@@ -3,15 +3,18 @@ const config = require('../config/config');
 const leadManager = require('./leadManager');
 const messaging = require('./messaging');
 const conversationFlow = require('./conversationFlow');
+const activityLog = require('./activityLog');
 const messages = require('../templates/messages');
 
 /**
  * Scheduler de Recordatorios Automáticos.
- * Ejecuta cada hora para verificar si hay leads que necesiten follow-up.
- * Reglas:
- *  - Fase 2 (Video): Recordatorio cada 48h a leads en estado "video_enviado"
- *  - Fase 3 (Reunión): Recordatorio cada 48h a leads en estado "reunion_registrado"
- *  - Máximo 3 recordatorios antes de descartar
+ * Recorre los leads cada 5 min y hace follow-up según el estado:
+ *  - Fase 1 (esperando_cualificacion): reenvía la pregunta de filtrado
+ *  - Fase 2 (video_enviado): no reservó el grupal → reenvía el Calendly grupal
+ *  - Fase 2B (video_visto): entró al funnel y lo dejó a medias → reenvía la
+ *    landing de su perfil, con copy según la etapa (inicio / vsl / webinar)
+ *  - Fase 3 (reunion_registrado): no reservó el 1-a-1 → reenvía el individual
+ *  - Máximo MAX_REMINDERS intentos por fase antes de descartar
  */
 
 const MAX_REMINDERS = config.agent.maxReminders;
@@ -26,18 +29,25 @@ function _intervaloMs(n) {
 }
 
 // Mapeo de funciones de recordatorio por contador (4 niveles)
-const videoReminders = [
-  messages.recordatorioVideo1,
-  messages.recordatorioVideo2,
-  messages.recordatorioVideo3,
-  messages.recordatorioVideo3, // 4º reintento usa el mismo copy duro que el 3º
+const grupalReminders = [
+  messages.recordatorioGrupal1,
+  messages.recordatorioGrupal2,
+  messages.recordatorioGrupal3,
+  messages.recordatorioGrupal3, // 4º reintento usa el mismo copy duro que el 3º
 ];
 
-const reunionReminders = [
-  messages.recordatorioReunion1,
-  messages.recordatorioReunion2,
-  messages.recordatorioReunion3,
-  messages.recordatorioReunion3,
+const funnelReminders = [
+  messages.recordatorioFunnel1,
+  messages.recordatorioFunnel2,
+  messages.recordatorioFunnel3,
+  messages.recordatorioFunnel3,
+];
+
+const reminders1a1 = [
+  messages.recordatorio1a1Primero,
+  messages.recordatorio1a1Segundo,
+  messages.recordatorio1a1Tercero,
+  messages.recordatorio1a1Tercero,
 ];
 
 /**
@@ -84,7 +94,10 @@ async function procesarRecordatoriosFase1() {
 }
 
 /**
- * Procesa recordatorios de Fase 2: leads que recibieron el video pero no lo han visto.
+ * Procesa recordatorios de Fase 2: leads que recibieron el Calendly grupal
+ * tras cualificar pero aún no han reservado (estado video_enviado).
+ * Se les reenvía el enlace de reserva del grupal — la landing llega sola
+ * al confirmar la reserva (/tracking/calendly-booked).
  */
 async function procesarRecordatoriosFase2() {
   const leads = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.VIDEO_ENVIADO });
@@ -109,15 +122,15 @@ async function procesarRecordatoriosFase2() {
 
     if (ahora - referencia < _intervaloMs(fase2.enviados)) continue;
 
-    // Enviar recordatorio
-    const idx = Math.min(fase2.enviados, videoReminders.length - 1);
-    const msgFn = videoReminders[idx];
-    const enlaceVideo = `${config.landing.landingUrl}?lead=${lead.id}`;
+    // Enviar recordatorio con el enlace del Calendly grupal
+    const idx = Math.min(fase2.enviados, grupalReminders.length - 1);
+    const msgFn = grupalReminders[idx];
+    const enlaceCalendly = conversationFlow.enlaceRedirectorCalendly(lead, 'grupal');
 
-    console.log(`🔔 [Scheduler] Recordatorio Video #${fase2.enviados + 1} → ${lead.nombre}`);
+    console.log(`🔔 [Scheduler] Recordatorio Grupal #${fase2.enviados + 1} → ${lead.nombre}`);
     await messaging.sendTextMessage(
       lead.telefono,
-      msgFn({ nombre: lead.nombre, enlaceVideo })
+      msgFn({ nombre: lead.nombre, enlaceCalendly })
     );
 
     // Actualizar contadores
@@ -134,7 +147,66 @@ async function procesarRecordatoriosFase2() {
 }
 
 /**
- * Procesa recordatorios de Fase 3: leads registrados a la reunión que no han asistido.
+ * Procesa recordatorios de Fase 2B: leads que reservaron el grupal y
+ * recibieron la landing, pero abandonaron el funnel sin pulsar agendar
+ * (estado video_visto). Se les reenvía la landing de su perfil con un
+ * copy según dónde lo dejaron (deducido del registro de actividad).
+ */
+async function procesarRecordatoriosFase2B() {
+  const leads = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.VIDEO_VISTO });
+  const ahora = Date.now();
+
+  for (const lead of leads) {
+    // Leads antiguos pueden no tener el contador fase2b inicializado
+    const fase2b = (lead.recordatorios && lead.recordatorios.fase2b) || { enviados: 0, ultimoEnvio: null };
+
+    if (fase2b.enviados >= MAX_REMINDERS) {
+      console.log(`🗑  [Scheduler] Descartando lead (máx recordatorios Fase 2B): ${lead.nombre}`);
+      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
+      await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+      continue;
+    }
+
+    const referencia = fase2b.ultimoEnvio
+      ? new Date(fase2b.ultimoEnvio).getTime()
+      : new Date(lead.videoVistoAt || lead.updatedAt).getTime();
+
+    if (ahora - referencia < _intervaloMs(fase2b.enviados)) continue;
+
+    // ¿Dónde lo dejó? Lo deducimos de los eventos que reporta la landing.
+    const actividad = activityLog.getActivityByLead(lead.id);
+    let etapa = 'inicio';
+    if (actividad.some((e) => e.type === 'webinar_unlocked')) {
+      etapa = 'webinar';
+    } else if (actividad.some((e) => e.type === 'video_play')) {
+      etapa = 'vsl';
+    }
+
+    const idx = Math.min(fase2b.enviados, funnelReminders.length - 1);
+    const msgFn = funnelReminders[idx];
+    const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
+
+    console.log(`🔔 [Scheduler] Recordatorio Funnel (${etapa}) #${fase2b.enviados + 1} → ${lead.nombre}`);
+    await messaging.sendTextMessage(
+      lead.telefono,
+      msgFn({ nombre: lead.nombre, enlaceLanding, etapa })
+    );
+
+    leadManager.updateLead(lead.id, {
+      recordatorios: {
+        ...lead.recordatorios,
+        fase2b: {
+          enviados: fase2b.enviados + 1,
+          ultimoEnvio: new Date().toISOString(),
+        },
+      },
+    });
+  }
+}
+
+/**
+ * Procesa recordatorios de Fase 3: leads que pulsaron agendar y recibieron
+ * el enlace del 1-a-1 pero no han reservado (estado reunion_registrado).
  */
 async function procesarRecordatoriosFase3() {
   const leads = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.REUNION_REGISTRADO });
@@ -157,14 +229,14 @@ async function procesarRecordatoriosFase3() {
 
     if (ahora - referencia < _intervaloMs(fase3.enviados)) continue;
 
-    const idx = Math.min(fase3.enviados, reunionReminders.length - 1);
-    const msgFn = reunionReminders[idx];
+    const idx = Math.min(fase3.enviados, reminders1a1.length - 1);
+    const msgFn = reminders1a1[idx];
 
-    console.log(`🔔 [Scheduler] Recordatorio Reunión #${fase3.enviados + 1} → ${lead.nombre}`);
-    const enlaceReunion = conversationFlow.enlaceRedirectorCalendly(lead, 'grupal');
+    console.log(`🔔 [Scheduler] Recordatorio 1-a-1 #${fase3.enviados + 1} → ${lead.nombre}`);
+    const enlace1a1 = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
     await messaging.sendTextMessage(
       lead.telefono,
-      msgFn({ nombre: lead.nombre, enlaceReunion })
+      msgFn({ nombre: lead.nombre, enlace1a1 })
     );
 
     leadManager.updateLead(lead.id, {
@@ -186,6 +258,7 @@ async function ejecutarCiclo() {
   console.log(`\n⏰ [Scheduler] Ciclo de recordatorios — ${new Date().toLocaleString()}`);
   await procesarRecordatoriosFase1();
   await procesarRecordatoriosFase2();
+  await procesarRecordatoriosFase2B();
   await procesarRecordatoriosFase3();
   console.log(`✅ [Scheduler] Ciclo completado\n`);
 }
