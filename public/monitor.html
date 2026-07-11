@@ -589,7 +589,8 @@
   async function refreshStatus() {
     try {
       const s = await fetchJSON('/api/system/status');
-      setStatus('st-whatsapp', s.whatsapp.connected ? 'WhatsApp conectado' : 'WhatsApp desconectado', s.whatsapp.connected ? 'ok' : 'ko');
+      const waProv = s.whatsapp.provider === 'cloud' ? ' (API oficial)' : s.whatsapp.provider === 'baileys' ? ' (Baileys)' : '';
+      setStatus('st-whatsapp', (s.whatsapp.connected ? 'WhatsApp conectado' : 'WhatsApp desconectado') + waProv, s.whatsapp.connected ? 'ok' : 'ko');
       setStatus('st-telegram', s.telegram.enabled ? 'Telegram activo' : 'Telegram inactivo', s.telegram.enabled ? 'ok' : 'warn');
       setStatus('st-zoom', s.zoom && s.zoom.configured ? 'Zoom conectado' : 'Zoom no conectado (asistencia manual)', s.zoom && s.zoom.configured ? 'ok' : 'warn');
 

@@ -224,7 +224,7 @@ router.get('/system/status', (req, res) => {
   const sharedUrl = grupalSet && individualSet && grupalUrl === individualUrl;
 
   res.json({
-    whatsapp: { connected: whatsapp.isConfigured() },
+    whatsapp: { connected: whatsapp.isConfigured(), provider: whatsapp.provider },
     telegram: { enabled: telegram.isReady() },
     zoom: { configured: zoom.isConfigured() },
     calendly: {

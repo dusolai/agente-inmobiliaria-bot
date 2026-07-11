@@ -62,6 +62,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ─── Rutas ────────────────────────────────────────────────────────
 app.use('/webhook', require('./routes/webhook'));
 app.use('/webhook/zoom', require('./routes/zoomWebhook'));
+app.use('/webhook/whatsapp', require('./routes/webhookWhatsapp'));
 app.use('/api', require('./routes/api'));
 app.use('/tracking', require('./routes/tracking'));
 app.use('/r', require('./routes/redirector'));
@@ -86,7 +87,21 @@ app.get('/', (req, res) => {
 // ─── /qr (Generación Visual de QR de WhatsApp) ────────────────────
 app.get('/qr', (req, res) => {
   const whatsapp = require('./services/whatsapp');
-  
+
+  // Con la API oficial no hay QR: la conexión es por token, no por escaneo.
+  if (whatsapp.provider === 'cloud') {
+    const ok = whatsapp.isConfigured();
+    return res.send(`
+      <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
+        <h1 style="color: ${ok ? '#27ae60' : '#e67e22'};">☁️ WhatsApp — API oficial de Meta</h1>
+        <p>${ok
+          ? 'Conectado por API oficial. No hay QR que escanear: la conexión es permanente por token.'
+          : 'Faltan credenciales de Meta (WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_ACCESS_TOKEN) en Seenode.'}</p>
+        <p><a href="/monitor.html" style="color: #3498db; text-decoration: none;">Ir al CRM</a></p>
+      </div>
+    `);
+  }
+
   if (whatsapp.isConfigured()) {
     return res.send(`
       <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">

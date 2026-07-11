@@ -105,7 +105,8 @@ async function procesarActivacionDiaria() {
     messages.mensajeReactivacion({ nombre: lead.nombre }),
     lead
   );
-  const envio = await messaging.sendTextMessage(lead.telefono, texto, { delaySeconds: 0 });
+  // Primer contacto: plantilla en la API oficial, texto en Baileys.
+  const envio = await messaging.sendPrimerContacto(lead, texto, { delaySeconds: 0 });
   if (!_envioOk(envio)) {
     console.warn(`⚠️  [Activación] Envío a ${lead.nombre} no salió — sigue en la cola (no cuenta cupo)`);
     return;
@@ -190,8 +191,10 @@ async function procesarRecordatoriosFase1() {
     if (ahora - referencia < _intervaloMs(fase1.enviados)) continue;
 
     console.log(`🔔 [Scheduler] Recordatorio Cualificación #${fase1.enviados + 1} → ${lead.nombre}`);
-    const envio = await messaging.sendTextMessage(
-      lead.telefono,
+    // Aún sin respuesta del lead → fuera de la ventana de 24h, así que en la
+    // API oficial también va como plantilla (el primer contacto reintentado).
+    const envio = await messaging.sendPrimerContacto(
+      lead,
       messages.mensajeReactivacion({ nombre: lead.nombre })
     );
     if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta

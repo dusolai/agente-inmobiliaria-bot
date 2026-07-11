@@ -5,10 +5,22 @@ module.exports = {
   env: process.env.NODE_ENV || 'development',
 
   whatsapp: {
+    // Proveedor del canal WhatsApp:
+    //   'cloud'   → API oficial de Meta (recomendado, no banea; requiere
+    //               WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN)
+    //   'baileys' → método no oficial por QR (riesgo de baneo)
+    // Si no se fuerza con WHATSAPP_PROVIDER, se autodetecta: cloud cuando hay
+    // credenciales de Meta, baileys en caso contrario.
+    provider: process.env.WHATSAPP_PROVIDER
+      || ((process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN) ? 'cloud' : 'baileys'),
     apiUrl: process.env.WHATSAPP_API_URL || 'https://graph.facebook.com/v19.0',
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
+    // Plantilla aprobada en Meta para el PRIMER mensaje (fuera de la ventana
+    // de 24h hay que usar plantilla, no texto libre).
+    templateName: process.env.WHATSAPP_TEMPLATE_NAME || '',
+    templateLang: process.env.WHATSAPP_TEMPLATE_LANG || 'es',
   },
 
   // Canal Telegram (modo piloto previo a producción)

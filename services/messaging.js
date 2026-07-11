@@ -83,4 +83,38 @@ async function sendTextMessage(telefono, text, opts = {}) {
   }
 }
 
-module.exports = { sendTextMessage, esTelegram, TG_PREFIX };
+/**
+ * Envía el PRIMER contacto (la pregunta de filtrado) a un lead.
+ *
+ * - Con la API oficial (cloud): va como PLANTILLA aprobada, porque WhatsApp
+ *   exige plantilla para iniciar conversación. La variable {{1}} es el nombre.
+ *   El `textoFallback` (personalizado por LLM, etc.) NO se usa aquí: en cloud
+ *   el primer mensaje es la plantilla fija y aprobada.
+ * - Con Baileys: va como texto normal (el `textoFallback`), como hasta ahora.
+ *
+ * @param {object} lead
+ * @param {string} textoFallback  texto a usar en Baileys (o si no hay plantilla)
+ * @param {object} [opts] { delaySeconds }
+ */
+async function sendPrimerContacto(lead, textoFallback, opts = {}) {
+  const telefono = lead.telefono;
+
+  // Telegram o Baileys → texto normal
+  if (esTelegram(telefono) || whatsapp.provider !== 'cloud') {
+    return sendTextMessage(telefono, textoFallback, opts);
+  }
+
+  // API oficial → plantilla (sin typing/delay: es un envío server-to-server)
+  const nombre = lead.nombre && lead.nombre !== 'Sin nombre' ? lead.nombre : 'hola';
+  let resultado;
+  try {
+    resultado = await whatsapp.sendTemplate(telefono, [nombre]);
+  } catch (err) {
+    console.error('⚠️  [Messaging] Error enviando plantilla:', err.message);
+    resultado = { success: false, error: err.message };
+  }
+  _registrarEnvio(telefono, `[plantilla ${config.whatsapp.templateName}] ${textoFallback}`, resultado);
+  return resultado;
+}
+
+module.exports = { sendTextMessage, sendPrimerContacto, esTelegram, TG_PREFIX };

@@ -37,17 +37,16 @@ router.post('/new-lead', async (req, res) => {
     // 2. Transicionar a "esperando_cualificacion" (reunión 29-05)
     leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
 
-    // 3. Enviar mensaje de reactivación con la pregunta de filtrado.
-    //    La respuesta del lead la procesa services/conversationFlow.js y, según
-    //    su perfil, recibe la landing profesional o emprendedor con el vídeo.
-    //    Con ANTHROPIC_API_KEY definida, el mensaje se reescribe con un LLM
-    //    para que cada envío sea único (anti-baneo).
+    // 3. Enviar el primer contacto con la pregunta de filtrado.
+    //    - API oficial: va como PLANTILLA aprobada (obligatorio para iniciar).
+    //    - Baileys: texto normal, personalizado por LLM si hay ANTHROPIC_API_KEY.
+    //    La respuesta del lead la procesa services/conversationFlow.js.
     const personalizer = require('../services/personalizer');
     const texto = await personalizer.personalizarMensaje(
       messages.mensajeReactivacion({ nombre }),
       lead
     );
-    const waResult = await messaging.sendTextMessage(lead.telefono, texto);
+    const waResult = await messaging.sendPrimerContacto(lead, texto);
 
     console.log(`🆕 [Webhook] Nuevo lead: ${nombre} (${telefono}) — pregunta de filtrado enviada`);
 
@@ -264,7 +263,7 @@ router.post('/bulk-import', async (req, res) => {
           lead
         );
         // sin delay para el envío masivo (es la primera toma de contacto)
-        await messaging.sendTextMessage(lead.telefono, texto, { delaySeconds: 0 });
+        await messaging.sendPrimerContacto(lead, texto, { delaySeconds: 0 });
         resultado.activados++;
       } catch (err) {
         console.error(`❌ [BulkImport] No pude activar ${lead.id}:`, err.message);
