@@ -73,11 +73,14 @@
   .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1.2rem 1.3rem;margin-bottom:1.2rem;box-shadow:0 6px 20px rgba(49,27,146,.04)}
   .panel h2{font-size:.85rem;color:var(--purple);font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:.9rem;display:flex;justify-content:space-between;align-items:center}
   .panel h2 small{font-weight:600;color:var(--muted);font-size:.72rem;text-transform:none;letter-spacing:0}
-  .funnel-row{display:grid;grid-template-columns:180px 1fr 50px;gap:.6rem;align-items:center;margin:.4rem 0;font-size:.85rem}
+  .funnel-row{display:grid;grid-template-columns:180px 1fr 96px;gap:.6rem;align-items:center;margin:.4rem 0;font-size:.85rem}
   .funnel-row .label{color:var(--ink);font-weight:600}
-  .funnel-row .bar{height:18px;background:#eee;border-radius:10px;overflow:hidden;position:relative}
-  .funnel-row .bar > div{height:100%;background:linear-gradient(90deg,var(--purple),var(--orange));border-radius:10px;transition:width .4s ease}
-  .funnel-row .num{text-align:right;font-weight:800;color:var(--purple);font-size:.9rem}
+  .funnel-row .bar{height:22px;background:#eef0f4;border-radius:10px;overflow:hidden;position:relative}
+  .funnel-row .bar > div{height:100%;background:linear-gradient(90deg,var(--purple),var(--orange));border-radius:10px;transition:width .4s ease;min-width:2px}
+  /* % escrito encima de la barra, para que se entienda su longitud */
+  .funnel-row .bar .pct{position:absolute;top:0;left:8px;height:100%;display:flex;align-items:center;font-size:.72rem;font-weight:800;color:#3a2a6b;mix-blend-mode:normal}
+  .funnel-row .num{text-align:right;font-weight:900;color:var(--purple);font-size:1.05rem;line-height:1.05}
+  .funnel-row .num small{display:block;font-weight:600;color:var(--muted);font-size:.66rem;letter-spacing:.2px}
 
   /* Panel "En directo" */
   .live-row{display:grid;grid-template-columns:170px 92px 150px 1fr 52px 76px;gap:.6rem;align-items:center;padding:.45rem 0;border-bottom:1px dashed var(--line);font-size:.85rem}
@@ -698,11 +701,13 @@
       const counts = statsActivity.counts || {};
       $('funnel').innerHTML = STAGES.map(s => {
         const n = counts[s.key] || 0;
-        const pct = Math.min(100, Math.round((n / total) * 100));
+        const pct = total ? Math.min(100, Math.round((n / total) * 100)) : 0;
+        // Número grande = cuántos leads llegaron; debajo "de {total}"; y el %
+        // escrito sobre la barra para que su longitud se entienda de un vistazo.
         return `<div class="funnel-row">
           <span class="label"><span class="ev-tag ${s.tag}">${s.label}</span></span>
-          <div class="bar"><div style="width:${pct}%"></div></div>
-          <span class="num">${n}</span>
+          <div class="bar"><div style="width:${pct}%"></div><span class="pct">${pct}%</span></div>
+          <span class="num">${n}<small>de ${total}</small></span>
         </div>`;
       }).join('');
 
