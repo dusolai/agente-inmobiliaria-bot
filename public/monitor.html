@@ -243,7 +243,7 @@
 
     <div class="atencion">
       <div class="panel" style="margin-bottom:0">
-        <h2>💬 Sin responder <small>el lead escribió y el bot no supo contestar — atiéndelo tú</small></h2>
+        <h2>💬 Sin responder <small>el lead escribió y el agente no supo contestar — atiéndelo tú</small></h2>
         <div id="inboxMsgs"><div class="at-vacio">Nada pendiente 👌</div></div>
       </div>
       <div class="panel" style="margin-bottom:0">
@@ -285,7 +285,7 @@
           </select>
         </div>
         <div id="leads" class="leads-list">
-          <div class="empty">Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span></div>
+          <div class="empty">Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al agente para entrar al embudo.</span></div>
         </div>
         <div id="leadPager" class="lead-pager" style="display:none">
           <button id="pagPrev">◀</button>
@@ -347,11 +347,11 @@
       </div>
 
       <div class="link-group">
-        <h3>🤖 Bot (canales)</h3>
+        <h3>🤖 Agente (canales)</h3>
         <div class="link-list">
           <div class="link-card"><a href="https://t.me/" target="_blank" id="tg-link">
             <span class="lc-icon">📲</span>
-            <div class="lc-body"><div class="lc-name">Bot de Telegram</div><div class="lc-url" id="tg-username">Abre Telegram y busca tu bot</div></div>
+            <div class="lc-body"><div class="lc-name">Agente de Telegram</div><div class="lc-url" id="tg-username">Abre Telegram y busca tu agente</div></div>
           </a></div>
 
           <div class="link-card"><a href="#" data-internal="whatsapp">
@@ -502,7 +502,7 @@
       case 'state_changed':      return `${m.from || '∅'} → ${m.to}`;
       case 'profile_set':        return `perfil: ${m.perfil}`;
       case 'message_received':   return m.texto ? `"${m.texto}"` : '';
-      case 'message_sent':       return `🤖 bot${m.ok === false ? ' ⚠️ NO ENTREGADO' : ''}: "${m.preview || ''}"`;
+      case 'message_sent':       return `🤖 agente${m.ok === false ? ' ⚠️ NO ENTREGADO' : ''}: "${m.preview || ''}"`;
       case 'llm_reply':          return `🧠 respuesta generada por IA (${m.proveedor || '?'})`;
       case 'opt_out':            return `🛑 pidió la BAJA: "${m.texto || ''}"`;
       case 'lead_activated':     return `activado del import (${m.activadosHoy || '?'}/${m.cupo || '?'} hoy)`;
@@ -753,7 +753,7 @@
       if (leads.length === 0) {
         const emptyMsg = (leadSearch || leadFilter)
           ? `Sin coincidencias para ${leadSearch ? `"${leadSearch}"` : 'este filtro'}.`
-          : `Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al bot para entrar al embudo.</span>`;
+          : `Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al agente para entrar al embudo.</span>`;
         $('leads').innerHTML = `<div class="empty">${emptyMsg}</div>`;
         if (!leadSearch && !leadFilter) {
           $('leadDetail').innerHTML = `<div class="empty">Selecciona un lead a la izquierda para ver su recorrido y actuar sobre él.</div>`;
