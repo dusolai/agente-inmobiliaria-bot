@@ -79,6 +79,8 @@ module.exports = {
   agent: {
     empresaNombre: process.env.EMPRESA_NOMBRE || 'Three Inmobiliaria',
     expertoNombre: process.env.EXPERTO_NOMBRE || 'Nuestro Experto',
+    // Nombre con el que se presenta el agente ("Soy Diego, del equipo de...").
+    agenteNombre: process.env.AGENTE_NOMBRE || 'Diego',
     // Reunión 22-05: recordatorios cada 24 h (antes 48)
     reminderIntervalHours: parseInt(process.env.REMINDER_INTERVAL_HOURS) || 24,
     // Reunión final 15-06: secuencia de 4 intentos (5 min, 24h, 48h, 72h)

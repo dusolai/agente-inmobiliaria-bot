@@ -13,7 +13,7 @@ const config = require('../config/config');
 // detectan primero. Mismo contenido, distinta forma.
 const VARIANTES_REACTIVACION = [
   ({ nombre }) =>
-    `¡Hola ${nombre}! 👋 Soy del equipo de Three Inmobiliaria.\n\n` +
+    `¡Hola ${nombre}! 👋 Soy ${config.agent.agenteNombre}, del equipo de Three Inmobiliaria.\n\n` +
     `Hace un tiempo mostraste interés en el proyecto, y te escribo porque justo ahora estamos reabriendo plazas para sumar gente nueva — y me acordé de ti.\n\n` +
     `Antes de mandarte nada, dime una cosa rápida para pasarte exactamente lo que te encaja (y no hacerte perder el tiempo):\n\n` +
     `¿Trabajas en el sector inmobiliario, o más bien buscas una forma de generar un ingreso extra?\n\n` +
@@ -22,14 +22,14 @@ const VARIANTES_REACTIVACION = [
     `Respóndeme con el 1 o el 2 y seguimos 🙂`,
   ({ nombre }) =>
     `¡Hola ${nombre}! ¿Cómo va todo? 👋\n\n` +
-    `Te escribo del equipo de Three Inmobiliaria. En su día dejaste tus datos interesándote por el proyecto, y ahora mismo estamos abriendo plazas de nuevo, así que quería contactarte personalmente.\n\n` +
+    `Soy ${config.agent.agenteNombre}, del equipo de Three Inmobiliaria. En su día dejaste tus datos interesándote por el proyecto, y ahora mismo estamos abriendo plazas de nuevo, así que quería contactarte personalmente.\n\n` +
     `Para mandarte justo la información que te sirva, cuéntame una cosa:\n\n` +
     `¿Lo tuyo es el sector inmobiliario, o buscas más bien un ingreso extra?\n\n` +
     `1️⃣ Trabajo en el sector inmobiliario\n` +
     `2️⃣ Busco generar un ingreso extra\n\n` +
     `Con que me digas 1 o 2 me vale, y te lo paso 👌`,
   ({ nombre }) =>
-    `¡Buenas ${nombre}! 👋 Del equipo de Three Inmobiliaria.\n\n` +
+    `¡Buenas ${nombre}! 👋 Soy ${config.agent.agenteNombre}, del equipo de Three Inmobiliaria.\n\n` +
     `Estamos retomando el contacto con gente que se interesó por el proyecto, porque acabamos de reabrir plazas y hay una buena oportunidad ahora mismo.\n\n` +
     `Una pregunta rápida antes de nada, para orientarte bien:\n\n` +
     `¿Eres del sector inmobiliario, o lo que buscas es más un sobresueldo?\n\n` +
