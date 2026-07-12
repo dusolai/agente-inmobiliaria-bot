@@ -185,7 +185,10 @@ function getLiveActivity(windowMinutes = 10) {
       porLead.set(e.leadId, info);
     }
 
-    const vid = e.meta && e.meta.videoId;
+    // Los clips decorativos no cuentan como "vídeo que está viendo".
+    const DECORATIVOS = ['video2', 'video3', 'video4', 'video35', 'video3.5'];
+    const vidRaw = e.meta && e.meta.videoId;
+    const vid = vidRaw && !DECORATIVOS.includes(vidRaw) ? vidRaw : null;
     const pct = _pctDeEvento(e.type);
     if (vid && pct !== null) {
       if (!info.progreso[vid] || pct > info.progreso[vid]) info.progreso[vid] = pct;
