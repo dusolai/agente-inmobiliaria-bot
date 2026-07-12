@@ -117,9 +117,9 @@ async function handleIncoming(telefono, texto) {
   }
 
   // ─── Fase A: respuesta a la pregunta de cualificación ──────────
-  // Tras cualificar enviamos el Calendly grupal (no la landing). El lead se
-  // compromete reservando hueco; al confirmar reserva, /tracking/calendly-booked
-  // le envía el acceso al vídeo y le mueve al siguiente estado.
+  // Tras cualificar enviamos la LANDING directamente (con sus vídeos). En la
+  // landing ven primero el VSL, luego el webinar, y al terminarlo aparece el
+  // botón de reservar la 1-a-1. El Calendly grupal se ofrece como OPCIÓN.
   if (lead.estado === LEAD_STATES.ESPERANDO_CUALIFICACION) {
     const perfil = interpretarRespuesta(texto);
     if (!perfil) {
@@ -136,16 +136,19 @@ async function handleIncoming(telefono, texto) {
     }
     leadManager.updateLead(lead.id, { perfil });
     activityLog.appendActivity(lead.id, 'profile_set', { perfil });
-    const result = leadManager.transitionState(lead.id, LEAD_STATES.VIDEO_ENVIADO);
+    // Directo a video_visto: ya tiene la landing y está "dentro del funnel".
+    const result = leadManager.transitionState(lead.id, LEAD_STATES.VIDEO_VISTO);
     if (result.error) {
       console.error(`❌ [Flujo] No se pudo avanzar el lead ${lead.id}: ${result.error}`);
       return;
     }
-    const enlaceCalendly = enlaceRedirectorCalendly(lead, 'grupal');
+    leadManager.updateLead(lead.id, { videoVistoAt: new Date().toISOString() });
+    const enlaceLanding = enlaceLandingPorPerfil(perfil, lead.id);
+    const enlaceGrupal = enlaceRedirectorCalendly(lead, 'grupal');
     const texto2 = perfil === LEAD_PROFILES.PROFESIONAL
-      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceCalendly })
-      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceCalendly });
-    console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → Calendly grupal enviado`);
+      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding, enlaceGrupal })
+      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding, enlaceGrupal });
+    console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing enviada (grupal opcional)`);
     await messaging.sendTextMessage(lead.telefono, texto2);
     return;
   }

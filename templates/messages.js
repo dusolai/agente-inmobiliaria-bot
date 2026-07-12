@@ -56,21 +56,27 @@ function mensajeReintentarCualificacion({ nombre }) {
 // Tras cualificar, enviamos directamente el Calendly grupal — el lead se
 // compromete reservando hueco; a la hora reservada (o antes) le llega el
 // acceso a la presentación.
-function mensajeRamaProfesional({ nombre, enlaceCalendly }) {
+// Tras cualificar, enviamos la presentación (landing con los vídeos) DIRECTAMENTE.
+// En la landing ven primero el VSL, luego se desbloquea el webinar, y al
+// terminarlo aparece el botón para reservar la reunión 1 a 1. El Calendly
+// grupal queda como OPCIÓN secundaria por si prefieren verlo en directo.
+function mensajeRamaProfesional({ nombre, enlaceLanding, enlaceGrupal }) {
   return (
     `¡Genial ${nombre}!\n\n` +
-    `Tenemos una presentación de 25 min con todo lo que necesitas saber. Para que sea el momento perfecto, reserva tu hueco (slots cada 15 min):\n\n` +
-    `${enlaceCalendly}\n\n` +
-    `En cuanto reserves te paso el enlace al instante 🎬`
+    `Aquí tienes la presentación completa del proyecto. Empieza por el vídeo corto y, según avanzas, se desbloquea el resto:\n` +
+    `${enlaceLanding}\n\n` +
+    `Cuando termines, en la propia página se activa el botón para reservar tu reunión 1 a 1 con Arkaitz 🎯` +
+    (enlaceGrupal ? `\n\n¿Prefieres verlo en directo con nosotros? También puedes reservar aquí:\n${enlaceGrupal}` : '')
   );
 }
 
-function mensajeRamaEmprendedor({ nombre, enlaceCalendly }) {
+function mensajeRamaEmprendedor({ nombre, enlaceLanding, enlaceGrupal }) {
   return (
     `Entendido ${nombre} 🚀\n\n` +
-    `Lo que hacemos lo explicamos en una presentación de 25 min — va al grano. Reserva tu hueco aquí (slots cada 15 min):\n\n` +
-    `${enlaceCalendly}\n\n` +
-    `En cuanto reserves te paso el acceso al vídeo.`
+    `Aquí tienes la presentación, va al grano. Verás primero un vídeo corto y, según avanzas, se desbloquea el resto:\n` +
+    `${enlaceLanding}\n\n` +
+    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con Arkaitz.` +
+    (enlaceGrupal ? `\n\n¿Prefieres verlo en directo? También puedes reservar aquí:\n${enlaceGrupal}` : '')
   );
 }
 
