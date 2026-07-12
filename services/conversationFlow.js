@@ -159,10 +159,9 @@ async function handleIncoming(telefono, texto) {
       return;
     }
     const enlaceLanding = enlaceLandingPorPerfil(perfil, lead.id);
-    const enlaceGrupal = enlaceRedirectorCalendly(lead, 'grupal');
     const texto2 = perfil === LEAD_PROFILES.PROFESIONAL
-      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding, enlaceGrupal })
-      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding, enlaceGrupal });
+      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding })
+      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
     console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing ENVIADA (pdte. de ver)`);
     await messaging.sendTextMessage(lead.telefono, texto2);
     return;

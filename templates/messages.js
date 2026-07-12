@@ -59,25 +59,24 @@ function mensajeReintentarCualificacion({ nombre }) {
 // acceso a la presentación.
 // Tras cualificar, enviamos la presentación (landing con los vídeos) DIRECTAMENTE.
 // En la landing ven primero el VSL, luego se desbloquea el webinar, y al
-// terminarlo aparece el botón para reservar la reunión 1 a 1. El Calendly
-// grupal queda como OPCIÓN secundaria por si prefieren verlo en directo.
-function mensajeRamaProfesional({ nombre, enlaceLanding, enlaceGrupal }) {
+// terminarlo aparece el botón para reservar la reunión 1 a 1. El Calendly grupal
+// NO se ofrece aquí: generaba fricción ("míralo ahora" + "resérvalo para otro
+// momento" a la vez). El camino es uno solo: ver la presentación → reservar 1-a-1.
+function mensajeRamaProfesional({ nombre, enlaceLanding }) {
   return (
     `¡Genial ${nombre}!\n\n` +
     `Aquí tienes la presentación completa del proyecto. Empieza por el vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Cuando termines, en la propia página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol} 🎯` +
-    (enlaceGrupal ? `\n\n¿Prefieres verlo en directo con nosotros? También puedes reservar aquí:\n${enlaceGrupal}` : '')
+    `Cuando termines, en la propia página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol} 🎯`
   );
 }
 
-function mensajeRamaEmprendedor({ nombre, enlaceLanding, enlaceGrupal }) {
+function mensajeRamaEmprendedor({ nombre, enlaceLanding }) {
   return (
     `Entendido ${nombre} 🚀\n\n` +
     `Aquí tienes la presentación, va al grano. Verás primero un vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}.` +
-    (enlaceGrupal ? `\n\n¿Prefieres verlo en directo? También puedes reservar aquí:\n${enlaceGrupal}` : '')
+    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}.`
   );
 }
 
