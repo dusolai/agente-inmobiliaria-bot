@@ -24,22 +24,34 @@
 </head>
 <body>
     <div class="card">
-        <h1>Simular Registro</h1>
-        <p>Simula que un usuario (tú) acaba de rellenar el formulario de registro (ej. Facebook Ads).</p>
-        
+        <h1>Añadir lead (prueba)</h1>
+        <p>Mete un lead a mano en el CRM. Úsalo para probar el embudo con el equipo.</p>
+
         <form id="registroForm">
             <div class="form-group">
-                <label for="name">Tu Nombre Real</label>
+                <label for="name">Nombre</label>
                 <input type="text" id="name" required placeholder="Ej. Diego Garcia">
             </div>
-            
+
             <div class="form-group">
-                <label for="phone">Tu Teléfono Personal</label>
+                <label for="phone">Teléfono</label>
                 <input type="tel" id="phone" required placeholder="Ej. 34667550070">
-                <span class="hint">(Pon el prefijo del país sin el +, por ejemplo 34 para España)</span>
+                <span class="hint">(Prefijo del país sin el +, por ejemplo 34 para España)</span>
             </div>
-            
-            <button type="submit" id="submitBtn">Registrarme</button>
+
+            <div class="form-group" style="background:#f4f7f6;padding:.75rem;border-radius:8px;">
+                <label style="display:flex;align-items:center;gap:.5rem;font-weight:500;cursor:pointer;">
+                    <input type="checkbox" id="enviarAhora" style="width:auto;">
+                    Enviar ya el primer mensaje
+                </label>
+                <span class="hint" style="color:#5d6d7e;">
+                    Déjalo <b>desmarcado</b> para probar el embudo: crea el lead sin escribirle,
+                    y luego <b>tú le escribes al bot</b> desde ese número.<br>
+                    Márcalo solo para el envío real (requiere la plantilla de WhatsApp aprobada).
+                </span>
+            </div>
+
+            <button type="submit" id="submitBtn">Crear lead</button>
         </form>
 
         <div id="message"></div>
@@ -52,6 +64,7 @@
             const msgDiv = document.getElementById('message');
             const name = document.getElementById('name').value;
             const phone = document.getElementById('phone').value;
+            const enviarAhora = document.getElementById('enviarAhora').checked;
 
             btn.disabled = true;
             btn.textContent = 'Procesando...';
@@ -61,25 +74,32 @@
                 const response = await fetch('/webhook/new-lead', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nombre: name, telefono: phone })
+                    body: JSON.stringify({ nombre: name, telefono: phone, enviarPrimerMensaje: enviarAhora })
                 });
 
                 const data = await response.json();
-                
+
                 msgDiv.style.display = 'block';
                 if (response.ok && data.success) {
-                    // Reflejar el resultado REAL del envío de WhatsApp, no solo
-                    // que el lead se creó (antes decía "éxito" aunque no saliera).
-                    const wa = data.whatsapp || {};
-                    if (wa.success === false) {
-                        msgDiv.className = 'error';
-                        msgDiv.textContent = '⚠️ Lead creado, pero el WhatsApp FALLÓ: ' + (wa.error || 'error desconocido');
-                    } else if (wa.mode === 'development') {
-                        msgDiv.className = 'error';
-                        msgDiv.textContent = '⚠️ Lead creado, pero WhatsApp NO está vinculado (escanea el QR en la raíz del backend). El mensaje no se ha enviado.';
-                    } else {
+                    if (!enviarAhora) {
+                        // Modo prueba: lead creado sin enviar. Toca escribirle al bot.
                         msgDiv.className = 'success';
-                        msgDiv.textContent = '✅ Registro OK y WhatsApp enviado. Debería llegarte en unos segundos.';
+                        msgDiv.innerHTML = '✅ Lead creado en el CRM (sin enviar mensaje).<br><br>' +
+                            'Ahora <b>escríbele tú al bot</b> desde ese número (+34 611 78 67 91) un "hola", ' +
+                            'y prueba el embudo respondiendo 1 o 2.';
+                    } else {
+                        // Reflejar el resultado REAL del envío de WhatsApp.
+                        const wa = data.whatsapp || {};
+                        if (wa.success === false) {
+                            msgDiv.className = 'error';
+                            msgDiv.textContent = '⚠️ Lead creado, pero el WhatsApp FALLÓ: ' + (wa.error || 'error desconocido') + ' (¿plantilla aprobada?)';
+                        } else if (wa.mode === 'development') {
+                            msgDiv.className = 'error';
+                            msgDiv.textContent = '⚠️ Lead creado, pero WhatsApp NO está configurado. El mensaje no se ha enviado.';
+                        } else {
+                            msgDiv.className = 'success';
+                            msgDiv.textContent = '✅ Lead creado y primer mensaje enviado. Debería llegar en unos segundos.';
+                        }
                     }
                     document.getElementById('registroForm').reset();
                 } else {

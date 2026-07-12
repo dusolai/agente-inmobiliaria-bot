@@ -15,6 +15,11 @@ const messages = require('../templates/messages');
 router.post('/new-lead', async (req, res) => {
   try {
     const { nombre, email, telefono, fuente } = req.body;
+    // Por defecto SÍ se envía (comportamiento del formulario real). Para
+    // pruebas del equipo se pasa enviarPrimerMensaje:false → se crea el lead
+    // en "esperando_cualificacion" pero NO se le escribe (así se prueba el
+    // embudo escribiéndole tú al bot, sin depender de la plantilla aprobada).
+    const enviar = req.body.enviarPrimerMensaje !== false;
 
     if (!nombre || !telefono) {
       return res.status(400).json({
@@ -37,18 +42,22 @@ router.post('/new-lead', async (req, res) => {
     // 2. Transicionar a "esperando_cualificacion" (reunión 29-05)
     leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
 
-    // 3. Enviar el primer contacto con la pregunta de filtrado.
+    // 3. (Opcional) Enviar el primer contacto con la pregunta de filtrado.
     //    - API oficial: va como PLANTILLA aprobada (obligatorio para iniciar).
     //    - Baileys: texto normal, personalizado por LLM si hay ANTHROPIC_API_KEY.
     //    La respuesta del lead la procesa services/conversationFlow.js.
-    const personalizer = require('../services/personalizer');
-    const texto = await personalizer.personalizarMensaje(
-      messages.mensajeReactivacion({ nombre }),
-      lead
-    );
-    const waResult = await messaging.sendPrimerContacto(lead, texto);
-
-    console.log(`🆕 [Webhook] Nuevo lead: ${nombre} (${telefono}) — pregunta de filtrado enviada`);
+    let waResult = null;
+    if (enviar) {
+      const personalizer = require('../services/personalizer');
+      const texto = await personalizer.personalizarMensaje(
+        messages.mensajeReactivacion({ nombre }),
+        lead
+      );
+      waResult = await messaging.sendPrimerContacto(lead, texto);
+      console.log(`🆕 [Webhook] Nuevo lead: ${nombre} (${telefono}) — pregunta de filtrado enviada`);
+    } else {
+      console.log(`🆕 [Webhook] Lead creado SIN enviar (modo prueba): ${nombre} (${telefono}) — esperando que escriba al bot`);
+    }
 
     res.status(201).json({
       success: true,
