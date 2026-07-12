@@ -76,7 +76,8 @@ function mensajeRamaEmprendedor({ nombre, enlaceLanding }) {
     `Entendido ${nombre} 🚀\n\n` +
     `Aquí tienes la presentación, va al grano. Verás primero un vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}.`
+    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}.\n\n` +
+    `🇵🇹 ¿La prefieres en portugués? Dentro de la página tienes un botón para verla en portugués. (Se preferires em português, tens um botão na página.)`
   );
 }
 

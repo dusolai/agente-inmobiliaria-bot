@@ -167,6 +167,23 @@ async function handleIncoming(telefono, texto) {
     return;
   }
 
+  // ─── Lead curioso: ya cualificó pero pide ver también la OTRA rama ──
+  // Si escribe un 1 o un 2 claro, le enviamos ESA landing igualmente, sin
+  // cambiar su estado ni su perfil principal. Así quien tiene curiosidad puede
+  // ver las dos presentaciones (antes, tras elegir una, la otra quedaba blindada).
+  const tokensMsg = normalizar(texto).split(/\s+/);
+  const pideOtraRama = tokensMsg.includes('1') ? LEAD_PROFILES.PROFESIONAL
+    : tokensMsg.includes('2') ? LEAD_PROFILES.EMPRENDEDOR : null;
+  if (pideOtraRama) {
+    const enlaceLanding = enlaceLandingPorPerfil(pideOtraRama, lead.id);
+    const texto2 = pideOtraRama === LEAD_PROFILES.PROFESIONAL
+      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding })
+      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
+    console.log(`🔎 [Flujo] ${lead.nombre} (curioso) pidió la rama ${pideOtraRama} → landing enviada`);
+    await messaging.sendTextMessage(lead.telefono, texto2);
+    return;
+  }
+
   // ─── Resto de estados: respuesta conversacional con LLM ─────────
   // El lead ya está dentro del embudo (reserva, landing, 1-a-1...) y
   // escribe algo. El LLM contesta su duda y le recuerda su siguiente paso
