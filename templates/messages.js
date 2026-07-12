@@ -13,28 +13,29 @@ const config = require('../config/config');
 // detectan primero. Mismo contenido, distinta forma.
 const VARIANTES_REACTIVACION = [
   ({ nombre }) =>
-    `Hey ${nombre}, ¿qué tal? 👋\n\n` +
-    `Soy del equipo de Three Inmobiliaria. Hace un tiempo te interesaste por el proyecto y justo ahora estamos reabriendo plazas.\n\n` +
-    `Antes de mandarte info quería preguntarte una cosa rápida, así te paso lo que de verdad te encaje y no perdemos tiempo:\n\n` +
-    `¿Trabajas en el sector inmobiliario o más bien estás buscando un sobresueldo / forma de generar ingresos extra?\n\n` +
-    `1️⃣ Soy agente o trabajo en una inmobiliaria\n` +
+    `¡Hola ${nombre}! 👋 Soy del equipo de Three Inmobiliaria.\n\n` +
+    `Hace un tiempo mostraste interés en el proyecto, y te escribo porque justo ahora estamos reabriendo plazas para sumar gente nueva — y me acordé de ti.\n\n` +
+    `Antes de mandarte nada, dime una cosa rápida para pasarte exactamente lo que te encaja (y no hacerte perder el tiempo):\n\n` +
+    `¿Trabajas en el sector inmobiliario, o más bien buscas una forma de generar un ingreso extra?\n\n` +
+    `1️⃣ Soy agente / trabajo en una inmobiliaria\n` +
     `2️⃣ Busco un sobresueldo / ingreso extra\n\n` +
-    `Contéstame con el número que toque 🙂`,
+    `Respóndeme con el 1 o el 2 y seguimos 🙂`,
   ({ nombre }) =>
-    `Hola ${nombre}, ¿cómo va todo?\n\n` +
-    `Te escribo de Three Inmobiliaria — en su día dejaste tus datos interesándote por el proyecto y ahora mismo estamos abriendo plazas otra vez.\n\n` +
-    `Para pasarte justo la info que te encaje, dime una cosa:\n\n` +
+    `¡Hola ${nombre}! ¿Cómo va todo? 👋\n\n` +
+    `Te escribo del equipo de Three Inmobiliaria. En su día dejaste tus datos interesándote por el proyecto, y ahora mismo estamos abriendo plazas de nuevo, así que quería contactarte personalmente.\n\n` +
+    `Para mandarte justo la información que te sirva, cuéntame una cosa:\n\n` +
+    `¿Lo tuyo es el sector inmobiliario, o buscas más bien un ingreso extra?\n\n` +
     `1️⃣ Trabajo en el sector inmobiliario\n` +
     `2️⃣ Busco generar un ingreso extra\n\n` +
-    `Respóndeme con el 1 o el 2 y te lo mando 👌`,
+    `Con que me digas 1 o 2 me vale, y te lo paso 👌`,
   ({ nombre }) =>
-    `¡Buenas ${nombre}! 👋\n\n` +
-    `Del equipo de Three Inmobiliaria. Retomamos contactos de gente que se interesó por el proyecto porque acabamos de reabrir plazas.\n\n` +
-    `Una pregunta rápida antes de mandarte nada, para no hacerte perder el tiempo:\n\n` +
-    `¿Eres del sector inmobiliario, o lo tuyo es más buscar un sobresueldo?\n\n` +
+    `¡Buenas ${nombre}! 👋 Del equipo de Three Inmobiliaria.\n\n` +
+    `Estamos retomando el contacto con gente que se interesó por el proyecto, porque acabamos de reabrir plazas y hay una buena oportunidad ahora mismo.\n\n` +
+    `Una pregunta rápida antes de nada, para orientarte bien:\n\n` +
+    `¿Eres del sector inmobiliario, o lo que buscas es más un sobresueldo?\n\n` +
     `1️⃣ Soy agente / trabajo en inmobiliaria\n` +
     `2️⃣ Busco un ingreso extra\n\n` +
-    `Con el número me vale 🙂`,
+    `Dime el número que toque y seguimos 🙂`,
 ];
 
 function mensajeReactivacion({ nombre }) {

@@ -96,24 +96,37 @@ async function sendTextMessage(telefono, text, opts = {}) {
  * @param {string} textoFallback  texto a usar en Baileys (o si no hay plantilla)
  * @param {object} [opts] { delaySeconds }
  */
+// Deja constancia de que a este lead ya se le envió la bienvenida / primer
+// contacto, para que si luego escribe "hola" (en vez de responder 1/2) no se
+// le repita el mensaje de bienvenida entero.
+function _marcarBienvenida(telefono) {
+  try {
+    const leadManager = require('./leadManager');
+    const activityLog = require('./activityLog');
+    const lead = leadManager.getLeadByPhone(telefono);
+    if (lead) activityLog.appendActivity(lead.id, 'welcome_sent', null);
+  } catch (e) { /* nunca romper el envío por esto */ }
+}
+
 async function sendPrimerContacto(lead, textoFallback, opts = {}) {
   const telefono = lead.telefono;
+  let resultado;
 
   // Telegram o Baileys → texto normal
   if (esTelegram(telefono) || whatsapp.provider !== 'cloud') {
-    return sendTextMessage(telefono, textoFallback, opts);
+    resultado = await sendTextMessage(telefono, textoFallback, opts);
+  } else {
+    // API oficial → plantilla (sin typing/delay: es un envío server-to-server)
+    const nombre = lead.nombre && lead.nombre !== 'Sin nombre' ? lead.nombre : 'hola';
+    try {
+      resultado = await whatsapp.sendTemplate(telefono, [nombre]);
+    } catch (err) {
+      console.error('⚠️  [Messaging] Error enviando plantilla:', err.message);
+      resultado = { success: false, error: err.message };
+    }
+    _registrarEnvio(telefono, `[plantilla ${config.whatsapp.templateName}] ${textoFallback}`, resultado);
   }
-
-  // API oficial → plantilla (sin typing/delay: es un envío server-to-server)
-  const nombre = lead.nombre && lead.nombre !== 'Sin nombre' ? lead.nombre : 'hola';
-  let resultado;
-  try {
-    resultado = await whatsapp.sendTemplate(telefono, [nombre]);
-  } catch (err) {
-    console.error('⚠️  [Messaging] Error enviando plantilla:', err.message);
-    resultado = { success: false, error: err.message };
-  }
-  _registrarEnvio(telefono, `[plantilla ${config.whatsapp.templateName}] ${textoFallback}`, resultado);
+  _marcarBienvenida(telefono);
   return resultado;
 }
 

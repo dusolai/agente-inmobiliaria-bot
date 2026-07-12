@@ -72,6 +72,12 @@ router.post('/', async (req, res) => {
           if (!telefono || !texto) continue;
 
           console.log(`📥 [WhatsAppCloud] Mensaje de ${telefono}: "${texto.slice(0, 60)}"`);
+          // Mostrar "escribiendo…" al momento (marca leído + typing), para que
+          // el lead vea que el agente está respondiendo mientras el LLM piensa.
+          try {
+            const whatsappCloud = require('../services/whatsappCloud');
+            whatsappCloud.sendTyping(msg.id).catch(() => {});
+          } catch (e) { /* opcional */ }
           try {
             await conversationFlow.handleIncoming(telefono, texto);
           } catch (err) {

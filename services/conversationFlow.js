@@ -123,9 +123,22 @@ async function handleIncoming(telefono, texto) {
   if (lead.estado === LEAD_STATES.ESPERANDO_CUALIFICACION) {
     const perfil = interpretarRespuesta(texto);
     if (!perfil) {
-      // Fuera de guion ("¿esto qué es?", "¿cuánto cuesta?"...): el LLM
-      // responde en contexto y reconduce al 1/2. Sin LLM configurado (o si
-      // falla), se repite la pregunta como siempre.
+      // ¿Ya recibió la bienvenida? Si NO (caso típico: el lead escribe "hola"
+      // primero, sin que le hayamos escrito), le mandamos el mensaje de
+      // bienvenida COMPLETO — no una respuesta corta del LLM.
+      const yaBienvenida = activityLog.getActivityByLead(lead.id).some((e) => e.type === 'welcome_sent');
+      if (!yaBienvenida) {
+        activityLog.appendActivity(lead.id, 'welcome_sent', null);
+        console.log(`👋 [Flujo] ${lead.nombre} escribió sin bienvenida previa → enviando bienvenida completa`);
+        await messaging.sendTextMessage(
+          lead.telefono,
+          messages.mensajeReactivacion({ nombre: lead.nombre })
+        );
+        return;
+      }
+      // Ya tiene la bienvenida y sigue sin decir 1/2 → es que pregunta algo.
+      // Ahí sí entra el LLM (responde en contexto y reconduce al 1/2). Sin LLM
+      // configurado o si falla, se repite la pregunta.
       const responder = require('./responder');
       const respuestaLlm = await responder.responder(lead, texto);
       await messaging.sendTextMessage(

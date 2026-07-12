@@ -54,8 +54,32 @@ function getLatestQr() {
   return null;
 }
 
-// El indicador "escribiendo…" de la API oficial solo se puede mandar como
-// respuesta a un mensaje recibido; lo omitimos para simplificar.
+// El indicador "escribiendo…" en la API oficial se manda marcando como leído
+// el mensaje entrante + typing_indicator. Se muestra hasta 25s o hasta que
+// enviamos la respuesta. Como ahora el LLM tarda un poco en contestar, esto
+// hace que el lead vea "escribiendo…" mientras tanto (como una persona real).
+// Necesita el ID del mensaje entrante (lo pasa el webhook).
+async function sendTyping(messageId) {
+  if (!isConfigured() || !messageId) return;
+  try {
+    await axios.post(
+      `${API}/${PHONE_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+        typing_indicator: { type: 'text' },
+      },
+      { headers: _headers(), timeout: 8000 }
+    );
+  } catch (err) {
+    // El typing es opcional: si falla, no rompemos nada.
+  }
+}
+
+// Compatibilidad con la interfaz de Baileys (que recibe el teléfono). En la
+// API oficial el typing necesita el ID del mensaje, así que aquí no hace nada;
+// el webhook llama a sendTyping(messageId) directamente.
 async function sendTypingAction() {
   return;
 }
@@ -133,6 +157,7 @@ module.exports = {
   initialize,
   sendTextMessage,
   sendTemplate,
+  sendTyping,
   sendTypingAction,
   isConfigured,
   getLatestQr,
