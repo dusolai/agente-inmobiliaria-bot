@@ -80,6 +80,9 @@ function readLeads() {
 function writeLeads(leads) {
   ensureDataDir();
   fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2), 'utf-8');
+  // Programar copia a Postgres a los pocos segundos (si está configurado).
+  // Así un lead recién creado no se pierde aunque redespliegues al momento.
+  try { require('./backupDb').guardarPronto(); } catch (e) {}
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────

@@ -107,6 +107,32 @@ async function _restaurar() {
   return restaurados;
 }
 
+// ─── Guardado "pronto" (debounce) ────────────────────────────────
+// Se llama tras crear/cambiar un lead: agenda una copia en unos segundos.
+// Debounce: muchos cambios seguidos = una sola copia. Así un lead de prueba
+// queda guardado a los pocos segundos, no hay que esperar a la copia de 5 min.
+let _debounce = null;
+function guardarPronto() {
+  if (!pool) return;
+  clearTimeout(_debounce);
+  _debounce = setTimeout(() => guardar(), 8000);
+}
+
+// Copia final al apagarse (Seenode manda SIGTERM antes de redesplegar). Así
+// el estado más reciente se guarda justo antes de reiniciar el contenedor.
+let _cerrando = false;
+async function _flushYSalir(sig) {
+  if (_cerrando) return;
+  _cerrando = true;
+  try {
+    if (pool) {
+      console.log(`💾 [BackupDB] ${sig}: guardando copia final antes de cerrar...`);
+      await guardar();
+    }
+  } catch (e) { /* best effort */ }
+  process.exit(0);
+}
+
 // ─── Arranque ─────────────────────────────────────────────────────
 async function iniciar() {
   const url = process.env.DATABASE_URL;
@@ -133,10 +159,14 @@ async function iniciar() {
 
     setInterval(() => guardar(), INTERVALO_MIN * 60 * 1000);
     setTimeout(() => guardar(), 45 * 1000); // primera foto al poco de arrancar
+
+    // Copia final al recibir la señal de apagado (redeploy de Seenode).
+    process.on('SIGTERM', () => _flushYSalir('SIGTERM'));
+    process.on('SIGINT', () => _flushYSalir('SIGINT'));
   } catch (err) {
     console.error('⚠️  [BackupDB] No se pudo conectar a Postgres (la app sigue sin copia):', err.message);
     pool = null;
   }
 }
 
-module.exports = { iniciar, guardar };
+module.exports = { iniciar, guardar, guardarPronto };

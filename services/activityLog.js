@@ -56,6 +56,8 @@ function writeAll(arr) {
     ? arr.slice(arr.length - MAX_ENTRIES_IN_MEMORY)
     : arr;
   fs.writeFileSync(ACTIVITY_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  // Programar copia a Postgres a los pocos segundos (si está configurado).
+  try { require('./backupDb').guardarPronto(); } catch (e) {}
 }
 
 function appendActivity(leadId, type, meta = null, ip = null) {
