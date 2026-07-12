@@ -66,7 +66,7 @@ function mensajeRamaProfesional({ nombre, enlaceLanding, enlaceGrupal }) {
     `¡Genial ${nombre}!\n\n` +
     `Aquí tienes la presentación completa del proyecto. Empieza por el vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Cuando termines, en la propia página se activa el botón para reservar tu reunión 1 a 1 con Arkaitz 🎯` +
+    `Cuando termines, en la propia página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol} 🎯` +
     (enlaceGrupal ? `\n\n¿Prefieres verlo en directo con nosotros? También puedes reservar aquí:\n${enlaceGrupal}` : '')
   );
 }
@@ -76,7 +76,7 @@ function mensajeRamaEmprendedor({ nombre, enlaceLanding, enlaceGrupal }) {
     `Entendido ${nombre} 🚀\n\n` +
     `Aquí tienes la presentación, va al grano. Verás primero un vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con Arkaitz.` +
+    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}.` +
     (enlaceGrupal ? `\n\n¿Prefieres verlo en directo? También puedes reservar aquí:\n${enlaceGrupal}` : '')
   );
 }
@@ -96,7 +96,7 @@ function mensajeAccesoVideoTrasReserva({ nombre, enlaceLanding }) {
 function mensajeAcceso1a1({ nombre, enlace1a1 }) {
   return (
     `¡Bien ${nombre}! 🙌\n\n` +
-    `Último paso: una reunión 1 a 1 con Arkaitz por Zoom para ver tu caso y diseñar tu entrada al proyecto.\n\n` +
+    `Último paso: una reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom para ver tu caso y diseñar tu entrada al proyecto.\n\n` +
     `Reserva el hueco que mejor te encaje:\n` +
     `${enlace1a1}\n\n` +
     `Los huecos vuelan, intenta cogerlo cuanto antes.`

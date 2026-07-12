@@ -84,7 +84,7 @@ function _systemPrompt(lead) {
     'Contexto del negocio: Three Inmobiliaria incorpora agentes inmobiliarios y personas que buscan un ingreso extra ' +
     '(prescriptores) a su red. El proceso con cada interesado es: (1) pregunta de perfil — responder 1 si es agente, ' +
     '2 si busca ingreso extra; (2) reservar plaza para una presentación del negocio; (3) ver la presentación en vídeo; ' +
-    '(4) reunión individual con Arkaitz por Zoom para resolver dudas y concretar su entrada.\n\n' +
+    `(4) reunión individual con ${config.agent.directorNombre} (${config.agent.directorRol}) por Zoom para resolver dudas y concretar su entrada.\n\n` +
     'REGLAS ESTRICTAS:\n' +
     '- NO inventes datos, cifras, precios, comisiones ni promesas. Si preguntan cuánto cuesta o cuánto se gana, di que ' +
     'eso se explica con detalle en la presentación y en la reunión con Arkaitz, sin dar números.\n' +

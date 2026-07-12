@@ -548,7 +548,9 @@
     const map = computeVideoProgress(eventos);
     // El VSL y el webinar primero, los extras después
     const ORDEN = ['video1', 'videoWebinar', 'videoVikingo', 'videoPortugal', 'videoGeneral'];
-    const ids = Object.keys(map).sort((a, b) => {
+    // Los clips decorativos (2, 3, 3.5, 4) NO son pasos del embudo: no se miden.
+    const DECORATIVOS = ['video2', 'video3', 'video3.5', 'video4', 'video35'];
+    const ids = Object.keys(map).filter((id) => !DECORATIVOS.includes(id)).sort((a, b) => {
       const ia = ORDEN.indexOf(a), ib = ORDEN.indexOf(b);
       return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     });
