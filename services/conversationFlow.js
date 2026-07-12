@@ -149,19 +149,21 @@ async function handleIncoming(telefono, texto) {
     }
     leadManager.updateLead(lead.id, { perfil });
     activityLog.appendActivity(lead.id, 'profile_set', { perfil });
-    // Directo a video_visto: ya tiene la landing y está "dentro del funnel".
-    const result = leadManager.transitionState(lead.id, LEAD_STATES.VIDEO_VISTO);
+    // Se le ENVÍA la landing, pero AÚN NO la ha visto → estado "video_enviado".
+    // Solo pasa a "video_visto" cuando la propia landing (vsl.js) avise de que
+    // realmente ha visto el VSL (evento de progreso 90% / completado). Así el
+    // CRM no marca "vídeo visto" nada más responder 1/2.
+    const result = leadManager.transitionState(lead.id, LEAD_STATES.VIDEO_ENVIADO);
     if (result.error) {
       console.error(`❌ [Flujo] No se pudo avanzar el lead ${lead.id}: ${result.error}`);
       return;
     }
-    leadManager.updateLead(lead.id, { videoVistoAt: new Date().toISOString() });
     const enlaceLanding = enlaceLandingPorPerfil(perfil, lead.id);
     const enlaceGrupal = enlaceRedirectorCalendly(lead, 'grupal');
     const texto2 = perfil === LEAD_PROFILES.PROFESIONAL
       ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding, enlaceGrupal })
       : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding, enlaceGrupal });
-    console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing enviada (grupal opcional)`);
+    console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing ENVIADA (pdte. de ver)`);
     await messaging.sendTextMessage(lead.telefono, texto2);
     return;
   }

@@ -273,7 +273,14 @@ async function procesarRecordatoriosFase2() {
  * copy según dónde lo dejaron (deducido del registro de actividad).
  */
 async function procesarRecordatoriosFase2B() {
-  const leads = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.VIDEO_VISTO });
+  // Cubre a los leads que están "dentro de la landing" pero aún no han pulsado
+  // agendar: tanto los que la tienen ENVIADA y no la han abierto (video_enviado)
+  // como los que empezaron a verla y la dejaron a medias (video_visto). A ambos
+  // se les reenvía la landing con el copy según dónde lo dejaron.
+  const S = leadManager.LEAD_STATES;
+  const leads = leadManager.getAllLeads().filter(
+    (l) => l.estado === S.VIDEO_ENVIADO || l.estado === S.VIDEO_VISTO
+  );
   const ahora = Date.now();
 
   for (const lead of leads) {
@@ -391,7 +398,9 @@ async function ejecutarCiclo() {
   console.log(`\n⏰ [Scheduler] Ciclo de recordatorios — ${new Date().toLocaleString()}`);
   await procesarActivacionDiaria();
   await procesarRecordatoriosFase1();
-  await procesarRecordatoriosFase2();
+  // Fase 2 (recordatorio del Calendly grupal) queda retirada: el flujo actual
+  // no obliga a reservar el grupal. Los leads con la landing enviada se cubren
+  // en la Fase 2B junto con los que la están viendo.
   await procesarRecordatoriosFase2B();
   await procesarRecordatoriosFase3();
   console.log(`✅ [Scheduler] Ciclo completado\n`);

@@ -30,12 +30,18 @@ router.post('/video-click', async (req, res) => {
       return res.status(404).json({ error: 'Lead no encontrado' });
     }
 
-    // Aceptamos el clic desde dos estados:
-    //  - VIDEO_VISTO: nuevo flujo (lead ya reservó grupal, ahora vio el vídeo)
-    //  - VIDEO_ENVIADO: flujo legacy (por si quedan leads del modelo antiguo)
-    if (lead.estado === leadManager.LEAD_STATES.VIDEO_VISTO) {
-      // Transición VIDEO_VISTO → REUNION_REGISTRADO (= "vio vídeo, pasa a 1-a-1")
-      const result = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_REGISTRADO);
+    // El clic en "agendar" aparece al terminar el webinar. Lo aceptamos tanto si
+    // el lead ya figura como VIDEO_VISTO como si todavía estaba en VIDEO_ENVIADO
+    // (por si no llegó el evento de progreso del VSL): en ambos casos ha visto lo
+    // suficiente para pasar a la 1-a-1. Si venía de "enviado", lo marcamos visto
+    // primero (la máquina de estados no salta enviado → registrado directo).
+    const S = leadManager.LEAD_STATES;
+    if (lead.estado === S.VIDEO_ENVIADO || lead.estado === S.VIDEO_VISTO) {
+      if (lead.estado === S.VIDEO_ENVIADO) {
+        leadManager.transitionState(lead.id, S.VIDEO_VISTO);
+        leadManager.updateLead(lead.id, { videoVistoAt: new Date().toISOString() });
+      }
+      const result = leadManager.transitionState(lead.id, S.REUNION_REGISTRADO);
       if (result.error) return res.status(400).json({ error: result.error });
       activityLog.appendActivity(lead.id, 'cta_1a1_click', null, req.ip);
       console.log(`🎥→📞 [Tracking] CTA pulsado, 1-a-1 enviado: ${lead.nombre}`);
@@ -45,12 +51,6 @@ router.post('/video-click', async (req, res) => {
         lead.telefono,
         messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 })
       );
-    } else if (lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
-      // Legacy: avanza al siguiente estado y manda la rama antigua de opciones
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_VISTO);
-      activityLog.appendActivity(lead.id, 'calendly_click', null, req.ip);
-      const texto = messages.mensajeOpcionesVerPresentacion({ nombre: lead.nombre });
-      await messaging.sendTextMessage(lead.telefono, texto);
     } else {
       return res.json({ success: true, message: `Lead ya está en estado: ${lead.estado}`, lead });
     }
@@ -193,6 +193,25 @@ router.post('/event', (req, res) => {
     const lead = leadManager.getLeadById(leadId);
     if (!lead) return res.json({ ok: true, ignored: 'lead_not_found' });
     activityLog.appendActivity(leadId, type, meta || null, req.ip);
+
+    // Promoción de estado: si el lead solo tenía el vídeo ENVIADO y la landing
+    // reporta que YA lo ha visto de verdad (VSL al 90%/completo, o desbloqueó el
+    // webinar → implica que terminó el VSL), lo pasamos a "video_visto". Así el
+    // badge del CRM refleja que lo ha visto, no que se lo enviamos.
+    try {
+      const señalDeVisto =
+        type === 'webinar_unlocked' ||
+        type === 'video_complete' ||
+        type === 'video_progress_90';
+      if (señalDeVisto && lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
+        const r = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_VISTO);
+        if (!r.error) {
+          leadManager.updateLead(lead.id, { videoVistoAt: new Date().toISOString() });
+          console.log(`🎬 [Tracking] ${lead.nombre} vio el VSL (${type}) → video_visto`);
+        }
+      }
+    } catch (e) {}
+
     res.json({ ok: true });
   } catch (err) {
     console.error('❌ [Tracking] Error /event:', err.message);
