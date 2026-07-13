@@ -161,17 +161,23 @@ router.post('/leads/:id/send-1a1', async (req, res) => {
     const lead = leadManager.getLeadById(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
 
-    // La máquina de estados no salta enviado → registrado directo.
-    if (lead.estado === S.VIDEO_ENVIADO) {
-      leadManager.transitionState(lead.id, S.VIDEO_VISTO);
-      leadManager.updateLead(lead.id, { videoVistoAt: new Date().toISOString() });
-    }
-    // Solo transicionamos si aún no está en registrado (permite reenviar el
-    // enlace a un lead que ya estaba en reunion_registrado sin dar error).
-    if (leadManager.getLeadById(lead.id).estado !== S.REUNION_REGISTRADO) {
-      const r = leadManager.transitionState(lead.id, S.REUNION_REGISTRADO);
+    // Avanzamos la máquina de estados paso a paso hasta reunion_registrado,
+    // desde CUALQUIER estado previo (nuevo, esperando, enviado, visto). Así el
+    // botón sirve también para leads recién (re)importados a los que hay que
+    // mandarles el 1-a-1 directamente. Si ya está en registrado, solo reenvía.
+    const SIGUIENTE = {
+      [S.NUEVO]: S.VIDEO_ENVIADO,
+      [S.ESPERANDO_CUALIFICACION]: S.VIDEO_ENVIADO,
+      [S.VIDEO_ENVIADO]: S.VIDEO_VISTO,
+      [S.VIDEO_VISTO]: S.REUNION_REGISTRADO,
+    };
+    for (let i = 0; i < 4; i++) {
+      const actual = leadManager.getLeadById(lead.id).estado;
+      if (actual === S.REUNION_REGISTRADO) break;
+      const paso = SIGUIENTE[actual];
+      if (!paso) return res.status(400).json({ error: `No se puede enviar el 1-a-1 desde el estado: ${actual}` });
+      const r = leadManager.transitionState(lead.id, paso);
       if (r.error) return res.status(400).json({ error: r.error });
-      leadManager.updateLead(lead.id, { reunionRegistradoAt: new Date().toISOString() });
     }
 
     activityLog.appendActivity(lead.id, 'cta_1a1_manual', { via: 'crm' }, req.ip);

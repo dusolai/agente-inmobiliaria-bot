@@ -53,6 +53,19 @@ function _escribirObjetoComoDir(dir, obj) {
   }
 }
 
+// ¿El contenido es un JSON "vacío"? ([] , {} o ilegible). Un fichero así
+// jamás debe machacar una copia con datos, ni impedir una restauración.
+function _esJsonVacio(contenido) {
+  try {
+    const v = JSON.parse(contenido);
+    if (Array.isArray(v)) return v.length === 0;
+    if (v && typeof v === 'object') return Object.keys(v).length === 0;
+    return true;
+  } catch (e) {
+    return true;
+  }
+}
+
 // ─── Guardar (fichero → BD) ───────────────────────────────────────
 async function guardar() {
   if (!pool) return;
@@ -61,6 +74,18 @@ async function guardar() {
       const ruta = f.ruta();
       if (!fs.existsSync(ruta)) continue;
       const data = fs.readFileSync(ruta, 'utf-8');
+      // CANDADO ANTI-DESASTRE (incidente 13-07): si el fichero local está
+      // vacío ([] recién creado tras un redeploy) y la BD tiene una copia con
+      // datos, NO la machacamos. Solo se sube vacío si la BD también lo está.
+      if ((f.kind === 'leads' || f.kind === 'activity') && _esJsonVacio(data)) {
+        const prev = await pool.query('SELECT data FROM bot_backup WHERE kind = $1', [f.kind]);
+        const copiaConDatos = prev.rows.length &&
+          !_esJsonVacio(typeof prev.rows[0].data === 'string' ? prev.rows[0].data : JSON.stringify(prev.rows[0].data));
+        if (copiaConDatos) {
+          console.warn(`🛑 [BackupDB] ${f.kind} local está VACÍO pero la copia en BD tiene datos — NO se sobreescribe`);
+          continue;
+        }
+      }
       await pool.query(
         `INSERT INTO bot_backup (kind, data, updated_at) VALUES ($1, $2::jsonb, now())
          ON CONFLICT (kind) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
@@ -89,7 +114,15 @@ async function _restaurar() {
   for (const f of FICHEROS) {
     const ruta = f.ruta();
     const row = porKind.get(f.kind);
-    if (!row || fs.existsSync(ruta)) continue; // el fichero local manda
+    if (!row) continue;
+    // El fichero local manda… salvo que esté VACÍO. Un [] recién creado por
+    // una petición que llegó antes de la restauración no es "datos locales":
+    // es el disco efímero recién limpiado. La copia de la BD gana en ese caso.
+    if (fs.existsSync(ruta)) {
+      let contenidoLocal = '';
+      try { contenidoLocal = fs.readFileSync(ruta, 'utf-8'); } catch (e) {}
+      if (!_esJsonVacio(contenidoLocal)) continue;
+    }
     fs.mkdirSync(path.dirname(ruta), { recursive: true });
     const contenido = typeof row.data === 'string' ? row.data : JSON.stringify(row.data, null, 2);
     fs.writeFileSync(ruta, contenido, 'utf-8');

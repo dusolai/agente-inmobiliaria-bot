@@ -912,7 +912,7 @@
     return `<div class="actions">
       <button class="btn primary" data-act="resend">Reenviar cuestionario</button>
       <button class="btn green" data-act="mark-video-visto" ${s === 'video_enviado' ? '' : 'disabled'}>Marcar vídeo visto</button>
-      <button class="btn green" data-act="mark-registrado" ${(s === 'video_visto' || s === 'reunion_registrado') ? '' : 'disabled'}>${s === 'reunion_registrado' ? 'Reenviar enlace 1-a-1 ahora' : 'Enviar enlace 1-a-1 (registrado)'}</button>
+      <button class="btn green" data-act="mark-registrado" ${['reunion_asistio','agenda_1a1','descartado'].includes(s) ? 'disabled' : ''}>${s === 'reunion_registrado' ? 'Reenviar enlace 1-a-1 ahora' : 'Enviar enlace 1-a-1'}</button>
       <button class="btn green" data-act="mark-asistio" ${s === 'reunion_registrado' ? '' : 'disabled'}>Marcar asistió al 1-a-1</button>
       <button class="btn warn" data-act="descartar" ${s === 'descartado' ? 'disabled' : ''}>Descartar</button>
       <button class="btn danger" data-act="eliminar">Eliminar lead</button>

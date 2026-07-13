@@ -143,8 +143,22 @@ app.get('/qr', (req, res) => {
 });
 
 // ─── Iniciar servidor ─────────────────────────────────────────────
-app.listen(config.port, () => {
-  console.log(`
+// ORDEN CRÍTICO: la restauración desde Postgres tiene que terminar ANTES de
+// abrir el puerto. Si el servidor acepta peticiones primero (p. ej. el CRM
+// abierto refrescando cada 3 s tras un redeploy), la primera /api/leads crea
+// un leads.json VACÍO, la restauración lo ve y no restaura ("el fichero local
+// manda"), y a los 45 s la copia automática sube ese vacío a Postgres
+// machacando el backup bueno. Pasó el 13-07: lista entera perdida.
+async function arrancar() {
+  const backupDb = require('./services/backupDb');
+  try {
+    await backupDb.iniciar();
+  } catch (err) {
+    console.error('⚠️  [BackupDB] Error en el arranque (seguimos sin copia):', err.message);
+  }
+
+  app.listen(config.port, () => {
+    console.log(`
 ╔══════════════════════════════════════════════════════╗
 ║                                                      ║
 ║   🏠  Three Inmobiliaria – Embudo Agéntico           ║
@@ -157,28 +171,21 @@ app.listen(config.port, () => {
 ║   📝 Modo: ${config.env.padEnd(15)}                       ║
 ║                                                      ║
 ╚══════════════════════════════════════════════════════╝
-  `);
+    `);
 
-  // ─── Restaurar desde Postgres ANTES de arrancar los servicios ────
-  // Tras un redeploy el disco viene vacío: si hay DATABASE_URL, backupDb
-  // recupera leads, actividad y la sesión de WhatsApp desde la última copia.
-  // Solo después arrancan el scheduler y Baileys (que leen esos ficheros).
-  const backupDb = require('./services/backupDb');
-  backupDb
-    .iniciar()
-    .catch((err) => console.error('⚠️  [BackupDB] Error en el arranque:', err.message))
-    .finally(() => {
-      // ─── Iniciar scheduler de recordatorios ─────────────────────
-      const scheduler = require('./services/scheduler');
-      scheduler.iniciar();
+    // ─── Iniciar scheduler de recordatorios ─────────────────────
+    const scheduler = require('./services/scheduler');
+    scheduler.iniciar();
 
-      // ─── Iniciar cliente de WhatsApp (Baileys) ───────────────────
-      const whatsapp = require('./services/whatsapp');
-      whatsapp.initialize();
+    // ─── Iniciar cliente de WhatsApp (Baileys) ───────────────────
+    const whatsapp = require('./services/whatsapp');
+    whatsapp.initialize();
 
-      // ─── Iniciar adaptador de Telegram (modo piloto) ─────────────
-      // Si TELEGRAM_BOT_TOKEN está vacío, el adaptador se salta solo.
-      const telegram = require('./services/telegram');
-      telegram.initialize();
-    });
-});
+    // ─── Iniciar adaptador de Telegram (modo piloto) ─────────────
+    // Si TELEGRAM_BOT_TOKEN está vacío, el adaptador se salta solo.
+    const telegram = require('./services/telegram');
+    telegram.initialize();
+  });
+}
+
+arrancar();
