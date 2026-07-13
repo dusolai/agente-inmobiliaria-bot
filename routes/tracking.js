@@ -142,6 +142,7 @@ router.get('/calendly-booked', async (req, res) => {
           messages.mensajeAccesoVideoTrasReserva({
             nombre: lead.nombre,
             enlaceLanding,
+            perfil: lead.perfil,
           })
         );
       } else if (lead.estado === leadManager.LEAD_STATES.REUNION_REGISTRADO) {

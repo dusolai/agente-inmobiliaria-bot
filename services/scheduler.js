@@ -326,7 +326,7 @@ async function procesarRecordatoriosFase2B() {
     console.log(`🔔 [Scheduler] Recordatorio Funnel (${etapa}) #${fase2b.enviados + 1} → ${lead.nombre}`);
     const envio = await messaging.sendTextMessage(
       lead.telefono,
-      msgFn({ nombre: lead.nombre, enlaceLanding, etapa })
+      msgFn({ nombre: lead.nombre, enlaceLanding, etapa, perfil: lead.perfil })
     );
     if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
 

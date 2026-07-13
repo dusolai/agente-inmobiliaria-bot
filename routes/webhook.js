@@ -111,7 +111,7 @@ router.post('/calendly', async (req, res) => {
       const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
       await messaging.sendTextMessage(
         lead.telefono,
-        messages.mensajeAccesoVideoTrasReserva({ nombre: lead.nombre, enlaceLanding })
+        messages.mensajeAccesoVideoTrasReserva({ nombre: lead.nombre, enlaceLanding, perfil: lead.perfil })
       );
       console.log(`📅 [CalendlyWebhook] Reserva GRUPAL de ${lead.nombre} → landing enviada`);
     } else if (lead.estado === leadManager.LEAD_STATES.REUNION_REGISTRADO) {

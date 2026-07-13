@@ -76,19 +76,29 @@ function mensajeRamaEmprendedor({ nombre, enlaceLanding }) {
     `Entendido ${nombre} 🚀\n\n` +
     `Aquí tienes la presentación, va al grano. Verás primero un vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}.\n\n` +
-    `🇵🇹 ¿La prefieres en portugués? Dentro de la página tienes un botón para verla en portugués. (Se preferires em português, tens um botão na página.)`
+    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}.` +
+    _notaPortugues('emprendedor')
   );
+}
+
+// Nota que recuerda que la landing de EMPRENDE tiene versión en portugués
+// (botón en la propia página). Solo se añade al perfil emprendedor: la landing
+// de profesionales no tiene versión portuguesa. Se usa en TODOS los mensajes
+// que reenvían el vídeo de emprende (inicial, recordatorios y tras reservar).
+function _notaPortugues(perfil) {
+  if (perfil !== 'emprendedor') return '';
+  return `\n\n🇵🇹 ¿La prefieres en portugués? En la página tienes un botón para verla en portugués. (Se preferires em português, usa o botão na página.)`;
 }
 
 // Justo después de reservar en Calendly grupal: enviamos el acceso a la
 // landing con el vídeo. Pueden verlo ya o esperar a su hora reservada.
-function mensajeAccesoVideoTrasReserva({ nombre, enlaceLanding }) {
+function mensajeAccesoVideoTrasReserva({ nombre, enlaceLanding, perfil }) {
   return (
     `¡Listo ${nombre}! Tu hueco está reservado ✅\n\n` +
     `Aquí tienes el acceso a la presentación. Puedes verla ya mismo o a la hora que reservaste, como prefieras:\n` +
     `${enlaceLanding}\n\n` +
-    `Cuando termines el vídeo, en la propia página se activa el botón para reservar tu reunión 1 a 1 con Arkaitz 🎯`
+    `Cuando termines el vídeo, en la propia página se activa el botón para reservar tu reunión 1 a 1 con Arkaitz 🎯` +
+    _notaPortugues(perfil)
   );
 }
 
@@ -186,28 +196,31 @@ function _lineaEtapaFunnel(etapa) {
   return 'aún no has entrado a ver la presentación';
 }
 
-function recordatorioFunnel1({ nombre, enlaceLanding, etapa }) {
+function recordatorioFunnel1({ nombre, enlaceLanding, etapa, perfil }) {
   return (
     `Oye ${nombre}, vi que ${_lineaEtapaFunnel(etapa)} 👀\n\n` +
     `Retomas justo donde lo dejaste. Te dejo el acceso otra vez:\n` +
-    `${enlaceLanding}`
+    `${enlaceLanding}` +
+    _notaPortugues(perfil)
   );
 }
 
-function recordatorioFunnel2({ nombre, enlaceLanding, etapa }) {
+function recordatorioFunnel2({ nombre, enlaceLanding, etapa, perfil }) {
   return (
     `${nombre}, el acceso a la presentación lo vamos a cerrar pronto.\n\n` +
     `Vi que ${_lineaEtapaFunnel(etapa)}. ¿Puedes terminarla hoy?\n` +
-    `${enlaceLanding}`
+    `${enlaceLanding}` +
+    _notaPortugues(perfil)
   );
 }
 
-function recordatorioFunnel3({ nombre, enlaceLanding, etapa }) {
+function recordatorioFunnel3({ nombre, enlaceLanding, etapa, perfil }) {
   return (
     `${nombre}, último aviso por mi parte 🔔\n\n` +
     `Vamos a cerrar el acceso en breve. Lo tienes aquí:\n` +
-    `${enlaceLanding}\n\n` +
-    `Si no es el momento, no pasa nada, ignora este mensaje.`
+    `${enlaceLanding}` +
+    _notaPortugues(perfil) +
+    `\n\nSi no es el momento, no pasa nada, ignora este mensaje.`
   );
 }
 
