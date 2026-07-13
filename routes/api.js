@@ -134,8 +134,34 @@ router.put('/leads/:id', (req, res) => {
  * Body: { estado: "video_visto" }
  */
 router.put('/leads/:id/state', (req, res) => {
-  const { estado } = req.body;
+  const { estado, force } = req.body;
   if (!estado) return res.status(400).json({ error: 'Se requiere campo "estado"' });
+
+  // force=true: fija el estado SALTÁNDOSE la máquina de transiciones y sin
+  // enviar ningún mensaje. Para reconstruir leads a mano (p. ej. tras el
+  // incidente del 13-07: reimportas la lista y marcas a cada contactado en
+  // el punto exacto donde estaba, sin molestarle con reenvíos).
+  if (force) {
+    const S = leadManager.LEAD_STATES;
+    if (!Object.values(S).includes(estado)) {
+      return res.status(400).json({ error: `Estado desconocido: ${estado}` });
+    }
+    const lead = leadManager.getLeadById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
+    const desde = lead.estado;
+    const now = new Date().toISOString();
+    const updates = {
+      estado,
+      historial: [...(lead.historial || []), { estado, fecha: now, forzado: true }],
+    };
+    if (estado === S.VIDEO_VISTO) updates.videoVistoAt = now;
+    if (estado === S.REUNION_REGISTRADO) updates.reunionRegistradoAt = now;
+    if (estado === S.REUNION_ASISTIO) updates.reunionAsistioAt = now;
+    const updated = leadManager.updateLead(lead.id, updates);
+    activityLog.appendActivity(lead.id, 'state_changed', { from: desde, to: estado, force: true }, req.ip);
+    console.log(`🔧 [API] Estado FORZADO ${desde} → ${estado}: ${lead.nombre}`);
+    return res.json(updated);
+  }
 
   const result = leadManager.transitionState(req.params.id, estado);
   if (result.error) return res.status(400).json({ error: result.error });

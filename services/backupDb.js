@@ -91,6 +91,22 @@ async function guardar() {
          ON CONFLICT (kind) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
         [f.kind, data]
       );
+      // Historial versionado (incidente 13-07): además de la foto "viva" (que
+      // se sobreescribe), guardamos una copia por hora que NUNCA se pisa. Si
+      // algo corrompe la foto viva, siempre queda la de hace una hora, ayer,
+      // etc. Se conservan 14 días. Restaurar una: copiar su data de
+      // bot_backup_hist a bot_backup y reiniciar la app.
+      if (!_esJsonVacio(data)) {
+        await pool.query(
+          `INSERT INTO bot_backup_hist (kind, data)
+           SELECT $1, $2::jsonb
+           WHERE NOT EXISTS (
+             SELECT 1 FROM bot_backup_hist
+             WHERE kind = $1 AND created_at > now() - interval '55 minutes'
+           )`,
+          [f.kind, data]
+        );
+      }
     }
     const auth = _leerDirComoObjeto(WA_AUTH_DIR);
     if (auth) {
@@ -186,6 +202,15 @@ async function iniciar() {
       data JSONB NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+    // Historial versionado: una copia por hora y por tipo, nunca se pisa.
+    await pool.query(`CREATE TABLE IF NOT EXISTS bot_backup_hist (
+      id BIGSERIAL PRIMARY KEY,
+      kind TEXT NOT NULL,
+      data JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+    // Purga de copias antiguas (conservamos 14 días)
+    await pool.query(`DELETE FROM bot_backup_hist WHERE created_at < now() - interval '14 days'`);
 
     const restaurados = await _restaurar();
     console.log(`💾 [BackupDB] Activo — copia cada ${INTERVALO_MIN} min${restaurados ? ` (${restaurados} elementos restaurados)` : ''}`);
