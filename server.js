@@ -13,8 +13,8 @@ const app = express();
 
 // ─── Middleware ────────────────────────────────────────────────────
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' })); // 10mb: para importar listas grandes de leads desde el CRM
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ─── Protección del CRM y la API (ADMIN_TOKEN) ────────────────────
 // Con ADMIN_TOKEN definido en Seenode, el panel y la API de leads piden

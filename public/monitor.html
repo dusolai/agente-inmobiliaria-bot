@@ -90,6 +90,10 @@
   .csv-day{background:#faf8fc;border:1px solid var(--line);border-radius:10px;padding:.4rem .55rem;font-size:.72rem;text-align:center;min-width:58px}
   .csv-day b{display:block;color:var(--purple);font-size:1.05rem}
   .csv-day span{color:var(--muted)}
+  /* Importador CSV */
+  .drop{border:2px dashed var(--purple);border-radius:14px;padding:2.2rem;text-align:center;background:#faf8fc;transition:background .2s,border-color .2s;cursor:pointer}
+  .drop.over{background:#f0e9fb;border-color:var(--orange)}
+  .drop-inner{display:flex;flex-direction:column;gap:.6rem;align-items:center}
   .funnel-row{display:grid;grid-template-columns:180px 1fr 96px;gap:.6rem;align-items:center;margin:.4rem 0;font-size:.85rem}
   .funnel-row .label{color:var(--ink);font-weight:600}
   .funnel-row .bar{height:22px;background:#eef0f4;border-radius:10px;overflow:hidden;position:relative}
@@ -238,6 +242,7 @@
     <button class="active" data-tab="inicio"><span class="ic">📊</span> Inicio</button>
     <button data-tab="whatsapp"><span class="ic">📱</span> WhatsApp</button>
     <button data-tab="simulador"><span class="ic">🧪</span> Simulador</button>
+    <button data-tab="importar"><span class="ic">📥</span> Importar</button>
     <button data-tab="enlaces"><span class="ic">🔗</span> Enlaces</button>
   </nav>
 
@@ -362,6 +367,36 @@
     </div>
     <div class="embed">
       <iframe id="iframe-sim" src="about:blank" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <!-- ─────────── TAB: IMPORTAR ─────────── -->
+  <div id="tab-importar" class="tab">
+    <div class="panel">
+      <h2>📥 Importar leads desde CSV <small>los crea SIN enviar nada — el activador diario los suelta luego</small></h2>
+      <p class="info">Arrastra tu CSV (export de Meta Lead Ads, o columnas <b>nombre / telefono / email</b>). Se limpian los teléfonos a formato español, se quitan duplicados y filas de prueba, y verás un resumen <b>antes</b> de crear nada. Nada se envía por WhatsApp: solo se crean en la cola.</p>
+      <div id="dropZone" class="drop">
+        <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none">
+        <div class="drop-inner">
+          <div style="font-size:2.6rem">📄</div>
+          <div><b>Arrastra el CSV aquí</b> o <button type="button" id="csvPick" class="btn">elige un archivo</button></div>
+          <div class="csv-hint" id="dropHint">Se lee solo en tu navegador; nada sale de aquí hasta que pulses Importar.</div>
+        </div>
+      </div>
+      <div id="importPreview" style="display:none">
+        <div class="csv-nums" style="margin-top:1.1rem">
+          <div class="csv-num g"><b id="imp-validos">—</b><span>Válidos</span></div>
+          <div class="csv-num o"><b id="imp-revisar">—</b><span>A revisar</span></div>
+          <div class="csv-num"><b id="imp-total">—</b><span>Filas leídas</span></div>
+          <div class="csv-num"><b id="imp-test">—</b><span>Descartados</span></div>
+        </div>
+        <div id="imp-revisar-list" class="csv-hint" style="margin-bottom:.9rem"></div>
+        <div style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap">
+          <button id="importBtn" class="btn green">✅ Importar los <span id="imp-btn-n">0</span> válidos (crear sin enviar)</button>
+          <span id="importStatus" class="csv-hint"></span>
+        </div>
+        <div class="csv-hint" style="margin-top:.7rem">Se crean en estado «nuevo». Luego, en la pestaña <b>Inicio</b>, pon cuántos contactar por día y el sistema los va soltando solo hasta acabar.</div>
+      </div>
     </div>
   </div>
 
@@ -965,6 +1000,76 @@
     }
   }
 
+  // ─── Importador de CSV (cliente) ───────────────────────
+  let _leadsValidos = [];
+  function _parseCSV(text) {
+    const rows = []; let row = [], field = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i], n = text[i + 1];
+      if (q) { if (c === '"' && n === '"') { field += '"'; i++; } else if (c === '"') { q = false; } else field += c; }
+      else { if (c === '"') q = true; else if (c === ',') { row.push(field); field = ''; } else if (c === '\r') {} else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; } else field += c; }
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    return rows;
+  }
+  function _limpiaTel(raw) {
+    let t = String(raw || '').trim().replace(/^p:/i, '').replace(/[^\d]/g, '');
+    if (!t) return null;
+    if (t.length === 9 && /^[67]/.test(t)) t = '34' + t;
+    if (t.startsWith('00')) t = t.slice(2);
+    return t;
+  }
+  function _idxCol(header, names) { for (const n of names) { const i = header.indexOf(n); if (i >= 0) return i; } return -1; }
+  function procesarCSV(text) {
+    const rows = _parseCSV(text);
+    if (!rows.length) return { error: 'CSV vacío' };
+    const header = rows[0].map(h => h.trim().toLowerCase());
+    const iName = _idxCol(header, ['full_name', 'nombre', 'name']);
+    const iPhone = _idxCol(header, ['phone_number', 'telefono', 'teléfono', 'phone', 'movil', 'móvil']);
+    const iEmail = _idxCol(header, ['email', 'mail', 'correo']);
+    if (iName < 0 || iPhone < 0) return { error: 'No encuentro columnas de nombre y teléfono. Cabeceras: ' + header.slice(0, 10).join(', ') };
+    const stats = { total: 0, test: 0, validos: 0, revisar: 0 };
+    const validos = [], revisar = [], vistos = new Set();
+    const esMovil = (t) => /^34[67]\d{8}$/.test(t);
+    for (let r = 1; r < rows.length; r++) {
+      const f = rows[r]; if (!f || f.every(c => !c || !c.trim())) continue;
+      stats.total++;
+      const nombre = (f[iName] || '').trim();
+      const telRaw = (f[iPhone] || '').trim();
+      const email = iEmail >= 0 ? (f[iEmail] || '').trim() : '';
+      if (/test lead|dummy data/i.test(nombre) || /test lead|dummy data/i.test(telRaw) || /@fb\.com$/i.test(email)) { stats.test++; continue; }
+      const tel = _limpiaTel(telRaw);
+      if (!tel || tel.length < 8 || !nombre) { stats.test++; continue; }
+      if (vistos.has(tel)) { stats.test++; continue; }
+      vistos.add(tel);
+      const lead = { nombre, telefono: tel, email: email || '' };
+      if (esMovil(tel)) { validos.push(lead); stats.validos++; } else { revisar.push(lead); stats.revisar++; }
+    }
+    return { stats, validos, revisar };
+  }
+  function renderImportPreview(res) {
+    const escI = (s) => String(s || '').replace(/</g, '&lt;');
+    if (res.error) { $('importPreview').style.display = 'none'; $('dropHint').textContent = '⚠️ ' + res.error; return; }
+    _leadsValidos = res.validos;
+    $('imp-validos').textContent = res.stats.validos;
+    $('imp-revisar').textContent = res.stats.revisar;
+    $('imp-total').textContent = res.stats.total;
+    $('imp-test').textContent = res.stats.test;
+    $('imp-btn-n').textContent = res.stats.validos;
+    $('imp-revisar-list').innerHTML = res.revisar.length
+      ? '⚠️ A revisar (NO se importan, teléfono raro): ' + res.revisar.map(l => escI(l.nombre) + ' (' + escI(l.telefono) + ')').join(' · ')
+      : '';
+    $('importStatus').textContent = '';
+    $('importPreview').style.display = 'block';
+  }
+  function leerArchivoCSV(file) {
+    if (!file) return;
+    $('dropHint').textContent = 'Leyendo ' + file.name + '…';
+    const fr = new FileReader();
+    fr.onload = () => { try { renderImportPreview(procesarCSV(fr.result)); $('dropHint').textContent = '✔ ' + file.name; } catch (e) { $('dropHint').textContent = '⚠️ error leyendo el CSV'; } };
+    fr.readAsText(file, 'utf-8');
+  }
+
   // ─── Tabs ──────────────────────────────────────────────
   function switchTab(name) {
     currentTab = name;
@@ -1023,6 +1128,28 @@
       setTimeout(() => { $('csv-rate-status').textContent = ''; }, 3000);
       refresh();
     } catch (e) { $('csv-rate-status').textContent = '❌ error al guardar'; }
+  });
+
+  // ─── Importador CSV: file input + drag & drop + importar ─
+  $('csvPick').addEventListener('click', () => $('csvFile').click());
+  $('csvFile').addEventListener('change', (e) => leerArchivoCSV(e.target.files[0]));
+  const _dz = $('dropZone');
+  _dz.addEventListener('click', (e) => { if (e.target.id !== 'csvPick') $('csvFile').click(); });
+  ['dragover', 'dragenter'].forEach(ev => _dz.addEventListener(ev, (e) => { e.preventDefault(); _dz.classList.add('over'); }));
+  ['dragleave', 'dragend'].forEach(ev => _dz.addEventListener(ev, (e) => { e.preventDefault(); _dz.classList.remove('over'); }));
+  _dz.addEventListener('drop', (e) => { e.preventDefault(); _dz.classList.remove('over'); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) leerArchivoCSV(f); });
+  $('importBtn').addEventListener('click', async () => {
+    if (!_leadsValidos.length) { $('importStatus').textContent = 'No hay leads válidos que importar.'; return; }
+    if (!confirm(`Crear ${_leadsValidos.length} leads en la cola (sin enviar ningún mensaje)?`)) return;
+    $('importBtn').disabled = true;
+    $('importStatus').textContent = `Importando ${_leadsValidos.length}…`;
+    try {
+      const r = await fetchJSON('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leads: _leadsValidos, ignorarDuplicados: true }) });
+      const x = r.resultado || {};
+      $('importStatus').textContent = `✅ ${x.creados} creados · ${x.duplicados} ya existían · ${x.errores} errores. Ve a Inicio para poner el ritmo.`;
+      refresh();
+    } catch (e) { $('importStatus').textContent = '❌ error al importar: ' + e.message; }
+    $('importBtn').disabled = false;
   });
 
   // ─── Copiar al portapapeles ────────────────────────────

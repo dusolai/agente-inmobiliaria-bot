@@ -266,6 +266,38 @@ router.post('/leads/:id/resend-question', async (req, res) => {
 });
 
 /**
+ * POST /api/import
+ * Importa una lista de leads (desde el CSV en el CRM) en modo SEGURO: los crea
+ * en estado "nuevo" SIN enviar ningún mensaje. El activador diario los va
+ * soltando al ritmo configurado. Está bajo /api (protegido por ADMIN_TOKEN).
+ * Body: { leads: [{nombre, telefono, email?}], ignorarDuplicados?: true }
+ */
+router.post('/import', (req, res) => {
+  try {
+    const { leads, ignorarDuplicados } = req.body || {};
+    if (!Array.isArray(leads) || leads.length === 0) {
+      return res.status(400).json({ error: 'leads debe ser un array no vacío' });
+    }
+    const ignorar = ignorarDuplicados !== false; // default true
+    const r = { creados: 0, duplicados: 0, errores: 0, total: leads.length };
+    for (const fila of leads) {
+      try {
+        if (!fila || !fila.telefono || !fila.nombre) { r.errores++; continue; }
+        const tel = String(fila.telefono).replace(/\s+/g, '');
+        if (ignorar && leadManager.getLeadByPhone(tel)) { r.duplicados++; continue; }
+        leadManager.createLead({ nombre: fila.nombre, email: fila.email || '', telefono: tel, fuente: 'excel_import' });
+        r.creados++;
+      } catch (e) { r.errores++; }
+    }
+    console.log(`📥 [API/import] ${r.creados} creados, ${r.duplicados} duplicados, ${r.errores} errores (sin enviar)`);
+    res.json({ success: true, resultado: r });
+  } catch (err) {
+    console.error('❌ [API] Error /import:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/activation
  * Estado del flujo de la lista importada (CSV): cuántos hay, cuántos ya
  * contactados, cuántos en cola, cuántos hoy, el cupo diario actual y el
