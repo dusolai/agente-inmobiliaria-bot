@@ -168,12 +168,11 @@ async function handleIncoming(telefono, texto) {
   }
 
   // ─── Lead curioso: ya cualificó pero pide ver también la OTRA rama ──
-  // Si escribe un 1 o un 2 claro, le enviamos ESA landing igualmente, sin
-  // cambiar su estado ni su perfil principal. Así quien tiene curiosidad puede
-  // ver las dos presentaciones (antes, tras elegir una, la otra quedaba blindada).
-  const tokensMsg = normalizar(texto).split(/\s+/);
-  const pideOtraRama = tokensMsg.includes('1') ? LEAD_PROFILES.PROFESIONAL
-    : tokensMsg.includes('2') ? LEAD_PROFILES.EMPRENDEDOR : null;
+  // Si escribe algo que se interpreta como un perfil ("1"/"2", "soy agente",
+  // "busco ingreso extra"...), le enviamos ESA landing igualmente, sin cambiar
+  // su estado ni su perfil principal. Así quien tiene curiosidad puede ver las
+  // dos presentaciones (antes, tras elegir una, la otra quedaba blindada).
+  const pideOtraRama = interpretarRespuesta(texto);
   if (pideOtraRama) {
     const enlaceLanding = enlaceLandingPorPerfil(pideOtraRama, lead.id);
     const texto2 = pideOtraRama === LEAD_PROFILES.PROFESIONAL

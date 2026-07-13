@@ -54,8 +54,8 @@ function _contextoDeEstado(lead) {
       };
     case 'video_enviado':
       return {
-        objetivo: 'que reserve su plaza para la presentación en el enlace de reserva. Contesta su duda y recuérdale el enlace.',
-        enlace: `${base}/r/grupal?l=${encodeURIComponent(lead.id)}`,
+        objetivo: 'que entre en la página y vea la presentación en vídeo (primero el vídeo corto y, según avanza, se desbloquea el webinar). Al terminar el webinar, en la propia página se activa el botón para agendar su reunión 1 a 1. Contesta su duda y recuérdale el enlace de la presentación.',
+        enlace: landing,
       };
     case 'video_visto':
       return {
@@ -83,8 +83,8 @@ function _systemPrompt(lead) {
     'Español de España, tono cercano y natural, respuestas CORTAS (1 a 3 frases, como una persona), máximo un emoji.\n\n' +
     'Contexto del negocio: Three Inmobiliaria incorpora agentes inmobiliarios y personas que buscan un ingreso extra ' +
     '(prescriptores) a su red. El proceso con cada interesado es: (1) pregunta de perfil — responder 1 si es agente, ' +
-    '2 si busca ingreso extra; (2) reservar plaza para una presentación del negocio; (3) ver la presentación en vídeo; ' +
-    `(4) reunión individual con ${config.agent.directorNombre} (${config.agent.directorRol}) por Zoom para resolver dudas y concretar su entrada.\n\n` +
+    '2 si busca ingreso extra; (2) ver la presentación en vídeo en la página que se le envía (primero un vídeo corto y luego el webinar); ' +
+    `(3) reunión individual con ${config.agent.directorNombre} (${config.agent.directorRol}) por Zoom para resolver dudas y concretar su entrada. NO existe ninguna "reserva de plaza" previa ni sesión grupal: del vídeo se pasa directo a la reunión 1 a 1.\n\n` +
     'REGLAS ESTRICTAS:\n' +
     '- NO inventes datos, cifras, precios, comisiones ni promesas. Si preguntan cuánto cuesta o cuánto se gana, di que ' +
     'eso se explica con detalle en la presentación y en la reunión con Arkaitz, sin dar números.\n' +
