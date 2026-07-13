@@ -220,7 +220,9 @@ router.post('/zoom-attendance', async (req, res) => {
  * Body: {
  *   leads: [ { nombre, telefono, email? }, ... ],
  *   leadsPorDia?: 10,        // throttle: cuántos arrancar al día (default 10)
- *   ignorarDuplicados?: true // si ya existe por teléfono, lo salta
+ *   ignorarDuplicados?: true, // si ya existe por teléfono, lo salta
+ *   soloCrear?: true,         // crea los leads SIN enviar nada (modo seguro)
+ *   activarTodos?: false      // lanza el 1er mensaje a TODOS al instante
  * }
  *
  * Crea los leads como "nuevos" (estado nuevo) y los pone con fuente
@@ -230,7 +232,7 @@ router.post('/zoom-attendance', async (req, res) => {
  */
 router.post('/bulk-import', async (req, res) => {
   try {
-    const { leads, leadsPorDia, ignorarDuplicados, activarTodos } = req.body || {};
+    const { leads, leadsPorDia, ignorarDuplicados, activarTodos, soloCrear } = req.body || {};
     if (!Array.isArray(leads) || leads.length === 0) {
       return res.status(400).json({ error: 'leads debe ser un array no vacío' });
     }
@@ -261,9 +263,13 @@ router.post('/bulk-import', async (req, res) => {
     }
 
     // Activación: pasa de nuevo → esperando_cualificacion y envía el mensaje.
-    // Si activarTodos, lanzamos los X primeros (porDia) al instante.
+    // - soloCrear: NO activa ni envía nada (los deja "nuevo" para que el
+    //   activador diario los suelte al ritmo configurado). Modo seguro para
+    //   importar una lista grande sin disparar WhatsApps de golpe.
+    // - activarTodos: lanza TODOS al instante.
+    // - por defecto: lanza los `porDia` primeros al instante.
     const personalizer = require('../services/personalizer');
-    const aActivar = activarTodos ? creados : creados.slice(0, porDia);
+    const aActivar = soloCrear ? [] : (activarTodos ? creados : creados.slice(0, porDia));
     for (const lead of aActivar) {
       try {
         leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
