@@ -265,4 +265,61 @@ router.post('/leads/:id/resend-question', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/activation
+ * Estado del flujo de la lista importada (CSV): cuántos hay, cuántos ya
+ * contactados, cuántos en cola, cuántos hoy, el cupo diario actual y el
+ * historial de contactos por día. Para el panel "Flujo de la lista" del CRM.
+ */
+router.get('/activation', (req, res) => {
+  try {
+    const scheduler = require('../services/scheduler');
+    const stats = leadManager.getStats();
+    const S = leadManager.LEAD_STATES;
+    const enCola = (stats.porEstado && stats.porEstado[S.NUEVO]) || 0;
+    const total = stats.total || 0;
+    const descartados = (stats.porEstado && stats.porEstado[S.DESCARTADO]) || 0;
+    const contactados = total - enCola;
+    const leadsPorDia = scheduler.getLeadsPorDia();
+
+    // Cuántos activados HOY (de activation.json)
+    let activadosHoy = 0;
+    try {
+      const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+      const act = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'activation.json'), 'utf-8'));
+      const hoy = new Date().toISOString().slice(0, 10);
+      if (act.fecha === hoy) activadosHoy = act.activadosHoy || 0;
+    } catch (e) {}
+
+    const porDia = activityLog.getActivacionesPorDia();
+    const diasRestantes = leadsPorDia > 0 ? Math.ceil(enCola / leadsPorDia) : null;
+
+    res.json({ total, contactados, enCola, descartados, activadosHoy, leadsPorDia, diasRestantes, porDia });
+  } catch (err) {
+    console.error('❌ [API] Error /activation:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/activation/rate
+ * Cambia el cupo diario (leads por día) EN CALIENTE, sin tocar Seenode.
+ * Body: { leadsPorDia: <número> }. Se persiste en activation.json.
+ */
+router.post('/activation/rate', (req, res) => {
+  try {
+    const scheduler = require('../services/scheduler');
+    const n = req.body && req.body.leadsPorDia;
+    if (n === undefined || n === null || isNaN(parseInt(n, 10))) {
+      return res.status(400).json({ error: 'Falta leadsPorDia (número)' });
+    }
+    const leadsPorDia = scheduler.setLeadsPorDia(n);
+    console.log(`⚙️  [API] Cupo diario cambiado a ${leadsPorDia}/día desde el CRM`);
+    res.json({ success: true, leadsPorDia });
+  } catch (err) {
+    console.error('❌ [API] Error /activation/rate:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

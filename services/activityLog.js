@@ -236,6 +236,24 @@ function getInboxData() {
   return map;
 }
 
+/**
+ * Cuántos leads se activaron (primer contacto) cada día. Se basa en el evento
+ * 'lead_activated' que registra el activador diario. Devuelve un array
+ * ordenado por fecha descendente: [{ fecha:'YYYY-MM-DD', n: 12 }, ...].
+ */
+function getActivacionesPorDia() {
+  const porDia = new Map();
+  for (const e of readAll()) {
+    if (e.type !== 'lead_activated') continue;
+    const fecha = (e.ts || '').slice(0, 10);
+    if (!fecha) continue;
+    porDia.set(fecha, (porDia.get(fecha) || 0) + 1);
+  }
+  return Array.from(porDia.entries())
+    .map(([fecha, n]) => ({ fecha, n }))
+    .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+}
+
 // Borra del archivo todos los eventos asociados a un leadId.
 // Útil para "empezar de cero" en pruebas tras eliminar el lead.
 function deleteActivityByLead(leadId) {
@@ -255,5 +273,6 @@ module.exports = {
   getVideoProgressByLead,
   getLiveActivity,
   getInboxData,
+  getActivacionesPorDia,
   deleteActivityByLead,
 };

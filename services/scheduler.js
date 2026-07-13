@@ -46,6 +46,24 @@ function _guardarEstadoActivacion(st) {
   fs.writeFileSync(ACTIVATION_FILE, JSON.stringify(st, null, 2), 'utf-8');
 }
 
+// Cupo diario configurable EN CALIENTE desde el CRM (persistido en
+// activation.json). Prioridad: valor guardado desde el panel > env
+// LEADS_POR_DIA > 10. Así se cambia el ritmo sin tocar Seenode.
+function getLeadsPorDia() {
+  const st = _leerEstadoActivacion();
+  if (st && Number.isFinite(st.leadsPorDia) && st.leadsPorDia >= 0) return st.leadsPorDia;
+  return parseInt(process.env.LEADS_POR_DIA, 10) || 10;
+}
+
+function setLeadsPorDia(n) {
+  const v = Math.max(0, Math.min(500, parseInt(n, 10)));
+  if (!Number.isFinite(v)) return getLeadsPorDia();
+  const st = _leerEstadoActivacion();
+  st.leadsPorDia = v;
+  _guardarEstadoActivacion(st);
+  return v;
+}
+
 // ¿Está listo el canal por el que se enviaría a este lead?
 // (WhatsApp para teléfonos normales, Telegram para los "tg:")
 function _canalListo(telefono) {
@@ -61,7 +79,7 @@ function _envioOk(res) {
 }
 
 async function procesarActivacionDiaria() {
-  const cupo = parseInt(process.env.LEADS_POR_DIA, 10) || 10;
+  const cupo = getLeadsPorDia();
   if (cupo <= 0) return;
 
   const horaInicio = parseInt(process.env.ACTIVACION_HORA_INICIO, 10) || 10;
@@ -72,7 +90,7 @@ async function procesarActivacionDiaria() {
 
   let st = _leerEstadoActivacion();
   const hoy = ahora.toISOString().slice(0, 10);
-  if (st.fecha !== hoy) st = { fecha: hoy, activadosHoy: 0, ultimaActivacion: null };
+  if (st.fecha !== hoy) st = { fecha: hoy, activadosHoy: 0, ultimaActivacion: null, leadsPorDia: st.leadsPorDia };
   if (st.activadosHoy >= cupo) return;
 
   // Espaciado: repartimos el cupo por la ventana horaria, con jitter ±30%
@@ -427,4 +445,4 @@ function iniciar() {
   }, 10000);
 }
 
-module.exports = { iniciar, ejecutarCiclo };
+module.exports = { iniciar, ejecutarCiclo, getLeadsPorDia, setLeadsPorDia };

@@ -73,6 +73,23 @@
   .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:1.2rem 1.3rem;margin-bottom:1.2rem;box-shadow:0 6px 20px rgba(49,27,146,.04)}
   .panel h2{font-size:.85rem;color:var(--purple);font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:.9rem;display:flex;justify-content:space-between;align-items:center}
   .panel h2 small{font-weight:600;color:var(--muted);font-size:.72rem;text-transform:none;letter-spacing:0}
+  /* Panel Flujo de la lista (CSV) */
+  .csv-nums{display:grid;grid-template-columns:repeat(4,1fr);gap:.8rem;margin-bottom:1rem}
+  .csv-num{text-align:center;background:#faf8fc;border:1px solid var(--line);border-radius:12px;padding:.7rem}
+  .csv-num b{display:block;font-size:1.7rem;font-weight:900;color:var(--purple);line-height:1}
+  .csv-num span{font-size:.64rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+  .csv-num.g b{color:var(--green)} .csv-num.o b{color:var(--orange)}
+  .csv-bar{position:relative;height:24px;background:#ececf3;border-radius:999px;overflow:hidden;margin-bottom:1rem}
+  .csv-bar>div{height:100%;background:linear-gradient(90deg,var(--purple),var(--green));width:0;transition:width .5s}
+  .csv-bar span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:800;color:#1f1147}
+  .csv-controls{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin-bottom:.9rem}
+  .csv-controls label{font-size:.82rem;font-weight:700;color:var(--purple);display:flex;align-items:center;gap:.4rem}
+  .csv-controls input{padding:.4rem .5rem;border:1px solid var(--line);border-radius:8px;font-size:.95rem;font-weight:800;text-align:center}
+  .csv-hint{font-size:.75rem;color:var(--muted)}
+  .csv-history{display:flex;gap:.5rem;flex-wrap:wrap}
+  .csv-day{background:#faf8fc;border:1px solid var(--line);border-radius:10px;padding:.4rem .55rem;font-size:.72rem;text-align:center;min-width:58px}
+  .csv-day b{display:block;color:var(--purple);font-size:1.05rem}
+  .csv-day span{color:var(--muted)}
   .funnel-row{display:grid;grid-template-columns:180px 1fr 96px;gap:.6rem;align-items:center;margin:.4rem 0;font-size:.85rem}
   .funnel-row .label{color:var(--ink);font-weight:600}
   .funnel-row .bar{height:22px;background:#eef0f4;border-radius:10px;overflow:hidden;position:relative}
@@ -242,6 +259,26 @@
       <div class="kpi o"><b id="kpi-cola">—</b><span>Cola import · hoy</span></div>
       <div class="kpi y"><b id="kpi-conversion">—</b><span>% conversión</span></div>
       <div class="kpi"><b id="kpi-eventos">—</b><span>Eventos registrados</span></div>
+    </div>
+
+    <div class="panel" id="csvFlowPanel">
+      <h2>📋 Flujo de la lista <small>cómo se va contactando la lista importada, día a día</small></h2>
+      <div class="csv-nums">
+        <div class="csv-num"><b id="csv-total">—</b><span>En la lista</span></div>
+        <div class="csv-num g"><b id="csv-contactados">—</b><span>Ya contactados</span></div>
+        <div class="csv-num o"><b id="csv-cola">—</b><span>En cola</span></div>
+        <div class="csv-num"><b id="csv-hoy">—</b><span>Hoy</span></div>
+      </div>
+      <div class="csv-bar"><div id="csv-bar-fill"></div><span id="csv-bar-pct">0%</span></div>
+      <div class="csv-controls">
+        <label>📨 Contactar por día:
+          <input type="number" id="csv-rate-input" min="0" max="500" step="1" value="0">
+        </label>
+        <button id="csv-rate-save" class="btn green">Guardar ritmo</button>
+        <span id="csv-rate-status" class="csv-hint"></span>
+        <span id="csv-dias" class="csv-hint"></span>
+      </div>
+      <div id="csv-history" class="csv-history"></div>
     </div>
 
     <div class="atencion">
@@ -612,16 +649,41 @@
     }
   }
 
+  // ── Panel "Flujo de la lista (CSV)" ──
+  let _rateEditing = false; // no pisar el input mientras el usuario lo edita
+  function renderCsvFlow(a) {
+    if (!a) return;
+    $('csv-total').textContent = a.total ?? '—';
+    $('csv-contactados').textContent = a.contactados ?? '—';
+    $('csv-cola').textContent = a.enCola ?? '—';
+    $('csv-hoy').textContent = `${a.activadosHoy ?? 0}/${a.leadsPorDia ?? 0}`;
+    const pct = a.total > 0 ? Math.round((a.contactados / a.total) * 100) : 0;
+    $('csv-bar-fill').style.width = pct + '%';
+    $('csv-bar-pct').textContent = pct + '% contactado';
+    if (!_rateEditing) $('csv-rate-input').value = a.leadsPorDia ?? 0;
+    $('csv-dias').textContent = (a.enCola > 0 && a.leadsPorDia > 0)
+      ? `A ${a.leadsPorDia}/día quedan ~${a.diasRestantes} día(s) para acabar.`
+      : (a.enCola === 0 && a.total > 0 ? '✅ Lista completada' : '');
+    const hist = (a.porDia || []).slice(0, 7);
+    $('csv-history').innerHTML = hist.length === 0
+      ? '<div class="csv-hint">Aún no se ha contactado a nadie de la lista.</div>'
+      : hist.map(d => `<div class="csv-day"><b>${d.n}</b><span>${d.fecha.slice(5)}</span></div>`).join('');
+  }
+
   async function refresh() {
     if (currentTab !== 'inicio') return; // ahorra si no estamos viendo el dashboard
     try {
-      const [stats, leadsResp, statsActivity, live, inbox] = await Promise.all([
+      const [stats, leadsResp, statsActivity, live, inbox, activation] = await Promise.all([
         fetchJSON('/api/stats'),
         fetchJSON('/api/leads'),
         fetchJSON('/api/stats/activity'),
         fetchJSON('/api/live?minutes=10'),
         fetchJSON('/api/inbox'),
+        fetchJSON('/api/activation'),
       ]);
+
+      // ── Flujo de la lista importada (CSV) ──
+      renderCsvFlow(activation);
 
       $('kpi-total').textContent = stats.total;
       $('kpi-activos').textContent = stats.activos;
@@ -943,6 +1005,25 @@
   $('leadSort').addEventListener('change', (e) => { leadSort = e.target.value; leadPage = 1; refresh(); });
   $('pagPrev').addEventListener('click', () => { if (leadPage > 1) { leadPage--; selectedLeadId = null; refresh(); } });
   $('pagNext').addEventListener('click', () => { leadPage++; selectedLeadId = null; refresh(); });
+
+  // ─── Ritmo diario (leads/día) desde el CRM ──────────────
+  $('csv-rate-input').addEventListener('focus', () => { _rateEditing = true; });
+  $('csv-rate-input').addEventListener('blur', () => { setTimeout(() => { _rateEditing = false; }, 400); });
+  $('csv-rate-save').addEventListener('click', async () => {
+    const v = parseInt($('csv-rate-input').value, 10);
+    if (isNaN(v) || v < 0) { $('csv-rate-status').textContent = '⚠️ número no válido'; return; }
+    $('csv-rate-status').textContent = 'Guardando…';
+    try {
+      const r = await fetchJSON('/api/activation/rate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadsPorDia: v }),
+      });
+      _rateEditing = false;
+      $('csv-rate-status').textContent = `✅ ${r.leadsPorDia}/día guardado`;
+      setTimeout(() => { $('csv-rate-status').textContent = ''; }, 3000);
+      refresh();
+    } catch (e) { $('csv-rate-status').textContent = '❌ error al guardar'; }
+  });
 
   // ─── Copiar al portapapeles ────────────────────────────
   document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async (e) => {
