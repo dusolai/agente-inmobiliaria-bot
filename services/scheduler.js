@@ -305,6 +305,54 @@ async function procesarRecordatoriosFase2B() {
     // Leads antiguos pueden no tener el contador fase2b inicializado
     const fase2b = (lead.recordatorios && lead.recordatorios.fase2b) || { enviados: 0, ultimoEnvio: null };
 
+    const actividad = activityLog.getActivityByLead(lead.id);
+
+    // Si tiene actividad reciente en la landing es que sigue dentro viendo
+    // los vídeos — no le interrumpimos con un recordatorio (ni le mandamos el
+    // 1-a-1) a mitad; puede pulsar agendar él mismo en unos minutos.
+    const EVENTOS_LANDING = /^(landing_view|video_play|video_progress|video_complete|webinar_unlocked|extras_unlocked|calendly_button_revealed)/;
+    const ultimoEventoLanding = actividad
+      .filter((e) => EVENTOS_LANDING.test(e.type))
+      .reduce((max, e) => Math.max(max, new Date(e.ts).getTime()), 0);
+    if (ultimoEventoLanding && ahora - ultimoEventoLanding < 30 * 60 * 1000) continue;
+
+    // ¿Ya TERMINÓ el webinar? La landing revela el botón de agendar al llegar
+    // al 90% del webinar (evento calendly_button_revealed). Si el lead sigue en
+    // video_visto es que vio TODA la presentación pero no pulsó agendar — no
+    // tiene sentido mandarle "vuelve a ver el vídeo": lo que le falta es el
+    // enlace del 1-a-1. Lo promovemos a reunion_registrado y le mandamos el
+    // acceso al 1-a-1 (igual que si hubiera pulsado el botón). A partir de ahí
+    // los recordatorios los lleva la Fase 3.
+    const terminoWebinar = actividad.some(
+      (e) =>
+        e.type === 'calendly_button_revealed' ||
+        ((e.type === 'video_complete' || e.type === 'video_progress_90') &&
+          e.meta && e.meta.videoId === 'videoWebinar')
+    );
+    if (terminoWebinar) {
+      // La máquina de estados no salta enviado → registrado directo.
+      if (lead.estado === S.VIDEO_ENVIADO) {
+        leadManager.transitionState(lead.id, S.VIDEO_VISTO);
+        leadManager.updateLead(lead.id, { videoVistoAt: new Date().toISOString() });
+      }
+      const r = leadManager.transitionState(lead.id, S.REUNION_REGISTRADO);
+      if (!r.error) {
+        leadManager.updateLead(lead.id, { reunionRegistradoAt: new Date().toISOString() });
+        activityLog.appendActivity(lead.id, 'cta_1a1_auto', { motivo: 'webinar_completado' });
+        const enlace1a1 = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
+        console.log(`🎬→📞 [Scheduler] ${lead.nombre} terminó el webinar sin pulsar agendar → enviando 1-a-1`);
+        await messaging.sendTextMessage(
+          lead.telefono,
+          messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 })
+        );
+      }
+      // Tanto si el envío salió como si no, el lead ya está en Fase 3: la recoge
+      // el próximo ciclo. No le mandamos el recordatorio de landing.
+      continue;
+    }
+
+    // A partir de aquí, leads que NO han terminado el webinar: recordatorio de
+    // landing para que retomen la presentación donde la dejaron.
     if (fase2b.enviados >= MAX_REMINDERS) {
       const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
       if (!_envioOk(envio)) continue; // canal caído: no descartamos todavía
@@ -318,16 +366,6 @@ async function procesarRecordatoriosFase2B() {
       : new Date(lead.videoVistoAt || lead.updatedAt).getTime();
 
     if (ahora - referencia < _intervaloMs(fase2b.enviados)) continue;
-
-    const actividad = activityLog.getActivityByLead(lead.id);
-
-    // Si tiene actividad reciente en la landing es que sigue dentro viendo
-    // los vídeos — no le interrumpimos con un recordatorio a mitad.
-    const EVENTOS_LANDING = /^(landing_view|video_play|video_progress|video_complete|webinar_unlocked|extras_unlocked|calendly_button_revealed)/;
-    const ultimoEventoLanding = actividad
-      .filter((e) => EVENTOS_LANDING.test(e.type))
-      .reduce((max, e) => Math.max(max, new Date(e.ts).getTime()), 0);
-    if (ultimoEventoLanding && ahora - ultimoEventoLanding < 30 * 60 * 1000) continue;
 
     // ¿Dónde lo dejó? Lo deducimos de los eventos que reporta la landing.
     let etapa = 'inicio';
@@ -369,8 +407,8 @@ async function procesarRecordatoriosFase3() {
   const ahora = Date.now();
 
   for (const lead of leads) {
-    const { recordatorios } = lead;
-    const fase3 = recordatorios.fase3;
+    // Leads antiguos (o promovidos desde la Fase 2B) pueden no traer fase3.
+    const fase3 = (lead.recordatorios && lead.recordatorios.fase3) || { enviados: 0, ultimoEnvio: null };
 
     if (fase3.enviados >= MAX_REMINDERS) {
       const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));

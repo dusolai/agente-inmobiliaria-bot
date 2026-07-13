@@ -143,6 +143,52 @@ router.put('/leads/:id/state', (req, res) => {
 });
 
 /**
+ * POST /api/leads/:id/send-1a1
+ * Manda al lead el enlace de la reunión 1-a-1 y lo deja en reunion_registrado.
+ * Se usa desde el CRM (botón "registró a reunión") para leads que terminaron la
+ * presentación pero no pulsaron el botón de agendar: cambiar el estado a mano
+ * (PUT /state) NO enviaba nada, así que el lead se quedaba sin el enlace.
+ * Es el equivalente manual a pulsar "agendar" en la landing.
+ */
+router.post('/leads/:id/send-1a1', async (req, res) => {
+  try {
+    const messaging = require('../services/messaging');
+    const messages = require('../templates/messages');
+    const conversationFlow = require('../services/conversationFlow');
+    const activityLog = require('../services/activityLog');
+    const S = leadManager.LEAD_STATES;
+
+    const lead = leadManager.getLeadById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
+
+    // La máquina de estados no salta enviado → registrado directo.
+    if (lead.estado === S.VIDEO_ENVIADO) {
+      leadManager.transitionState(lead.id, S.VIDEO_VISTO);
+      leadManager.updateLead(lead.id, { videoVistoAt: new Date().toISOString() });
+    }
+    // Solo transicionamos si aún no está en registrado (permite reenviar el
+    // enlace a un lead que ya estaba en reunion_registrado sin dar error).
+    if (leadManager.getLeadById(lead.id).estado !== S.REUNION_REGISTRADO) {
+      const r = leadManager.transitionState(lead.id, S.REUNION_REGISTRADO);
+      if (r.error) return res.status(400).json({ error: r.error });
+      leadManager.updateLead(lead.id, { reunionRegistradoAt: new Date().toISOString() });
+    }
+
+    activityLog.appendActivity(lead.id, 'cta_1a1_manual', { via: 'crm' }, req.ip);
+    const enlace1a1 = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
+    await messaging.sendTextMessage(
+      lead.telefono,
+      messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 })
+    );
+
+    res.json({ success: true, lead: leadManager.getLeadById(lead.id) });
+  } catch (err) {
+    console.error('❌ [API] Error send-1a1:', err.message);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+/**
  * DELETE /api/leads/:id
  * Elimina un lead. Si se pasa ?wipeActivity=1 también borra todos sus
  * eventos del activity log (útil para empezar de cero en pruebas).

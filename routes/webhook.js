@@ -156,23 +156,15 @@ router.post('/zoom-attendance', async (req, res) => {
         const duracionMinutos = req.body.duration || null;
         activityLog.appendActivity(lead.id, 'meeting_joined', { duracionMinutos });
 
-        // Transicionamos a "reunion_asistio" y enviamos el cierre 1-a-1
+        // La reunión que se atiende ES el 1-a-1 (la grupal está omitida por
+        // fricción). Marcamos asistencia pero NO reenviamos el Calendly del
+        // 1-a-1: ya lo tienen y acaban de asistir. Sería un duplicado absurdo.
         const result = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
         if (result.error) {
           return res.status(400).json({ error: result.error });
         }
 
-        const enlaceCalendly = conversationFlow.enlaceRedirectorCalendly(
-          leadManager.getLeadById(lead.id),
-          'individual'
-        );
-        const texto = messages.mensajeCierre({
-          nombre: lead.nombre,
-          enlaceCalendly,
-        });
-        await messaging.sendTextMessage(lead.telefono, texto);
-
-        console.log(`🤝 [Webhook] Lead asistió a reunión: ${lead.nombre}`);
+        console.log(`🤝 [Webhook] Lead asistió al 1-a-1: ${lead.nombre}`);
       }
 
       return res.json({ success: true, lead: leadManager.getLeadById(lead.id) });
@@ -189,16 +181,8 @@ router.post('/zoom-attendance', async (req, res) => {
         );
 
         if (match) {
+          // Marcamos asistencia al 1-a-1 sin reenviar el Calendly (ya lo tienen).
           leadManager.transitionState(match.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
-          const enlaceCalendly = conversationFlow.enlaceRedirectorCalendly(
-            leadManager.getLeadById(match.id),
-            'individual'
-          );
-          const texto = messages.mensajeCierre({
-            nombre: match.nombre,
-            enlaceCalendly,
-          });
-          await messaging.sendTextMessage(match.telefono, texto);
           resultados.push({ lead: match.nombre, status: 'asistio' });
         }
       }

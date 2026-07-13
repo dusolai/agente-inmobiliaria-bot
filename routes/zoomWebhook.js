@@ -132,15 +132,14 @@ router.post('/', async (req, res) => {
         activityLog.appendActivity(lead.id, 'meeting_left', { meetingId, minutos });
         console.log(`🚪 [ZoomWebhook] ${lead.nombre} salió tras ${minutos} min`);
 
-        // Si superó el umbral, marcamos asistio + disparamos el cierre 1-a-1
+        // Si superó el umbral, marcamos asistió al 1-a-1. NO reenviamos el
+        // Calendly: la reunión de Zoom ES el 1-a-1 (la grupal está omitida),
+        // así que reofrecerlo tras asistir no tiene sentido.
         const umbral = config.zoom.minutosAsistenciaValida;
         if (minutos !== null && minutos >= umbral) {
           const ok = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
           if (!ok.error) {
-            const enlace = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
-            const texto = messages.mensajeCierre({ nombre: lead.nombre, enlaceCalendly: enlace });
-            await messaging.sendTextMessage(lead.telefono, texto);
-            console.log(`🤝 [ZoomWebhook] Cierre 1-a-1 enviado a ${lead.nombre} (asistió ${minutos} min)`);
+            console.log(`🤝 [ZoomWebhook] ${lead.nombre} asistió al 1-a-1 (${minutos} min)`);
           }
         } else {
           // Salió pronto: lo dejamos avisado para que el equipo pueda recuperar
@@ -164,12 +163,8 @@ router.post('/', async (req, res) => {
           if (lead) {
             activityLog.appendActivity(lead.id, 'meeting_left', { meetingId, minutos, reason: 'meeting_ended' });
             if (minutos >= config.zoom.minutosAsistenciaValida) {
-              const ok = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
-              if (!ok.error) {
-                const enlace = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
-                const texto = messages.mensajeCierre({ nombre: lead.nombre, enlaceCalendly: enlace });
-                await messaging.sendTextMessage(lead.telefono, texto);
-              }
+              // Asistió al 1-a-1: marcamos estado, sin reenviar el Calendly.
+              leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
             }
           }
         }

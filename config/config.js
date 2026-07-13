@@ -85,12 +85,12 @@ module.exports = {
     // el rol para que el lead sepa quién es: "con Arkaitz, el director del proyecto").
     directorNombre: process.env.DIRECTOR_NOMBRE || 'Arkaitz',
     directorRol: process.env.DIRECTOR_ROL || 'el director del proyecto',
-    // Reunión 22-05: recordatorios cada 24 h (antes 48)
-    reminderIntervalHours: parseInt(process.env.REMINDER_INTERVAL_HOURS) || 24,
-    // Reunión final 15-06: secuencia de 4 intentos (5 min, 24h, 48h, 72h)
-    // antes de desistir y pedir la razón.
+    // Recordatorios a ritmo de 2 al día (cada 12 h).
+    reminderIntervalHours: parseInt(process.env.REMINDER_INTERVAL_HOURS) || 12,
+    // Cadencia pedida: DOS recordatorios cada 24 h → uno cada 12 h (720 min).
+    // Con 4 intentos son 2 días de seguimiento antes de desistir.
     maxReminders: parseInt(process.env.MAX_REMINDERS) || 4,
-    reminderIntervalsMinutes: (process.env.REMINDER_INTERVALS_MINUTES || '5,1440,2880,4320')
+    reminderIntervalsMinutes: (process.env.REMINDER_INTERVALS_MINUTES || '720,720,720,720')
       .split(',')
       .map((s) => parseInt(s.trim()) || 0),
     // Reunión 22-05/Agente: el botón de agenda aparece tras 1 min de vídeo
