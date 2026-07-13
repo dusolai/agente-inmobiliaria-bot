@@ -912,7 +912,7 @@
     return `<div class="actions">
       <button class="btn primary" data-act="resend">Reenviar cuestionario</button>
       <button class="btn green" data-act="mark-video-visto" ${s === 'video_enviado' ? '' : 'disabled'}>Marcar vídeo visto</button>
-      <button class="btn green" data-act="mark-registrado" ${s === 'video_visto' ? '' : 'disabled'}>Enviar enlace 1-a-1 (registrado)</button>
+      <button class="btn green" data-act="mark-registrado" ${(s === 'video_visto' || s === 'reunion_registrado') ? '' : 'disabled'}>${s === 'reunion_registrado' ? 'Reenviar enlace 1-a-1 ahora' : 'Enviar enlace 1-a-1 (registrado)'}</button>
       <button class="btn green" data-act="mark-asistio" ${s === 'reunion_registrado' ? '' : 'disabled'}>Marcar asistió al 1-a-1</button>
       <button class="btn warn" data-act="descartar" ${s === 'descartado' ? 'disabled' : ''}>Descartar</button>
       <button class="btn danger" data-act="eliminar">Eliminar lead</button>
@@ -973,7 +973,7 @@
         toast('Marcado como vídeo visto');
       } else if (act === 'mark-registrado') {
         await fetchJSON(`/api/leads/${id}/send-1a1`, { method: 'POST' });
-        toast('Enlace 1-a-1 enviado · registrado');
+        toast('Enlace 1-a-1 enviado');
       } else if (act === 'mark-asistio') {
         await fetch('/webhook/zoom-attendance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: id, attended: true }) });
         toast('Marcado como asistió al 1-a-1');
