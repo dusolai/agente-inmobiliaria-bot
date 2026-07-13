@@ -13,7 +13,8 @@
  *
  * Sin claves — o ante error, timeout o respuesta rara — devuelve null y el
  * flujo se comporta como siempre (el mensaje queda en "Sin responder" del
- * CRM). Límite: 4 respuestas LLM por lead y hora, para cortar bucles.
+ * CRM). Límite: 20 respuestas LLM por lead y hora (LLM_MAX_RESPUESTAS_HORA),
+ * solo como corta-bucles ante un fallo; en una conversación normal no se toca.
  */
 
 const axios = require('axios');
@@ -22,7 +23,7 @@ const activityLog = require('./activityLog');
 
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const HAIKU_MODEL = process.env.PERSONALIZER_MODEL || 'claude-haiku-4-5';
-const MAX_RESPUESTAS_HORA = Math.max(1, parseInt(process.env.LLM_MAX_RESPUESTAS_HORA, 10) || 4);
+const MAX_RESPUESTAS_HORA = Math.max(1, parseInt(process.env.LLM_MAX_RESPUESTAS_HORA, 10) || 20);
 
 function estaActivo() {
   return Boolean(process.env.GROQ_API_KEY || process.env.ANTHROPIC_API_KEY);
