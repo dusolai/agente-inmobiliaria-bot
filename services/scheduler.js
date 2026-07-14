@@ -367,13 +367,21 @@ async function procesarRecordatoriosFase2B() {
 
     if (ahora - referencia < _intervaloMs(fase2b.enviados)) continue;
 
-    // ¿Dónde lo dejó? Lo deducimos de los eventos que reporta la landing.
+    // ¿Dónde lo dejó EXACTAMENTE? De más avanzado a menos, para que el copy
+    // encaje con su punto real y nunca le digamos "vuelve al vídeo" de algo que
+    // ya vio, ni "estás a mitad del webinar" de algo que no ha abierto:
+    //  - dio al play al webinar y no lo terminó      → 'webinar'
+    //  - terminó el VSL pero no ha abierto el webinar → 'vsl_hecho'
+    //  - empezó el VSL pero no lo terminó            → 'vsl'
+    //  - abrió la landing pero no dio al play        → 'inicio'
+    // (Los que SÍ terminaron el webinar ya salieron arriba, van al 1-a-1.)
+    const jugoWebinar = actividad.some((e) => e.type === 'video_play' && e.meta && e.meta.videoId === 'videoWebinar');
+    const acaboVsl = actividad.some((e) => e.type === 'webinar_unlocked');
+    const jugoAlgo = actividad.some((e) => e.type === 'video_play');
     let etapa = 'inicio';
-    if (actividad.some((e) => e.type === 'webinar_unlocked')) {
-      etapa = 'webinar';
-    } else if (actividad.some((e) => e.type === 'video_play')) {
-      etapa = 'vsl';
-    }
+    if (jugoWebinar) etapa = 'webinar';
+    else if (acaboVsl) etapa = 'vsl_hecho';
+    else if (jugoAlgo) etapa = 'vsl';
 
     const idx = Math.min(fase2b.enviados, funnelReminders.length - 1);
     const msgFn = funnelReminders[idx];

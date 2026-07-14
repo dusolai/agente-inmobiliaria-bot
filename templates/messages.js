@@ -190,6 +190,9 @@ function _lineaEtapaFunnel(etapa) {
   if (etapa === 'webinar') {
     return 'empezaste el webinar pero te quedaste a mitad — justo al final está lo importante';
   }
+  if (etapa === 'vsl_hecho') {
+    return 'ya viste el primer vídeo pero aún te queda el webinar — ahí está lo que de verdad importa';
+  }
   if (etapa === 'vsl') {
     return 'no llegaste a terminar el primer vídeo';
   }
