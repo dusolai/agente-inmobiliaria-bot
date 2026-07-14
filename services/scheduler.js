@@ -453,6 +453,22 @@ async function procesarRecordatoriosFase3() {
 async function ejecutarCiclo() {
   console.log(`\n⏰ [Scheduler] Ciclo de recordatorios — ${new Date().toLocaleString()}`);
   await procesarActivacionDiaria();
+
+  // Los RECORDATORIOS también respetan el horario de día (mismo que la
+  // activación: ACTIVACION_HORA_INICIO–FIN, def. 10–20). Sin esto, un lead
+  // contactado a las 09:30 recibía su recordatorio de las +12h a las 23:30 —
+  // mensaje nocturno = molestia y papeleta de denuncia por spam. Fuera de la
+  // ventana no se pierde nada: el intervalo ya vencido dispara en el primer
+  // ciclo de la mañana siguiente.
+  const horaInicio = parseInt(process.env.ACTIVACION_HORA_INICIO, 10) || 10;
+  const horaFin = parseInt(process.env.ACTIVACION_HORA_FIN, 10) || 20;
+  const hora = new Date().getHours();
+  if (hora < horaInicio || hora >= horaFin) {
+    console.log(`🌙 [Scheduler] Fuera de horario (${hora}h) — recordatorios en pausa hasta las ${horaInicio}h`);
+    console.log(`✅ [Scheduler] Ciclo completado\n`);
+    return;
+  }
+
   await procesarRecordatoriosFase1();
   // Fase 2 (recordatorio del Calendly grupal) queda retirada: el flujo actual
   // no obliga a reservar el grupal. Los leads con la landing enviada se cubren
