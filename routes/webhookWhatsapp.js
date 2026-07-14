@@ -65,7 +65,34 @@ router.post('/', async (req, res) => {
       for (const change of entry.changes || []) {
         const value = change.value || {};
         const mensajes = value.messages || [];
-        // value.statuses = acuses de entrega/lectura → se ignoran
+
+        // ─── Acuses de entrega (statuses) ────────────────────────────
+        // Meta acepta el POST (200 + id) pero la ENTREGA real viene aquí:
+        // sent → delivered → read, o failed (con el motivo). Antes se ignoraba
+        // y el CRM decía "enviado" aunque no llegara. Ahora registramos
+        // entregado y, sobre todo, FALLÓ con su código, para ver la verdad.
+        const estados = value.statuses || [];
+        for (const st of estados) {
+          try {
+            const tel = String(st.recipient_id || '').replace(/[^\d]/g, '');
+            const estado = st.status; // sent | delivered | read | failed
+            if (!tel || !estado) continue;
+            if (estado !== 'delivered' && estado !== 'failed') continue; // sent/read: omitidos (volumen)
+            const leadManager = require('../services/leadManager');
+            const activityLog = require('../services/activityLog');
+            const lead = leadManager.getLeadByPhone(tel);
+            if (!lead) continue;
+            const err = (st.errors && st.errors[0]) || null;
+            activityLog.appendActivity(lead.id, 'message_status', {
+              status: estado,
+              ...(err ? { code: err.code, error: err.title || err.message } : {}),
+            });
+            if (estado === 'failed') {
+              console.warn(`❌ [WhatsAppCloud] ENTREGA FALLIDA a ${tel}: ${err ? err.code + ' ' + (err.title || err.message) : 'sin detalle'}`);
+            }
+          } catch (e) { /* nunca romper el webhook por un status */ }
+        }
+
         for (const msg of mensajes) {
           const telefono = String(msg.from || '').replace(/[^\d]/g, '');
           const texto = _textoDelMensaje(msg);

@@ -559,7 +559,7 @@
   function fmtDateTime(ts) { try { return new Date(ts).toLocaleString('es-ES'); } catch { return ts; } }
   function eventTag(type) {
     if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started' || type === 'question_resent' || type === 'meeting_joined' || type === 'lead_activated' || type === 'opt_out') return 'state';
-    if (type === 'message_received' || type === 'message_sent') return 'msg';
+    if (type === 'message_received' || type === 'message_sent' || type === 'message_status') return 'msg';
     if (type === 'profile_set') return 'profile';
     if (type.startsWith('video_') || type === 'calendly_button_revealed') return 'video';
     if (type.startsWith('calendly_')) return 'calendly';
@@ -591,7 +591,10 @@
       case 'state_changed':      return `${lblEstado(m.from) || '∅'} → ${lblEstado(m.to)}`;
       case 'profile_set':        return `perfil: ${m.perfil}`;
       case 'message_received':   return m.texto ? `"${m.texto}"` : '';
-      case 'message_sent':       return `🤖 agente${m.ok === false ? ' ⚠️ NO ENTREGADO' : ''}: "${m.preview || ''}"`;
+      case 'message_sent':       return `🤖 agente${m.ok === false ? ' ⚠️ RECHAZADO POR META' : ' (aceptado)'}: "${m.preview || ''}"`;
+      case 'message_status':     return m.status === 'failed'
+                                   ? `❌ NO LLEGÓ al móvil${m.code ? ` — Meta ${m.code}: ${m.error || ''}` : ''}`
+                                   : `✓✓ entregado en el móvil`;
       case 'llm_reply':          return `🧠 respuesta generada por IA (${m.proveedor || '?'})`;
       case 'opt_out':            return `🛑 pidió la BAJA: "${m.texto || ''}"`;
       case 'lead_activated':     return `activado del import (${m.activadosHoy || '?'}/${m.cupo || '?'} hoy)`;

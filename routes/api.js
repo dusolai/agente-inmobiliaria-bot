@@ -335,8 +335,11 @@ router.post('/leads/:id/resend-question', async (req, res) => {
       perfil: leadManager.LEAD_PROFILES.SIN_DEFINIR,
     });
     activityLog.appendActivity(lead.id, 'question_resent', { manual: true });
-    await messaging.sendTextMessage(lead.telefono, messages.mensajeReactivacion({ nombre: lead.nombre }));
-    res.json({ ok: true });
+    // Plantilla, no texto libre: el lead (frío) casi nunca está dentro de la
+    // ventana de 24h, y Meta rechaza el texto libre fuera de ella. sendPrimerContacto
+    // manda la plantilla en la API oficial (y texto normal en Baileys).
+    const envio = await messaging.sendPrimerContacto(lead, messages.mensajeReactivacion({ nombre: lead.nombre }), { delaySeconds: 0 });
+    res.json({ ok: true, entrega: envio && envio.success !== false ? 'aceptado' : 'rechazado', detalle: envio && envio.error });
   } catch (err) {
     console.error('❌ [API] Error resend-question:', err.message);
     res.status(500).json({ error: err.message });
