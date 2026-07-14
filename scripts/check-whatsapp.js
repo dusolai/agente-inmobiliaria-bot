@@ -50,6 +50,41 @@ const CALIDAD = {
       '(TIER_250 = 250/24h sin verificar negocio · TIER_1K = 1.000 · TIER_10K = 10.000)');
     if (data.throughput) console.log('Rendimiento:   ', JSON.stringify(data.throughput));
 
+    // ─── Estadísticas de entrega (enviados vs entregados) ────────────
+    // Responde a "de los YA enviados, ¿cuántos entregó Meta de verdad?".
+    // Necesita el WABA ID (WhatsApp Business Account) — el mismo del panel de Meta.
+    const WABA = process.env.WHATSAPP_WABA_ID;
+    if (WABA) {
+      try {
+        const fin = Math.floor(Date.now() / 1000);
+        const ini = fin - 3 * 24 * 3600; // últimos 3 días
+        const aUrl = `https://graph.facebook.com/${VER}/${WABA}?fields=analytics.start(${ini}).end(${fin}).granularity(DAY)&access_token=${encodeURIComponent(TOKEN)}`;
+        const { data: a } = await axios.get(aUrl, { timeout: 15000 });
+        const puntos = (a.analytics && a.analytics.data_points) || [];
+        console.log('\n══════ ENTREGA REAL (últimos 3 días, dato de Meta) ══════');
+        if (!puntos.length) console.log('(Meta aún no ha calculado estadísticas para este periodo)');
+        let tSent = 0, tDel = 0;
+        for (const p of puntos) {
+          const dia = new Date(p.start * 1000).toISOString().slice(0, 10);
+          const pct = p.sent ? Math.round((p.delivered / p.sent) * 100) : 0;
+          console.log(`  ${dia}:  enviados ${p.sent}  →  entregados ${p.delivered}  (${pct}%)`);
+          tSent += p.sent; tDel += p.delivered;
+        }
+        if (tSent) {
+          const pctT = Math.round((tDel / tSent) * 100);
+          console.log(`  ─────`);
+          console.log(`  TOTAL: ${tDel}/${tSent} entregados (${pctT}%)`);
+          if (pctT < 80) console.log(`  ⚠️  Entrega BAJA (${pctT}%) — Meta está reteniendo mensajes. Señal de número tocado.`);
+          else console.log(`  ✅ Entrega buena (${pctT}%) — los mensajes SÍ llegan.`);
+        }
+      } catch (e) {
+        const me = e.response && e.response.data && e.response.data.error;
+        console.log('\n(No pude leer estadísticas de entrega:', me ? me.message : e.message, ')');
+      }
+    } else {
+      console.log('\n(ℹ️  Para ver "enviados vs entregados" añade también:  $env:WHATSAPP_WABA_ID = "2032370564048199")');
+    }
+
     console.log('\n══════ VEREDICTO ══════');
     if (data.quality_rating === 'RED') {
       console.log('🔴 El número está PENALIZADO. Meta acepta los mensajes pero NO los entrega bien.');
