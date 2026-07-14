@@ -312,12 +312,12 @@
         <h2>Leads <small id="lead-count">0</small></h2>
         <div class="lead-filters" id="leadFilters">
           <button data-f="" class="active">Todos</button>
-          <button data-f="esperando_cualificacion">Cualificación</button>
-          <button data-f="video_enviado">Pdte. vídeo</button>
-          <button data-f="video_visto">Vídeo visto</button>
-          <button data-f="reunion_registrado">Registrado</button>
-          <button data-f="reunion_asistio">Asistió</button>
-          <button data-f="agenda_1a1">Agenda 1a1</button>
+          <button data-f="nuevo">En cola</button>
+          <button data-f="esperando_cualificacion">Pregunta</button>
+          <button data-f="video_enviado">Landing enviada</button>
+          <button data-f="video_visto">VSL visto</button>
+          <button data-f="reunion_registrado">Webinar · 1-a-1 enviado</button>
+          <button data-f="reunion_asistio">1-a-1 reservado</button>
           <button data-f="descartado">Descartados</button>
         </div>
         <div class="lead-toolbar">
@@ -515,10 +515,10 @@
     { key: 'landing_view',                     label: 'Abrió landing',              tag: 'lead' },
     { key: 'video_play__video1',               label: '▶ Play VSL',                 tag: 'video' },
     { key: 'video_progress_50__video1',        label: '50% VSL',                    tag: 'video' },
-    { key: 'webinar_unlocked',                 label: '90% VSL · webinar abierto',  tag: 'video' },
+    { key: 'webinar_unlocked',                 label: 'VSL visto · webinar abierto', tag: 'video' },
     { key: 'video_play__videoWebinar',         label: '▶ Play webinar',             tag: 'video' },
     { key: 'video_progress_50__videoWebinar',  label: '50% webinar',                tag: 'video' },
-    { key: 'calendly_button_revealed',         label: '90% webinar · botón visible', tag: 'video' },
+    { key: 'calendly_button_revealed',         label: 'Webinar visto · botón 1-a-1', tag: 'video' },
     { key: 'cta_1a1_click',                    label: 'Pulsó AGENDAR',              tag: 'calendly' },
     { key: 'calendly_intent_individual',       label: 'Clic Calendly 1-a-1',        tag: 'calendly' },
     { key: 'state_reunion_asistio',            label: 'Reservó 1-a-1',              tag: 'state' },
@@ -566,13 +566,29 @@
     if (type === 'landing_view') return 'lead';
     return 'state';
   }
+  // ── Nombres visibles de los estados (embudo actual, sin la grupal) ──
+  // Las claves internas no cambian (los datos guardados las usan); esto es
+  // solo cómo se MUESTRAN. reunion_registrado/asistio eran de la época del
+  // grupal: hoy significan "webinar visto + 1-a-1 enviado" y "1-a-1 reservado".
+  const ESTADO_LABEL = {
+    nuevo: 'En cola (sin contactar)',
+    esperando_cualificacion: 'Pregunta enviada',
+    video_enviado: 'Landing enviada',
+    video_visto: 'VSL visto (vídeo 1)',
+    reunion_registrado: 'Webinar visto · 1-a-1 enviado',
+    reunion_asistio: '1-a-1 reservado',
+    agenda_1a1: 'Cerrado',
+    descartado: 'Descartado',
+  };
+  const lblEstado = (e) => ESTADO_LABEL[e] || String(e || '').replace(/_/g, ' ');
+
   function describe(ev) {
     const m = ev.meta || {};
     switch (ev.type) {
       case 'lead_created':       return `creado · fuente ${m.fuente || '?'}`;
       case 'pilot_started':      return `reset del piloto (nuevo /start)`;
       case 'question_resent':    return `cuestionario reenviado manualmente`;
-      case 'state_changed':      return `${m.from || '∅'} → ${m.to}`;
+      case 'state_changed':      return `${lblEstado(m.from) || '∅'} → ${lblEstado(m.to)}`;
       case 'profile_set':        return `perfil: ${m.perfil}`;
       case 'message_received':   return m.texto ? `"${m.texto}"` : '';
       case 'message_sent':       return `🤖 agente${m.ok === false ? ' ⚠️ NO ENTREGADO' : ''}: "${m.preview || ''}"`;
@@ -749,7 +765,7 @@
       $('inboxMsgs').innerHTML = msgs.length === 0
         ? '<div class="at-vacio">Nada pendiente 👌</div>'
         : msgs.map(m => `<div class="at-row" data-id="${m.leadId}">
-            <div><span class="at-nombre">${esc(m.nombre)}</span> <span class="at-badge msg">${esc(m.estado).replace(/_/g,' ')}</span><div class="at-txt">"${esc(m.texto)}"</div></div>
+            <div><span class="at-nombre">${esc(m.nombre)}</span> <span class="at-badge msg">${esc(lblEstado(m.estado))}</span><div class="at-txt">"${esc(m.texto)}"</div></div>
             <div class="at-hace">${hace(m.haceMin)}</div>
           </div>`).join('') + ((inbox.sinResponder.length > 12) ? `<div class="at-vacio">…y ${inbox.sinResponder.length - 12} más</div>` : '');
 
@@ -759,7 +775,7 @@
       $('inboxHot').innerHTML = hots.length === 0
         ? '<div class="at-vacio">Ninguno ahora mismo</div>'
         : hots.map(h => `<div class="at-row" data-id="${h.leadId}">
-            <div><span class="at-nombre">${esc(h.nombre)}</span> <span class="at-badge hot">${TIPO_HOT[h.tipo] || h.tipo}</span><div class="at-txt">${esc(h.telefono)} · ${esc(h.estado).replace(/_/g,' ')}</div></div>
+            <div><span class="at-nombre">${esc(h.nombre)}</span> <span class="at-badge hot">${TIPO_HOT[h.tipo] || h.tipo}</span><div class="at-txt">${esc(h.telefono)} · ${esc(lblEstado(h.estado))}</div></div>
             <div class="at-hace">${hace(h.haceMin)}</div>
           </div>`).join('') + ((inbox.calientes.length > 12) ? `<div class="at-vacio">…y ${inbox.calientes.length - 12} más</div>` : '');
       document.querySelectorAll('.at-row').forEach(el => el.addEventListener('click', () => irAlLead(el.dataset.id)));
@@ -881,7 +897,7 @@
               <div class="name">${stale}${(l.nombre || 'Sin nombre').replace(/</g,'&lt;')}</div>
               <div class="meta">${mini}${fmtTime(l.updatedAt)}${perfil}</div>
             </div>
-            <span class="badge badge-${l.estado}">${l.estado.replace(/_/g,' ')}</span>
+            <span class="badge badge-${l.estado}">${lblEstado(l.estado)}</span>
           </div>`;
         }).join('');
 
@@ -911,17 +927,17 @@
     const s = lead.estado;
     return `<div class="actions">
       <button class="btn primary" data-act="resend">Reenviar cuestionario</button>
-      <button class="btn green" data-act="mark-video-visto" ${s === 'video_enviado' ? '' : 'disabled'}>Marcar vídeo visto</button>
+      <button class="btn green" data-act="mark-video-visto" ${s === 'video_enviado' ? '' : 'disabled'}>Marcar VSL visto</button>
       <button class="btn green" data-act="mark-registrado" ${['reunion_asistio','agenda_1a1','descartado'].includes(s) ? 'disabled' : ''}>${s === 'reunion_registrado' ? 'Reenviar enlace 1-a-1 ahora' : 'Enviar enlace 1-a-1'}</button>
-      <button class="btn green" data-act="mark-asistio" ${s === 'reunion_registrado' ? '' : 'disabled'}>Marcar asistió al 1-a-1</button>
+      <button class="btn green" data-act="mark-asistio" ${s === 'reunion_registrado' ? '' : 'disabled'}>Marcar 1-a-1 reservado</button>
       <button class="btn warn" data-act="descartar" ${s === 'descartado' ? 'disabled' : ''}>Descartar</button>
       <button class="btn danger" data-act="eliminar">Eliminar lead</button>
     </div>
     <div class="actions" style="margin-top:6px;align-items:center">
       <label style="font-size:12px;color:#777">Fijar estado a mano (no envía nada):</label>
       <select id="forceStateSel" style="padding:6px 8px;border-radius:8px;border:1px solid #ddd">
-        ${['nuevo','esperando_cualificacion','video_enviado','video_visto','reunion_registrado','reunion_asistio','agenda_1a1','descartado']
-          .map(e => `<option value="${e}" ${e === s ? 'selected' : ''}>${e.replace(/_/g,' ')}</option>`).join('')}
+        ${['nuevo','esperando_cualificacion','video_enviado','video_visto','reunion_registrado','reunion_asistio','descartado']
+          .map(e => `<option value="${e}" ${e === s ? 'selected' : ''}>${lblEstado(e)}</option>`).join('')}
       </select>
       <button class="btn" data-act="force-state" style="border:1px solid #ccc">Aplicar</button>
     </div>`;
@@ -939,7 +955,7 @@
           <h3>${(lead.nombre || 'Sin nombre').replace(/</g,'&lt;')}</h3>
           <small>${lead.telefono}${lead.email ? ' · ' + lead.email : ''}${lead.perfil && lead.perfil !== 'sin_definir' ? ' · ' + lead.perfil : ''}</small>
         </div>
-        <span class="badge badge-${lead.estado}">${lead.estado.replace(/_/g,' ')}</span>
+        <span class="badge badge-${lead.estado}">${lblEstado(lead.estado)}</span>
       </div>${renderActions(lead)}`;
 
       const videoSummary = renderVideoSummary(eventos);
@@ -978,13 +994,13 @@
         toast('Cuestionario reenviado');
       } else if (act === 'mark-video-visto') {
         await fetchJSON(`/api/leads/${id}/state`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: 'video_visto' }) });
-        toast('Marcado como vídeo visto');
+        toast('Marcado: VSL visto');
       } else if (act === 'mark-registrado') {
         await fetchJSON(`/api/leads/${id}/send-1a1`, { method: 'POST' });
         toast('Enlace 1-a-1 enviado');
       } else if (act === 'mark-asistio') {
         await fetch('/webhook/zoom-attendance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadId: id, attended: true }) });
-        toast('Marcado como asistió al 1-a-1');
+        toast('Marcado: 1-a-1 reservado');
       } else if (act === 'force-state') {
         const sel = document.getElementById('forceStateSel');
         const nuevo = sel ? sel.value : '';
