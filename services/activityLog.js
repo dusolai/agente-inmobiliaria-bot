@@ -114,9 +114,12 @@ function getStats() {
       leadsCalIndividual.add(e.leadId);
     }
 
-    // Contamos cuántos leads alcanzaron cada estado del embudo (a través
-    // de state_changed con meta.to).
-    if (e.type === 'state_changed' && e.meta && e.meta.to) {
+    // Contamos cuántos leads alcanzaron cada estado del embudo (a través de
+    // state_changed con meta.to). EXCLUIMOS los cambios forzados a mano
+    // (force:true): son correcciones del admin, no avance real del lead, y no
+    // deben inflar el embudo (p. ej. la reserva "fantasma" de Begoña tras la
+    // recuperación, forzada de nuevo → reunion_asistio).
+    if (e.type === 'state_changed' && e.meta && e.meta.to && !e.meta.force) {
       const st = e.meta.to;
       if (!leadsEnEstado.has(st)) leadsEnEstado.set(st, new Set());
       leadsEnEstado.get(st).add(e.leadId);
