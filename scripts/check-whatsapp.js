@@ -65,9 +65,15 @@ const CALIDAD = {
         if (!puntos.length) console.log('(Meta aún no ha calculado estadísticas para este periodo)');
         let tSent = 0, tDel = 0;
         for (const p of puntos) {
-          const dia = new Date(p.start * 1000).toISOString().slice(0, 10);
+          // OJO: Meta agrupa los días en la zona horaria de la cuenta (Madrid),
+          // no en UTC. Etiquetamos con la fecha española del FIN del tramo -1s
+          // para que "14 jul" sea de verdad el día 14 en España.
+          const dia = new Date((p.end - 1) * 1000).toLocaleDateString('es-ES', {
+            timeZone: 'Europe/Madrid', day: '2-digit', month: 'short', year: 'numeric',
+          });
           const pct = p.sent ? Math.round((p.delivered / p.sent) * 100) : 0;
-          console.log(`  ${dia}:  enviados ${p.sent}  →  entregados ${p.delivered}  (${pct}%)`);
+          const fallos = p.sent - p.delivered;
+          console.log(`  ${dia}:  enviados ${p.sent}  →  entregados ${p.delivered}  (${pct}%)${fallos ? `  ⚠️ ${fallos} no llegaron` : ''}`);
           tSent += p.sent; tDel += p.delivered;
         }
         if (tSent) {
