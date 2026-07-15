@@ -16,6 +16,22 @@ const activityLog = require('../services/activityLog');
  *   • La URL final de Calendly lleva utm_content=lead_<id> + name + email
  *     prerellenado, para identificar la reserva en el panel de Calendly.
  */
+/**
+ * ¿Quien abre el enlace es un ROBOT, no el lead?
+ *
+ * Los mensajes van con vista previa (preview_url), así que al enviar un enlace
+ * WhatsApp lo visita AL INSTANTE para generar la miniatura. Eso caía aquí y se
+ * registraba como "el lead pulsó el enlace" 1-3 segundos después del envío:
+ * clics fantasma que inflaban el embudo (los 5 primeros calendly_intent eran
+ * TODOS del robot, ninguno real). Seguimos redirigiendo —la vista previa debe
+ * funcionar— pero no lo contamos como clic.
+ */
+function _esBot(req) {
+  const ua = String(req.headers['user-agent'] || '').toLowerCase();
+  if (!ua) return true; // sin user-agent = no es un navegador humano
+  return /whatsapp|facebookexternalhit|facebookcatalog|meta-external|bot\b|crawler|spider|preview|curl|wget|python-requests|axios|headless|slackbot|telegrambot|twitterbot|discordbot|linkedinbot|embedly|quora link preview|skypeuripreview/.test(ua);
+}
+
 function _redirectorCalendly(req, res, tipo) {
   try {
     const leadId = req.query.l || req.query.lead || req.query.leadId;
@@ -33,7 +49,11 @@ function _redirectorCalendly(req, res, tipo) {
     if (leadId) {
       const lead = leadManager.getLeadById(leadId);
       if (lead) {
-        activityLog.appendActivity(lead.id, 'calendly_intent', { tipo }, req.ip);
+        if (_esBot(req)) {
+          console.log(`🤖 [Redirector] Vista previa de robot en /r/${tipo} (${lead.nombre}) — NO cuenta como clic`);
+        } else {
+          activityLog.appendActivity(lead.id, 'calendly_intent', { tipo }, req.ip);
+        }
         destino = conversationFlow.enlaceCalendlyConTracking(baseUrl, lead);
       }
     }
@@ -62,7 +82,7 @@ router.get('/presentacion', (req, res) => {
     }
     if (leadId) {
       const lead = leadManager.getLeadById(leadId);
-      if (lead) {
+      if (lead && !_esBot(req)) {
         activityLog.appendActivity(lead.id, 'presentacion_intent', null, req.ip);
       }
     }
