@@ -77,7 +77,9 @@ router.post('/', async (req, res) => {
             const tel = String(st.recipient_id || '').replace(/[^\d]/g, '');
             const estado = st.status; // sent | delivered | read | failed
             if (!tel || !estado) continue;
-            if (estado !== 'delivered' && estado !== 'failed') continue; // sent/read: omitidos (volumen)
+            // 'sent' se omite (es lo mismo que "aceptado", ya registrado).
+            // delivered / read / failed sí: son la verdad de la entrega.
+            if (estado !== 'delivered' && estado !== 'read' && estado !== 'failed') continue;
             const leadManager = require('../services/leadManager');
             const activityLog = require('../services/activityLog');
             const lead = leadManager.getLeadByPhone(tel);

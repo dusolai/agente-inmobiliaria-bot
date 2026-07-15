@@ -594,6 +594,8 @@
       case 'message_sent':       return `🤖 agente${m.ok === false ? ' ⚠️ RECHAZADO POR META' : ' (aceptado)'}: "${m.preview || ''}"`;
       case 'message_status':     return m.status === 'failed'
                                    ? `❌ NO LLEGÓ al móvil${m.code ? ` — Meta ${m.code}: ${m.error || ''}` : ''}`
+                                   : m.status === 'read'
+                                   ? `👀 LO HA LEÍDO (doble check azul)`
                                    : `✓✓ entregado en el móvil`;
       case 'llm_reply':          return `🧠 respuesta generada por IA (${m.proveedor || '?'})`;
       case 'opt_out':            return `🛑 pidió la BAJA: "${m.texto || ''}"`;
@@ -974,7 +976,19 @@
               </div>
             </div>`).join('')}</div>`;
 
-      $('leadDetail').innerHTML = head + videoSummary + timeline;
+      // El panel se refresca cada 3s. Repintar destruye el historial y te
+      // devuelve arriba (a lo más reciente) justo mientras lees lo antiguo.
+      // 1) Si NADA ha cambiado, no repintamos: así el scroll no se mueve.
+      // 2) Si cambia, conservamos la posición del scroll del historial.
+      const nuevoHtml = head + videoSummary + timeline;
+      const cont = $('leadDetail');
+      if (cont._lastHtml === nuevoHtml) return;
+      const tlPrev = cont.querySelector('.timeline');
+      const scrollPrev = tlPrev ? tlPrev.scrollTop : 0;
+      cont.innerHTML = nuevoHtml;
+      cont._lastHtml = nuevoHtml;
+      const tlNew = cont.querySelector('.timeline');
+      if (tlNew && scrollPrev) tlNew.scrollTop = scrollPrev;
       bindActions();
     } catch (err) {
       $('leadDetail').innerHTML = `<div class="empty">Error: ${err.message}</div>`;
