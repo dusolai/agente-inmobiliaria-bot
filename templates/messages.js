@@ -67,7 +67,8 @@ function mensajeRamaProfesional({ nombre, enlaceLanding }) {
     `¡Genial ${nombre}!\n\n` +
     `Aquí tienes la presentación completa del proyecto. Empieza por el vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Cuando termines, en la propia página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol} 🎯`
+    `Al terminar el webinar se te desbloquea el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol} 🎯\n\n` +
+    `Lo hacemos así a propósito: a esa reunión se viene con la presentación ya vista, para no hacerte perder el tiempo. Allí solo se habla de tu caso.`
   );
 }
 
@@ -76,7 +77,8 @@ function mensajeRamaEmprendedor({ nombre, enlaceLanding }) {
     `Entendido ${nombre} 🚀\n\n` +
     `Aquí tienes la presentación, va al grano. Verás primero un vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Al terminar, en la misma página se activa el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}.` +
+    `Al terminar el webinar se te desbloquea el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol} 🎯\n\n` +
+    `Lo hacemos así a propósito: a esa reunión se viene con la presentación ya vista, para no hacerte perder el tiempo. Allí solo se habla de tu caso.` +
     _notaPortugues('emprendedor')
   );
 }
