@@ -347,6 +347,29 @@ router.post('/leads/:id/resend-question', async (req, res) => {
 });
 
 /**
+ * POST /api/mantenimiento/limpiar-clics-falsos
+ * Borra del histórico los "clics" que en realidad eran la vista previa de
+ * WhatsApp (intents registrados a segundos del envío del enlace). Inflaban el
+ * embudo con clics que nunca hizo nadie.
+ * Body: { dryRun: true } → solo lista lo que borraría, sin tocar nada.
+ */
+router.post('/mantenimiento/limpiar-clics-falsos', (req, res) => {
+  try {
+    const dryRun = Boolean(req.body && req.body.dryRun);
+    const r = activityLog.limpiarClicsFalsos({ dryRun });
+    res.json({
+      success: true,
+      dryRun,
+      total: r.total,
+      eliminados: r.eliminados.map((e) => ({ ts: e.ts, leadId: e.leadId, type: e.type })),
+    });
+  } catch (err) {
+    console.error('❌ [API] Error limpiar-clics-falsos:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/import
  * Importa una lista de leads (desde el CSV en el CRM) en modo SEGURO: los crea
  * en estado "nuevo" SIN enviar ningún mensaje. El activador diario los va

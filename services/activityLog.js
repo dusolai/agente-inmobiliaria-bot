@@ -257,6 +257,50 @@ function getActivacionesPorDia() {
     .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
 }
 
+/**
+ * Limpia los "clics" que en realidad fueron la VISTA PREVIA de WhatsApp.
+ *
+ * Los mensajes van con preview_url, así que al enviar un enlace WhatsApp lo
+ * visita al instante para generar la miniatura; eso caía en el redirector y se
+ * registraba como calendly_intent / presentacion_intent 1-3 s después del
+ * envío. Un humano no lee y pulsa en 3 segundos: esos clics son falsos e
+ * inflaban el embudo. Aquí se borran del histórico.
+ *
+ * Solo elimina intents que caen dentro de `ventanaMs` tras un message_sent del
+ * MISMO lead. Un clic real (minutos/horas después) queda intacto.
+ *
+ * @param {object} opts { dryRun: solo listar, ventanaMs: margen (15s por defecto) }
+ * @returns {{ eliminados: object[], total: number }}
+ */
+function limpiarClicsFalsos({ dryRun = false, ventanaMs = 15000 } = {}) {
+  const all = readAll();
+
+  // Índice: momentos en que se envió un mensaje a cada lead
+  const enviosPorLead = new Map();
+  for (const e of all) {
+    if (e.type !== 'message_sent') continue;
+    const t = new Date(e.ts).getTime();
+    if (isNaN(t)) continue;
+    if (!enviosPorLead.has(e.leadId)) enviosPorLead.set(e.leadId, []);
+    enviosPorLead.get(e.leadId).push(t);
+  }
+
+  const esFalso = (e) => {
+    if (e.type !== 'calendly_intent' && e.type !== 'presentacion_intent') return false;
+    const t = new Date(e.ts).getTime();
+    if (isNaN(t)) return false;
+    const envios = enviosPorLead.get(e.leadId) || [];
+    return envios.some((s) => t - s >= 0 && t - s <= ventanaMs);
+  };
+
+  const eliminados = all.filter(esFalso);
+  if (!dryRun && eliminados.length) {
+    writeAll(all.filter((e) => !esFalso(e)));
+    console.log(`🧹 [Activity] ${eliminados.length} clics falsos (vista previa del robot) eliminados del histórico`);
+  }
+  return { eliminados, total: eliminados.length };
+}
+
 // Borra del archivo todos los eventos asociados a un leadId.
 // Útil para "empezar de cero" en pruebas tras eliminar el lead.
 function deleteActivityByLead(leadId) {
@@ -277,5 +321,6 @@ module.exports = {
   getLiveActivity,
   getInboxData,
   getActivacionesPorDia,
+  limpiarClicsFalsos,
   deleteActivityByLead,
 };
