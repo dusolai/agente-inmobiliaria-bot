@@ -91,6 +91,26 @@ router.post('/', async (req, res) => {
             });
             if (estado === 'failed') {
               console.warn(`❌ [WhatsAppCloud] ENTREGA FALLIDA a ${tel}: ${err ? err.code + ' ' + (err.title || err.message) : 'sin detalle'}`);
+
+              // Fallo PERMANENTE (el número no tiene WhatsApp / no existe):
+              // insistir es contraproducente — gasta cupo de los 250/24h y,
+              // sobre todo, Meta penaliza los NO entregados y hunde la calidad
+              // del número. Y nunca va a convertir. Se descarta al primer fallo.
+              // OJO: 131047 (fuera de ventana 24h) y 131049 (calidad) NO entran
+              // aquí: son temporales, el lead sigue siendo válido.
+              const PERMANENTES = [131026, 133010];
+              const S = leadManager.LEAD_STATES;
+              if (err && PERMANENTES.includes(Number(err.code)) && lead.estado !== S.DESCARTADO) {
+                const r = leadManager.transitionState(lead.id, S.DESCARTADO);
+                if (r.error) {
+                  leadManager.updateLead(lead.id, { estado: S.DESCARTADO, descartadoAt: new Date().toISOString() });
+                }
+                activityLog.appendActivity(lead.id, 'sin_whatsapp', {
+                  code: err.code,
+                  error: err.title || err.message,
+                });
+                console.warn(`🚫 [WhatsAppCloud] ${lead.nombre} descartado: su número no tiene WhatsApp (${err.code})`);
+              }
             }
           } catch (e) { /* nunca romper el webhook por un status */ }
         }

@@ -597,7 +597,7 @@
   }
   function fmtDateTime(ts) { try { return new Date(ts).toLocaleString('es-ES'); } catch { return ts; } }
   function eventTag(type) {
-    if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started' || type === 'question_resent' || type === 'meeting_joined' || type === 'lead_activated' || type === 'opt_out') return 'state';
+    if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started' || type === 'question_resent' || type === 'meeting_joined' || type === 'lead_activated' || type === 'opt_out' || type === 'sin_whatsapp') return 'state';
     if (type === 'message_received' || type === 'message_sent' || type === 'message_status') return 'msg';
     if (type === 'profile_set') return 'profile';
     if (type.startsWith('video_') || type === 'calendly_button_revealed') return 'video';
@@ -631,6 +631,7 @@
       case 'profile_set':        return `perfil: ${m.perfil}`;
       case 'message_received':   return m.texto ? `"${m.texto}"` : '';
       case 'message_sent':       return `🤖 agente${m.ok === false ? ' ⚠️ RECHAZADO POR META' : ' (aceptado)'}: "${m.preview || ''}"`;
+      case 'sin_whatsapp':       return `🚫 Descartado automáticamente: este número NO tiene WhatsApp${m.code ? ` (Meta ${m.code})` : ''}`;
       case 'message_status':     return m.status === 'failed'
                                    ? `❌ NO LLEGÓ al móvil${m.code ? ` — Meta ${m.code}: ${m.error || ''}` : ''}`
                                    : m.status === 'read'
