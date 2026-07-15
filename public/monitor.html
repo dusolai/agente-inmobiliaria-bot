@@ -186,6 +186,25 @@
   .vs-fill{height:100%;border-radius:6px;transition:width .3s ease}
   .vs-pct{font-weight:700;text-align:right;font-size:.78rem}
   .timeline{max-height:430px;overflow-y:auto;padding-right:.5rem}
+  /* Chat con el lead (escribes tú, mismo número y chat de WhatsApp) */
+  .chat-box{border:1px solid var(--line);border-radius:12px;padding:.9rem;margin:.9rem 0;background:#fbfbfe}
+  .chat-tit{font-size:.8rem;color:var(--purple);font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin-bottom:.6rem}
+  .chat-tit small{font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:.4rem}
+  .chat-aviso{font-size:.75rem;font-weight:600;padding:.45rem .6rem;border-radius:8px;margin-bottom:.6rem}
+  .chat-aviso.ok{background:#e8f7ee;color:#1f6b3e}
+  .chat-aviso.warn{background:#fff3d6;color:#a67400}
+  .chat-msgs{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.45rem;padding:.3rem;background:#f4f2f8;border-radius:8px;margin-bottom:.6rem}
+  .chat-linea{display:flex}
+  .chat-linea.mio{justify-content:flex-end}
+  .burbuja{max-width:78%;padding:.4rem .6rem;border-radius:10px;font-size:.82rem;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.06);white-space:pre-wrap;word-break:break-word}
+  .burbuja.suya{background:#fff;border:1px solid var(--line)}
+  .burbuja.mia{background:#d9fdd3}
+  .burbuja.fallo{background:#fee2e2;border:1px solid #f5b5b5}
+  .burbuja .quien{display:block;font-size:.65rem;font-weight:800;color:var(--muted);margin-bottom:.1rem}
+  .burbuja .hora{display:block;text-align:right;font-size:.62rem;color:var(--muted);margin-top:.15rem}
+  .chat-input{display:flex;gap:.5rem;align-items:flex-end}
+  .chat-input textarea{flex:1;padding:.5rem .6rem;border:1px solid var(--line);border-radius:8px;font-size:.85rem;font-family:inherit;resize:vertical;outline:none}
+  .chat-input textarea:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
   .tl-item{display:grid;grid-template-columns:104px 1fr;gap:.8rem;padding:.55rem 0;border-bottom:1px dashed var(--line);font-size:.85rem;align-items:start}
   .tl-time{color:var(--muted);font-size:.72rem;font-weight:600;font-variant-numeric:tabular-nums;padding-top:2px}
   .tl-event{display:flex;align-items:flex-start;gap:.5rem;flex-wrap:wrap}
@@ -944,6 +963,55 @@
     document.querySelectorAll('.lead').forEach(el => el.classList.toggle('active', el.dataset.id === selectedLeadId));
   }
 
+  // ── Chat con el lead: escribes TÚ, por el mismo número y el mismo chat ──
+  // WhatsApp solo deja mandar texto libre durante 24h desde el último mensaje
+  // del lead. Fuera de esa ventana Meta lo rechaza (131047), así que avisamos
+  // ANTES de escribir en vez de dejar que se pierda en silencio.
+  function renderChat(eventos) {
+    const escC = (s) => String(s || '').replace(/</g, '&lt;');
+    const msgs = eventos
+      .filter((e) => e.type === 'message_sent' || e.type === 'message_received')
+      .slice()
+      .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+    const ultimoDelLead = msgs
+      .filter((e) => e.type === 'message_received')
+      .reduce((max, e) => Math.max(max, new Date(e.ts).getTime()), 0);
+    const restante = ultimoDelLead ? ultimoDelLead + 24 * 3600 * 1000 - Date.now() : -1;
+    const abierta = restante > 0;
+    const h = Math.floor(restante / 3600000);
+    const min = Math.floor((restante % 3600000) / 60000);
+
+    const aviso = abierta
+      ? `<div class="chat-aviso ok">✅ Ventana abierta — tu mensaje le llegará. Se cierra en ${h}h ${min}m.</div>`
+      : `<div class="chat-aviso warn">⚠️ Ventana cerrada${ultimoDelLead ? ' (hace más de 24h que no te escribe)' : ' (nunca te ha escrito)'} — WhatsApp NO permite texto libre y Meta lo rechazará. Usa «Reenviar cuestionario» (va por plantilla) para que te vuelva a escribir y se reabra.</div>`;
+
+    const burbujas = msgs.length === 0
+      ? '<div class="empty">Aún no hay mensajes con este lead.</div>'
+      : msgs.map((e) => {
+          const mio = e.type === 'message_sent';
+          const m = e.meta || {};
+          const fallo = mio && m.ok === false;
+          const quien = mio ? (m.manual ? '🧑 tú' : '🤖 agente') : '';
+          return `<div class="chat-linea ${mio ? 'mio' : 'suyo'}">
+            <div class="burbuja ${mio ? 'mia' : 'suya'}${fallo ? ' fallo' : ''}">
+              ${quien ? `<span class="quien">${quien}</span>` : ''}${escC(m.preview || m.texto || '')}
+              <span class="hora">${fmtTime(e.ts)}${fallo ? ' · ❌ rechazado' : ''}</span>
+            </div>
+          </div>`;
+        }).join('');
+
+    return `<div class="chat-box">
+      <h4 class="chat-tit">💬 Escribir al lead <small>mismo número y mismo chat que usa el agente</small></h4>
+      ${aviso}
+      <div class="chat-msgs" id="chatMsgs">${burbujas}</div>
+      <div class="chat-input">
+        <textarea id="chatTexto" rows="2" placeholder="Escribe tu mensaje…"></textarea>
+        <button class="btn primary" data-act="enviar-mensaje">Enviar</button>
+      </div>
+    </div>`;
+  }
+
   function renderActions(lead) {
     const s = lead.estado;
     return `<div class="actions">
@@ -996,15 +1064,23 @@
       // devuelve arriba (a lo más reciente) justo mientras lees lo antiguo.
       // 1) Si NADA ha cambiado, no repintamos: así el scroll no se mueve.
       // 2) Si cambia, conservamos la posición del scroll del historial.
-      const nuevoHtml = head + videoSummary + timeline;
+      const nuevoHtml = head + renderChat(eventos) + videoSummary + timeline;
       const cont = $('leadDetail');
       if (cont._lastHtml === nuevoHtml) return;
+      // Conservar el scroll del historial y lo que estés escribiendo en el chat
       const tlPrev = cont.querySelector('.timeline');
       const scrollPrev = tlPrev ? tlPrev.scrollTop : 0;
+      const chatPrev = cont.querySelector('#chatTexto');
+      const borrador = chatPrev ? chatPrev.value : '';
+      const escribiendo = chatPrev && document.activeElement === chatPrev;
       cont.innerHTML = nuevoHtml;
       cont._lastHtml = nuevoHtml;
       const tlNew = cont.querySelector('.timeline');
       if (tlNew && scrollPrev) tlNew.scrollTop = scrollPrev;
+      const chatNew = cont.querySelector('#chatTexto');
+      if (chatNew && borrador) { chatNew.value = borrador; if (escribiendo) chatNew.focus(); }
+      const chatMsgs = cont.querySelector('#chatMsgs');
+      if (chatMsgs) chatMsgs.scrollTop = chatMsgs.scrollHeight; // el último mensaje, abajo
       bindActions();
     } catch (err) {
       $('leadDetail').innerHTML = `<div class="empty">Error: ${err.message}</div>`;
@@ -1022,7 +1098,22 @@
     const id = selectedLeadId;
     btn.disabled = true;
     try {
-      if (act === 'resend') {
+      if (act === 'enviar-mensaje') {
+        const ta = document.getElementById('chatTexto');
+        const texto = ((ta && ta.value) || '').trim();
+        if (!texto) { toast('Escribe algo primero'); btn.disabled = false; return; }
+        const r = await fetchJSON(`/api/leads/${id}/mensaje`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texto }),
+        });
+        if (r.success) {
+          if (ta) ta.value = '';
+          toast('✅ Mensaje enviado');
+        } else {
+          // Casi siempre: 131047 = fuera de la ventana de 24h
+          toast('❌ Meta lo rechazó: ' + (r.error || 'no se pudo enviar'));
+        }
+      } else if (act === 'resend') {
         await fetchJSON(`/api/leads/${id}/resend-question`, { method: 'POST' });
         toast('Cuestionario reenviado');
       } else if (act === 'mark-video-visto') {

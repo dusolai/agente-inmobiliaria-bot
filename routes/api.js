@@ -347,6 +347,43 @@ router.post('/leads/:id/resend-question', async (req, res) => {
 });
 
 /**
+ * POST /api/leads/:id/mensaje
+ * Escribe TÚ al lead desde el CRM, por el mismo número y el mismo chat de
+ * WhatsApp que usa el agente. Va como texto libre, así que solo llega si la
+ * ventana de 24h está abierta (el lead escribió hace menos de 24h); si no,
+ * Meta lo rechaza con 131047 y se devuelve el motivo para avisarte.
+ * Body: { texto }
+ */
+router.post('/leads/:id/mensaje', async (req, res) => {
+  try {
+    const texto = req.body && typeof req.body.texto === 'string' ? req.body.texto.trim() : '';
+    if (!texto) return res.status(400).json({ error: 'Falta el texto del mensaje' });
+    if (texto.length > 4000) return res.status(400).json({ error: 'Mensaje demasiado largo (máx. 4000)' });
+
+    const lead = leadManager.getLeadById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
+
+    const messaging = require('../services/messaging');
+    // Sin retraso de "escribiendo": lo mandas tú, no el agente simulando.
+    const envio = await messaging.sendTextMessage(lead.telefono, texto, {
+      delaySeconds: 0,
+      meta: { manual: true },
+    });
+
+    const ok = Boolean(envio) && envio.success !== false;
+    res.json({
+      success: ok,
+      aceptado: ok,
+      error: ok ? undefined : (envio && envio.error) || 'no se pudo enviar',
+      code: envio && envio.code,
+    });
+  } catch (err) {
+    console.error('❌ [API] Error enviando mensaje manual:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/mantenimiento/limpiar-clics-falsos
  * Borra del histórico los "clics" que en realidad eran la vista previa de
  * WhatsApp (intents registrados a segundos del envío del enlace). Inflaban el

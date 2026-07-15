@@ -20,16 +20,17 @@ const TG_PREFIX = telegram.TG_PREFIX || 'tg:';
 
 // Deja constancia en el CRM de cada mensaje que sale (y de si salió bien).
 // require perezoso para evitar ciclos de dependencia en el arranque.
-function _registrarEnvio(telefono, text, resultado) {
+function _registrarEnvio(telefono, text, resultado, extraMeta) {
   try {
     const leadManager = require('./leadManager');
     const activityLog = require('./activityLog');
     const lead = leadManager.getLeadByPhone(telefono);
     if (!lead) return;
     activityLog.appendActivity(lead.id, 'message_sent', {
-      preview: String(text).slice(0, 120),
+      preview: String(text).slice(0, 500), // 500: suficiente para leerlo entero en el chat del CRM
       ok: resultado ? resultado.success !== false : null,
       modo: resultado && resultado.mode ? resultado.mode : undefined,
+      ...(extraMeta || {}), // p. ej. { manual: true } cuando lo escribes tú desde el CRM
     });
   } catch (e) { /* el registro nunca debe romper un envío */ }
 }
@@ -70,7 +71,7 @@ async function sendTextMessage(telefono, text, opts = {}) {
       }
       resultado = await whatsapp.sendTextMessage(telefono, text);
     }
-    _registrarEnvio(telefono, text, resultado);
+    _registrarEnvio(telefono, text, resultado, opts.meta);
     return resultado;
   } catch (err) {
     // Si algo falla en el typing, no abortamos el envío del mensaje
@@ -78,7 +79,7 @@ async function sendTextMessage(telefono, text, opts = {}) {
     const resultado = esTelegram(telefono)
       ? await telegram.sendMessage(telefono, text)
       : await whatsapp.sendTextMessage(telefono, text);
-    _registrarEnvio(telefono, text, resultado);
+    _registrarEnvio(telefono, text, resultado, opts.meta);
     return resultado;
   }
 }
