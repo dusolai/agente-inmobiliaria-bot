@@ -193,7 +193,7 @@
   .chat-aviso{font-size:.75rem;font-weight:600;padding:.45rem .6rem;border-radius:8px;margin-bottom:.6rem}
   .chat-aviso.ok{background:#e8f7ee;color:#1f6b3e}
   .chat-aviso.warn{background:#fff3d6;color:#a67400}
-  .chat-msgs{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:.45rem;padding:.3rem;background:#f4f2f8;border-radius:8px;margin-bottom:.6rem}
+  .chat-msgs{max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:.45rem;padding:.3rem;background:#f4f2f8;border-radius:8px;margin-bottom:.6rem}
   .chat-linea{display:flex}
   .chat-linea.mio{justify-content:flex-end}
   .burbuja{max-width:78%;padding:.4rem .6rem;border-radius:10px;font-size:.82rem;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.06);white-space:pre-wrap;word-break:break-word}
@@ -202,6 +202,10 @@
   .burbuja.fallo{background:#fee2e2;border:1px solid #f5b5b5}
   .burbuja .quien{display:block;font-size:.65rem;font-weight:800;color:var(--muted);margin-bottom:.1rem}
   .burbuja .hora{display:block;text-align:right;font-size:.62rem;color:var(--muted);margin-top:.15rem}
+  /* Botones de la plantilla, como los ve el lead en su WhatsApp */
+  .burbuja-btns{display:flex;flex-direction:column;gap:1px;margin:.4rem -.6rem -.4rem;border-top:1px solid rgba(0,0,0,.08)}
+  .wa-btn{text-align:center;padding:.4rem;font-size:.78rem;font-weight:600;color:#1c8adb;background:rgba(255,255,255,.55);border-top:1px solid rgba(0,0,0,.06)}
+  .wa-btn:first-child{border-top:none}
   .chat-input{display:flex;gap:.5rem;align-items:flex-end}
   .chat-input textarea{flex:1;padding:.5rem .6rem;border:1px solid var(--line);border-radius:8px;font-size:.85rem;font-family:inherit;resize:vertical;outline:none}
   .chat-input textarea:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
@@ -992,11 +996,16 @@
           const mio = e.type === 'message_sent';
           const m = e.meta || {};
           const fallo = mio && m.ok === false;
-          const quien = mio ? (m.manual ? '🧑 tú' : '🤖 agente') : '';
+          const quien = mio ? (m.manual ? '🧑 tú' : `🤖 agente${m.plantilla ? ' · plantilla' : ''}`) : '';
+          // Los botones de la plantilla también los ve el lead en su WhatsApp
+          const btns = (m.botones || []).length
+            ? `<div class="burbuja-btns">${m.botones.map((b) => `<span class="wa-btn">${escC(b)}</span>`).join('')}</div>`
+            : '';
           return `<div class="chat-linea ${mio ? 'mio' : 'suyo'}">
             <div class="burbuja ${mio ? 'mia' : 'suya'}${fallo ? ' fallo' : ''}">
               ${quien ? `<span class="quien">${quien}</span>` : ''}${escC(m.preview || m.texto || '')}
               <span class="hora">${fmtTime(e.ts)}${fallo ? ' · ❌ rechazado' : ''}</span>
+              ${btns}
             </div>
           </div>`;
         }).join('');

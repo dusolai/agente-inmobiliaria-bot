@@ -27,7 +27,9 @@ function _registrarEnvio(telefono, text, resultado, extraMeta) {
     const lead = leadManager.getLeadByPhone(telefono);
     if (!lead) return;
     activityLog.appendActivity(lead.id, 'message_sent', {
-      preview: String(text).slice(0, 500), // 500: suficiente para leerlo entero en el chat del CRM
+      // Mensaje COMPLETO: en el chat del CRM se ve tal cual le llega al lead.
+      // 4096 = el máximo que admite un mensaje de WhatsApp, así que nunca corta.
+      preview: String(text).slice(0, 4096),
       ok: resultado ? resultado.success !== false : null,
       modo: resultado && resultado.mode ? resultado.mode : undefined,
       ...(extraMeta || {}), // p. ej. { manual: true } cuando lo escribes tú desde el CRM
@@ -125,7 +127,34 @@ async function sendPrimerContacto(lead, textoFallback, opts = {}) {
       console.error('⚠️  [Messaging] Error enviando plantilla:', err.message);
       resultado = { success: false, error: err.message };
     }
-    _registrarEnvio(telefono, `[plantilla ${config.whatsapp.templateName}] ${textoFallback}`, resultado);
+    // Registrar EXACTAMENTE lo que recibe el lead: el texto de la plantilla
+    // aprobada con el nombre ya sustituido. Antes se guardaba `textoFallback`
+    // (el texto de Baileys, que en cloud NO se envía), así que el CRM enseñaba
+    // un mensaje distinto del real. Si no se puede leer la plantilla, se deja
+    // una etiqueta honesta en vez de inventar un texto.
+    let textoReal = null;
+    let botones = [];
+    try {
+      if (typeof whatsapp.renderTemplate === 'function') {
+        textoReal = await whatsapp.renderTemplate(
+          config.whatsapp.templateName,
+          config.whatsapp.templateLang,
+          [nombre]
+        );
+      }
+      if (typeof whatsapp.getTemplateBotones === 'function') {
+        botones = await whatsapp.getTemplateBotones(
+          config.whatsapp.templateName,
+          config.whatsapp.templateLang
+        );
+      }
+    } catch (e) { /* si falla, etiqueta honesta */ }
+    _registrarEnvio(
+      telefono,
+      textoReal || `[plantilla ${config.whatsapp.templateName} · texto aprobado en Meta]`,
+      resultado,
+      { plantilla: config.whatsapp.templateName, ...(botones.length ? { botones } : {}) }
+    );
   }
   _marcarBienvenida(telefono);
   return resultado;

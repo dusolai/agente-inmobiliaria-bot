@@ -21,6 +21,10 @@ module.exports = {
     // de 24h hay que usar plantilla, no texto libre).
     templateName: process.env.WHATSAPP_TEMPLATE_NAME || '',
     templateLang: process.env.WHATSAPP_TEMPLATE_LANG || 'es',
+    // ID de la cuenta de WhatsApp Business (WABA). Solo se usa para LEER el
+    // texto real de las plantillas aprobadas y poder registrar en el CRM lo
+    // que de verdad recibe el lead (no un texto de reserva que no se envía).
+    wabaId: process.env.WHATSAPP_WABA_ID || '',
   },
 
   // Canal Telegram (modo piloto previo a producción)

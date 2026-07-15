@@ -125,6 +125,64 @@ async function sendTextMessage(to, body) {
   );
 }
 
+// ─── Texto real de las plantillas aprobadas ───────────────────────
+// El CRM debe mostrar lo que RECIBE el lead. Antes registraba un texto de
+// reserva que no se enviaba (el de Baileys), así que el panel enseñaba un
+// mensaje distinto del real. Leemos de Meta el cuerpo aprobado (una vez, en
+// caché) para poder registrar el texto exacto.
+let _plantillas = null;
+async function _cargarPlantillas() {
+  if (_plantillas) return _plantillas;
+  const waba = config.whatsapp.wabaId;
+  if (!waba || !config.whatsapp.accessToken) return null;
+  try {
+    const { data } = await axios.get(
+      `${API}/${waba}/message_templates?limit=50&access_token=${encodeURIComponent(config.whatsapp.accessToken)}`,
+      { timeout: 10000 }
+    );
+    _plantillas = {};
+    for (const t of data.data || []) {
+      const body = (t.components || []).find((c) => c.type === 'BODY');
+      const btns = (t.components || []).find((c) => c.type === 'BUTTONS');
+      if (body && body.text) {
+        _plantillas[`${t.name}|${t.language}`] = {
+          texto: body.text,
+          // Los botones también los ve el lead: se muestran en el chat del CRM
+          // para que sea idéntico a lo que tiene él en WhatsApp.
+          botones: ((btns && btns.buttons) || []).map((b) => b.text).filter(Boolean),
+        };
+      }
+    }
+    console.log(`📋 [WhatsAppCloud] ${Object.keys(_plantillas).length} plantillas leídas de Meta`);
+    return _plantillas;
+  } catch (err) {
+    console.warn('⚠️  [WhatsAppCloud] No pude leer las plantillas de Meta:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Devuelve el texto REAL de una plantilla con las variables sustituidas, o
+ * null si no se puede leer. Soporta variables numeradas ({{1}}) y con nombre
+ * ({{nombre}}) — el editor nuevo de Meta usa unas u otras según la plantilla.
+ */
+async function renderTemplate(name, lang, params = []) {
+  const tpl = await _cargarPlantillas();
+  const p = tpl && tpl[`${name}|${lang}`];
+  if (!p || !p.texto) return null;
+  let out = p.texto;
+  params.forEach((v, i) => { out = out.split(`{{${i + 1}}}`).join(String(v)); });
+  if (params.length) out = out.replace(/\{\{\s*[a-z_][a-z0-9_]*\s*\}\}/gi, String(params[0]));
+  return out;
+}
+
+/** Botones de una plantilla aprobada (los que ve el lead), o [] si no hay. */
+async function getTemplateBotones(name, lang) {
+  const tpl = await _cargarPlantillas();
+  const p = tpl && tpl[`${name}|${lang}`];
+  return (p && p.botones) || [];
+}
+
 /**
  * Envía una plantilla aprobada. Para el primer contacto y cualquier envío
  * fuera de la ventana de 24h.
@@ -157,6 +215,8 @@ module.exports = {
   initialize,
   sendTextMessage,
   sendTemplate,
+  renderTemplate,
+  getTemplateBotones,
   sendTyping,
   sendTypingAction,
   isConfigured,
