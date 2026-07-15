@@ -186,7 +186,7 @@
   .vs-fill{height:100%;border-radius:6px;transition:width .3s ease}
   .vs-pct{font-weight:700;text-align:right;font-size:.78rem}
   .timeline{max-height:430px;overflow-y:auto;padding-right:.5rem}
-  .tl-item{display:grid;grid-template-columns:90px 1fr;gap:.8rem;padding:.55rem 0;border-bottom:1px dashed var(--line);font-size:.85rem;align-items:start}
+  .tl-item{display:grid;grid-template-columns:104px 1fr;gap:.8rem;padding:.55rem 0;border-bottom:1px dashed var(--line);font-size:.85rem;align-items:start}
   .tl-time{color:var(--muted);font-size:.72rem;font-weight:600;font-variant-numeric:tabular-nums;padding-top:2px}
   .tl-event{display:flex;align-items:flex-start;gap:.5rem;flex-wrap:wrap}
   .tl-meta{color:var(--muted);font-size:.78rem}
@@ -555,7 +555,23 @@
     toast._h = setTimeout(() => t.classList.remove('show'), 2200);
   }
 
-  function fmtTime(ts) { try { return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return ts; } }
+  // Hora si es de HOY; si no, también el día — en un historial de varios días
+  // ver solo "12:20:08" no dice nada. Hoy → "12:20:08" · ayer → "ayer 12:20"
+  // · antes → "14 jul 12:20".
+  function fmtTime(ts) {
+    try {
+      const d = new Date(ts);
+      const hoy = new Date();
+      const mismoDia = (a, b) => a.toDateString() === b.toDateString();
+      if (mismoDia(d, hoy)) {
+        return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+      const hhmm = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      const ayer = new Date(hoy.getTime() - 86400000);
+      if (mismoDia(d, ayer)) return `ayer ${hhmm}`;
+      return `${d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} ${hhmm}`;
+    } catch { return ts; }
+  }
   function fmtDateTime(ts) { try { return new Date(ts).toLocaleString('es-ES'); } catch { return ts; } }
   function eventTag(type) {
     if (type === 'lead_created' || type === 'state_changed' || type === 'pilot_started' || type === 'question_resent' || type === 'meeting_joined' || type === 'lead_activated' || type === 'opt_out') return 'state';
