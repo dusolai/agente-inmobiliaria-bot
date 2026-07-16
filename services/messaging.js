@@ -160,4 +160,16 @@ async function sendPrimerContacto(lead, textoFallback, opts = {}) {
   return resultado;
 }
 
-module.exports = { sendTextMessage, sendPrimerContacto, esTelegram, TG_PREFIX };
+/**
+ * Envía una plantilla aprobada (para recordatorios). Wrapper de whatsapp.sendTemplate.
+ * @param {string} telefono
+ * @param {string[]} params  valores para reemplazar {{1}}, {{nombre}}, etc.
+ * @param {object} opts  { name, lang } (plantilla)
+ */
+async function sendTemplate(telefono, params = [], opts = {}) {
+  const resultado = await whatsapp.sendTemplate(telefono, params, opts);
+  _registrarEnvio(telefono, `[plantilla ${opts.name || config.whatsapp.templateName}]`, resultado);
+  return resultado;
+}
+
+module.exports = { sendTextMessage, sendPrimerContacto, sendTemplate, esTelegram, TG_PREFIX };

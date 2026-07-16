@@ -383,14 +383,15 @@ async function procesarRecordatoriosFase2B() {
     else if (acaboVsl) etapa = 'vsl_hecho';
     else if (jugoAlgo) etapa = 'vsl';
 
-    const idx = Math.min(fase2b.enviados, funnelReminders.length - 1);
-    const msgFn = funnelReminders[idx];
-    const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
-
+    // Recordatorio de landing: usa plantilla aprobada (funciona fuera de ventana 24h).
+    // La plantilla recordatorio_presentacion es genérica: "vuelve a ver", "webinar
+    // pendiente", etc. según el copy de plantilla — el detalle de qué etapa (vsl,
+    // webinar, inicio) ya está en los eventos de la landing (en el CRM).
     console.log(`🔔 [Scheduler] Recordatorio Funnel (${etapa}) #${fase2b.enviados + 1} → ${lead.nombre}`);
-    const envio = await messaging.sendTextMessage(
+    const envio = await messaging.sendTemplate(
       lead.telefono,
-      msgFn({ nombre: lead.nombre, enlaceLanding, etapa, perfil: lead.perfil })
+      [lead.nombre],
+      { name: 'recordatorio_presentacion', lang: 'es' }
     );
     if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
 
@@ -432,14 +433,13 @@ async function procesarRecordatoriosFase3() {
 
     if (ahora - referencia < _intervaloMs(fase3.enviados)) continue;
 
-    const idx = Math.min(fase3.enviados, reminders1a1.length - 1);
-    const msgFn = reminders1a1[idx];
-
+    // Recordatorio 1-a-1: usa plantilla aprobada (funciona fuera de ventana 24h).
+    // recordatorio_reunion dice "reserva tu 1-a-1 con Arkaitz" — es suficiente.
     console.log(`🔔 [Scheduler] Recordatorio 1-a-1 #${fase3.enviados + 1} → ${lead.nombre}`);
-    const enlace1a1 = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
-    const envio = await messaging.sendTextMessage(
+    const envio = await messaging.sendTemplate(
       lead.telefono,
-      msgFn({ nombre: lead.nombre, enlace1a1 })
+      [lead.nombre],
+      { name: 'recordatorio_reunion', lang: 'en' }  // en: aunque inglés, funciona igual
     );
     if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
 
