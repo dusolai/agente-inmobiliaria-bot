@@ -613,17 +613,19 @@
     const list = $('funnelModalList');
     const close = $('funnelModalClose');
 
-    title.textContent = stageLabel;
+    title.textContent = `${stageLabel} · ${leads ? leads.length : 0}`;
 
     if (!leads || leads.length === 0) {
       list.innerHTML = '<div class="funnel-modal-empty">No hay leads en esta etapa</div>';
     } else {
-      list.innerHTML = leads.slice(0, 50).map(l => `
+      const MAX = 300;
+      const extra = leads.length > MAX ? `<div class="funnel-modal-empty">…y ${leads.length - MAX} más</div>` : '';
+      list.innerHTML = leads.slice(0, MAX).map(l => `
         <div class="funnel-lead-item" data-id="${l.id}">
           <div class="funnel-lead-name">${(l.nombre || 'Sin nombre').replace(/</g, '&lt;')}</div>
           <div class="funnel-lead-meta">${l.telefono || '—'} · ${lblEstado(l.estado)}</div>
         </div>
-      `).join('');
+      `).join('') + extra;
 
       // Listeners para items
       list.querySelectorAll('.funnel-lead-item').forEach(item => {
@@ -934,23 +936,9 @@
         </div>`;
       }).join('');
 
-      // Mapa: hito → estado(s) aproximados a mostrar
-      const STAGE_TO_STATES = {
-        lead_created: ['nuevo', 'esperando_cualificacion', 'video_enviado', 'video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        message_received: ['esperando_cualificacion', 'video_enviado', 'video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        profile_set: ['video_enviado', 'video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        landing_view: ['video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        'video_play__video1': ['video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        'video_progress_50__video1': ['video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        webinar_unlocked: ['reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        'video_play__videoWebinar': ['reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        'video_progress_50__videoWebinar': ['reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        calendly_button_revealed: ['reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
-        cta_1a1_click: ['reunion_asistio', 'agenda_1a1'],
-        calendly_intent_individual: ['reunion_asistio', 'agenda_1a1'],
-        state_reunion_asistio: ['reunion_asistio', 'agenda_1a1'],
-        meeting_joined: ['agenda_1a1'],
-      };
+      // Índice id → lead para resolver rápido los leadIds de cada paso
+      const leadsById = {};
+      (leadsResp.leads || []).forEach(l => { leadsById[l.id] = l; });
 
       // Listeners para clicks en filas del embudo
       document.querySelectorAll('.funnel-row').forEach(row => {
@@ -959,11 +947,11 @@
           const stage = STAGES.find(s => s.key === stageKey);
           if (!stage) return;
 
-          // Filtrar leads por estados que corresponden a este hito
-          const targetStates = STAGE_TO_STATES[stageKey] || [];
-          const leadsEnEstapa = leadsResp.leads.filter(l => targetStates.includes(l.estado));
+          // Usamos los MISMOS leadIds que cuenta el embudo (server-side), así el
+          // modal enseña exactamente los leads que dice el número.
+          const ids = (statsActivity.leadIds && statsActivity.leadIds[stageKey]) || [];
+          const leadsEnEstapa = ids.map(id => leadsById[id]).filter(Boolean);
 
-          // Mostrar modal con la lista
           showFunnelModal(stage.label, leadsEnEstapa);
         });
         row.addEventListener('mouseenter', () => row.style.background = '#f0e9fb');

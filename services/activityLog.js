@@ -127,17 +127,30 @@ function getStats() {
   }
 
   const counts = {};
-  for (const [type, set] of leadsPorTipo.entries()) counts[type] = set.size;
+  // leadIds: MISMA estructura que counts pero con la lista de leadIds (no solo
+  // el tamaño). El panel lo usa para el desplegable "quién está en este paso":
+  // así el modal enseña EXACTAMENTE los mismos leads que dice el número, en vez
+  // de aproximar por estado (que no cuadra, un lead abre la landing pero sigue
+  // en "video_enviado").
+  const leadIds = {};
+  for (const [type, set] of leadsPorTipo.entries()) {
+    counts[type] = set.size;
+    leadIds[type] = Array.from(set);
+  }
   counts['calendly_intent_grupal'] = leadsCalGrupal.size;
+  leadIds['calendly_intent_grupal'] = Array.from(leadsCalGrupal);
   counts['calendly_intent_individual'] = leadsCalIndividual.size;
+  leadIds['calendly_intent_individual'] = Array.from(leadsCalIndividual);
   for (const [st, set] of leadsEnEstado.entries()) {
     counts[`state_${st}`] = set.size;
+    leadIds[`state_${st}`] = Array.from(set);
   }
 
   return {
     totalEventos: all.length,
     leadsUnicos: counts.lead_created || 0,
     counts,
+    leadIds,
   };
 }
 
