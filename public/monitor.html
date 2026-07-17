@@ -245,6 +245,21 @@
 
   .toast{position:fixed;bottom:24px;right:24px;background:var(--purple);color:#fff;padding:.8rem 1.2rem;border-radius:10px;font-weight:600;font-size:.9rem;box-shadow:0 10px 30px rgba(49,27,146,.3);opacity:0;transform:translateY(8px);transition:all .3s;pointer-events:none;z-index:1000}
   .toast.show{opacity:1;transform:translateY(0)}
+
+  /* Modal de embudo */
+  .funnel-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:2000}
+  .funnel-modal-overlay.show{display:flex}
+  .funnel-modal{background:#fff;border-radius:16px;max-width:520px;width:90%;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(49,27,146,.4)}
+  .funnel-modal-header{padding:1.2rem 1.5rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+  .funnel-modal-header h3{font-size:.95rem;color:var(--purple);font-weight:800;margin:0}
+  .funnel-modal-close{background:none;border:none;color:var(--muted);font-size:1.5rem;cursor:pointer;padding:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center}
+  .funnel-modal-close:hover{color:var(--purple)}
+  .funnel-modal-list{flex:1;overflow-y:auto;padding:1rem}
+  .funnel-lead-item{padding:.6rem;margin-bottom:.4rem;background:#f9f7fc;border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:all .15s}
+  .funnel-lead-item:hover{background:#f0e9fb;border-color:var(--purple)}
+  .funnel-lead-name{font-weight:700;color:var(--ink);font-size:.9rem;margin-bottom:.2rem}
+  .funnel-lead-meta{font-size:.75rem;color:var(--muted)}
+  .funnel-modal-empty{padding:2rem;text-align:center;color:var(--muted);font-size:.85rem}
 </style>
 </head>
 <body>
@@ -526,6 +541,19 @@
 
 </div>
 
+<!-- Modal para ver leads de cada etapa del embudo -->
+<div id="funnelModalOverlay" class="funnel-modal-overlay">
+  <div class="funnel-modal">
+    <div class="funnel-modal-header">
+      <h3 id="funnelModalTitle">Leads</h3>
+      <button class="funnel-modal-close" id="funnelModalClose">✕</button>
+    </div>
+    <div class="funnel-modal-list" id="funnelModalList">
+      <div class="funnel-modal-empty">Cargando…</div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
@@ -576,6 +604,43 @@
     t.classList.add('show');
     clearTimeout(toast._h);
     toast._h = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // Modal para ver leads de una etapa del embudo
+  function showFunnelModal(stageLabel, leads) {
+    const overlay = $('funnelModalOverlay');
+    const title = $('funnelModalTitle');
+    const list = $('funnelModalList');
+    const close = $('funnelModalClose');
+
+    title.textContent = stageLabel;
+
+    if (!leads || leads.length === 0) {
+      list.innerHTML = '<div class="funnel-modal-empty">No hay leads en esta etapa</div>';
+    } else {
+      list.innerHTML = leads.slice(0, 50).map(l => `
+        <div class="funnel-lead-item" data-id="${l.id}">
+          <div class="funnel-lead-name">${(l.nombre || 'Sin nombre').replace(/</g, '&lt;')}</div>
+          <div class="funnel-lead-meta">${l.telefono || '—'} · ${lblEstado(l.estado)}</div>
+        </div>
+      `).join('');
+
+      // Listeners para items
+      list.querySelectorAll('.funnel-lead-item').forEach(item => {
+        item.addEventListener('click', () => {
+          selectedLeadId = item.dataset.id;
+          overlay.classList.remove('show');
+          renderLeads();
+          refreshLeadDetail();
+        });
+      });
+    }
+
+    overlay.classList.add('show');
+    close.addEventListener('click', () => overlay.classList.remove('show'), { once: true });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.classList.remove('show');
+    });
   }
 
   // Hora si es de HOY; si no, también el día — en un historial de varios días
@@ -862,12 +927,48 @@
         const pct = total ? Math.min(100, Math.round((n / total) * 100)) : 0;
         // Número grande = cuántos leads llegaron; debajo "de {total}"; y el %
         // escrito sobre la barra para que su longitud se entienda de un vistazo.
-        return `<div class="funnel-row">
+        return `<div class="funnel-row" data-stage-key="${s.key}" style="cursor:pointer;transition:background .2s" title="Click para ver los leads">
           <span class="label"><span class="ev-tag ${s.tag}">${s.label}</span></span>
           <div class="bar"><div style="width:${pct}%"></div><span class="pct">${pct}%</span></div>
           <span class="num">${n}<small>de ${total}</small></span>
         </div>`;
       }).join('');
+
+      // Mapa: hito → estado(s) aproximados a mostrar
+      const STAGE_TO_STATES = {
+        lead_created: ['nuevo', 'esperando_cualificacion', 'video_enviado', 'video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        message_received: ['esperando_cualificacion', 'video_enviado', 'video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        profile_set: ['video_enviado', 'video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        landing_view: ['video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        'video_play__video1': ['video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        'video_progress_50__video1': ['video_visto', 'reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        webinar_unlocked: ['reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        'video_play__videoWebinar': ['reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        'video_progress_50__videoWebinar': ['reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        calendly_button_revealed: ['reunion_registrado', 'reunion_asistio', 'agenda_1a1'],
+        cta_1a1_click: ['reunion_asistio', 'agenda_1a1'],
+        calendly_intent_individual: ['reunion_asistio', 'agenda_1a1'],
+        state_reunion_asistio: ['reunion_asistio', 'agenda_1a1'],
+        meeting_joined: ['agenda_1a1'],
+      };
+
+      // Listeners para clicks en filas del embudo
+      document.querySelectorAll('.funnel-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const stageKey = row.dataset.stageKey;
+          const stage = STAGES.find(s => s.key === stageKey);
+          if (!stage) return;
+
+          // Filtrar leads por estados que corresponden a este hito
+          const targetStates = STAGE_TO_STATES[stageKey] || [];
+          const leadsEnEstapa = leadsResp.leads.filter(l => targetStates.includes(l.estado));
+
+          // Mostrar modal con la lista
+          showFunnelModal(stage.label, leadsEnEstapa);
+        });
+        row.addEventListener('mouseenter', () => row.style.background = '#f0e9fb');
+        row.addEventListener('mouseleave', () => row.style.background = 'transparent');
+      });
 
       let allLeads = (leadsResp.leads || []).slice();
       // 1) Filtro por estado (tabs)
