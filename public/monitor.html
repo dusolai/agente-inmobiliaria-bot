@@ -697,7 +697,7 @@
       case 'state_changed':      return `${lblEstado(m.from) || '∅'} → ${lblEstado(m.to)}`;
       case 'profile_set':        return `perfil: ${m.perfil}`;
       case 'message_received':   return m.texto ? `"${m.texto}"` : '';
-      case 'message_sent':       return `🤖 agente${m.ok === false ? ' ⚠️ RECHAZADO POR META' : ' (aceptado)'}: "${m.preview || ''}"`;
+      case 'message_sent':       return `🤖 agente${m.ok === false ? ` ⚠️ RECHAZADO POR META${m.code ? ` [${m.code}]` : ''}${m.error ? ` — ${m.error}` : ''}` : ' (aceptado)'}: "${m.preview || ''}"`;
       case 'sin_whatsapp':       return `🚫 Descartado automáticamente: este número NO tiene WhatsApp${m.code ? ` (Meta ${m.code})` : ''}`;
       case 'message_status':     return m.status === 'failed'
                                    ? `❌ NO LLEGÓ al móvil${m.code ? ` — Meta ${m.code}: ${m.error || ''}` : ''}`

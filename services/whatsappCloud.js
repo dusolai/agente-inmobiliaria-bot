@@ -183,12 +183,31 @@ async function getTemplateBotones(name, lang) {
   return (p && p.botones) || [];
 }
 
+// Devuelve los NOMBRES de las variables de una plantilla en el orden en que
+// aparecen: ["1","2"] si son numeradas, ["nombre"] si tiene nombre. Vacío si no
+// se puede leer (sin WABA_ID). Sirve para mandar el formato que Meta exige.
+async function getTemplateVars(name, lang) {
+  const tpl = await _cargarPlantillas();
+  const p = tpl && tpl[`${name}|${lang}`];
+  if (!p || !p.texto) return [];
+  const matches = p.texto.match(/\{\{\s*([^}]+?)\s*\}\}/g) || [];
+  return matches.map((m) => m.replace(/[{}]/g, '').trim());
+}
+
 /**
  * Envía una plantilla aprobada. Para el primer contacto y cualquier envío
  * fuera de la ventana de 24h.
+ *
+ * IMPORTANTE — variables con nombre vs numeradas: el editor nuevo de Meta
+ * permite variables con NOMBRE ({{nombre}}) además de numeradas ({{1}}). Una
+ * plantilla con {{nombre}} EXIGE mandar `parameter_name` en cada parámetro; si
+ * se manda en formato posicional Meta la RECHAZA (error 132000). Por eso aquí
+ * detectamos el tipo de variable (por `opts.varNames` explícito, o leyendo la
+ * plantilla de Meta) y construimos el formato correcto.
+ *
  * @param {string} to
- * @param {string[]} bodyParams  valores para las variables {{1}}, {{2}}... del cuerpo
- * @param {object} [opts] { name, lang }  (por defecto, los de la config)
+ * @param {string[]} bodyParams  valores para las variables del cuerpo, en orden
+ * @param {object} [opts] { name, lang, varNames }  (por defecto, los de la config)
  */
 async function sendTemplate(to, bodyParams = [], opts = {}) {
   const name = opts.name || config.whatsapp.templateName;
@@ -197,9 +216,28 @@ async function sendTemplate(to, bodyParams = [], opts = {}) {
     console.error('❌ [WhatsAppCloud] No hay WHATSAPP_TEMPLATE_NAME: no puedo enviar el primer contacto');
     return { success: false, mode: 'production', error: 'sin plantilla configurada' };
   }
-  const components = bodyParams.length
-    ? [{ type: 'body', parameters: bodyParams.map((t) => ({ type: 'text', text: String(t) })) }]
-    : [];
+
+  // Nombres de variables: explícitos (opts.varNames) o leídos de Meta. Si no se
+  // pueden averiguar, asumimos numeradas (comportamiento clásico).
+  let varNames = opts.varNames;
+  if (!varNames) {
+    try { varNames = await getTemplateVars(name, lang); } catch (e) { varNames = []; }
+  }
+  const usaNombres = varNames && varNames.some((v) => !/^\d+$/.test(v));
+
+  let parameters;
+  if (usaNombres) {
+    // Formato con nombre: cada variable lleva su parameter_name en orden.
+    parameters = varNames.map((vn, i) => ({
+      type: 'text',
+      parameter_name: vn,
+      text: String(bodyParams[i] != null ? bodyParams[i] : (bodyParams[0] || '')),
+    }));
+  } else {
+    parameters = bodyParams.map((t) => ({ type: 'text', text: String(t) }));
+  }
+
+  const components = parameters.length ? [{ type: 'body', parameters }] : [];
   return _post(
     {
       messaging_product: 'whatsapp',
@@ -217,6 +255,7 @@ module.exports = {
   sendTemplate,
   renderTemplate,
   getTemplateBotones,
+  getTemplateVars,
   sendTyping,
   sendTypingAction,
   isConfigured,

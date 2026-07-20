@@ -78,6 +78,13 @@ function _envioOk(res) {
   return Boolean(res) && res.success !== false && res.mode !== 'development';
 }
 
+// ¿Meta RECHAZÓ el envío (fallo permanente: plantilla mal, política, número
+// sin WhatsApp…)? A diferencia del canal caído (mode 'development', temporal),
+// esto NO se arregla reintentando cada 5 min, así que hay que hacer backoff.
+function _rechazoDeMeta(res) {
+  return Boolean(res) && res.success === false && res.mode === 'production';
+}
+
 async function procesarActivacionDiaria() {
   const cupo = getLeadsPorDia();
   if (cupo <= 0) return;
@@ -388,12 +395,27 @@ async function procesarRecordatoriosFase2B() {
     // pendiente", etc. según el copy de plantilla — el detalle de qué etapa (vsl,
     // webinar, inicio) ya está en los eventos de la landing (en el CRM).
     console.log(`🔔 [Scheduler] Recordatorio Funnel (${etapa}) #${fase2b.enviados + 1} → ${lead.nombre}`);
+    // recordatorio_presentacion usa variable CON NOMBRE ({{nombre}}), así que
+    // hay que declararla como tal o Meta la rechaza (132000).
     const envio = await messaging.sendTemplate(
       lead.telefono,
       [lead.nombre],
-      { name: 'recordatorio_presentacion', lang: 'es' }
+      { name: 'recordatorio_presentacion', lang: 'es', varNames: ['nombre'] }
     );
-    if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
+    // Rechazo permanente de Meta (plantilla mal, política, etc.): NO reintentar
+    // cada 5 min. Registramos el intento para que respete el intervalo. Solo el
+    // canal caído (development) reintenta en el próximo ciclo sin gastar intento.
+    if (!_envioOk(envio)) {
+      if (_rechazoDeMeta(envio)) {
+        leadManager.updateLead(lead.id, {
+          recordatorios: {
+            ...lead.recordatorios,
+            fase2b: { enviados: fase2b.enviados, ultimoEnvio: new Date().toISOString() },
+          },
+        });
+      }
+      continue;
+    }
 
     leadManager.updateLead(lead.id, {
       recordatorios: {
@@ -436,12 +458,25 @@ async function procesarRecordatoriosFase3() {
     // Recordatorio 1-a-1: usa plantilla aprobada (funciona fuera de ventana 24h).
     // recordatorio_reunion dice "reserva tu 1-a-1 con Arkaitz" — es suficiente.
     console.log(`🔔 [Scheduler] Recordatorio 1-a-1 #${fase3.enviados + 1} → ${lead.nombre}`);
+    // recordatorio_reunion usa variable numerada ({{1}}) → formato posicional.
     const envio = await messaging.sendTemplate(
       lead.telefono,
       [lead.nombre],
-      { name: 'recordatorio_reunion', lang: 'en' }  // en: aunque inglés, funciona igual
+      { name: 'recordatorio_reunion', lang: 'en', varNames: ['1'] }  // en: aunque inglés, funciona igual
     );
-    if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
+    // Igual que Fase 2B: si Meta lo rechaza (permanente) no reintentamos cada
+    // 5 min; registramos el intento para respetar el intervalo.
+    if (!_envioOk(envio)) {
+      if (_rechazoDeMeta(envio)) {
+        leadManager.updateLead(lead.id, {
+          recordatorios: {
+            ...lead.recordatorios,
+            fase3: { enviados: fase3.enviados, ultimoEnvio: new Date().toISOString() },
+          },
+        });
+      }
+      continue;
+    }
 
     leadManager.updateLead(lead.id, {
       recordatorios: {

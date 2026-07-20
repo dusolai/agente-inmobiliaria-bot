@@ -32,6 +32,10 @@ function _registrarEnvio(telefono, text, resultado, extraMeta) {
       preview: String(text).slice(0, 4096),
       ok: resultado ? resultado.success !== false : null,
       modo: resultado && resultado.mode ? resultado.mode : undefined,
+      // Si Meta lo rechazó, guardamos el motivo/código para verlo en el CRM
+      // (antes solo salía "RECHAZADO POR META" sin decir por qué).
+      error: resultado && resultado.success === false ? resultado.error : undefined,
+      code: resultado && resultado.code != null ? resultado.code : undefined,
       ...(extraMeta || {}), // p. ej. { manual: true } cuando lo escribes tú desde el CRM
     });
   } catch (e) { /* el registro nunca debe romper un envío */ }
