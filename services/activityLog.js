@@ -314,6 +314,30 @@ function limpiarClicsFalsos({ dryRun = false, ventanaMs = 15000 } = {}) {
   return { eliminados, total: eliminados.length };
 }
 
+/**
+ * Borra del histórico los envíos que Meta RECHAZÓ (message_sent con ok:false).
+ * Sirve para limpiar el "flood" de recordatorios rechazados que dejó el bug de
+ * la plantilla con variable con nombre (se reintentaba cada 5 min). NO toca los
+ * mensajes que sí salieron ni los recibidos.
+ * @param {object} opts { dryRun: solo contar, leadId: limitar a un lead }
+ * @returns {{ eliminados: number, total: number }}
+ */
+function limpiarRechazados({ dryRun = false, leadId = null } = {}) {
+  const all = readAll();
+  const esRechazado = (e) =>
+    e.type === 'message_sent' &&
+    e.meta && e.meta.ok === false &&
+    (!leadId || e.leadId === leadId);
+
+  const restantes = all.filter((e) => !esRechazado(e));
+  const eliminados = all.length - restantes.length;
+  if (!dryRun && eliminados) {
+    writeAll(restantes);
+    console.log(`🧹 [Activity] ${eliminados} envíos rechazados eliminados del histórico${leadId ? ` (lead ${leadId})` : ''}`);
+  }
+  return { eliminados, total: eliminados };
+}
+
 // Borra del archivo todos los eventos asociados a un leadId.
 // Útil para "empezar de cero" en pruebas tras eliminar el lead.
 function deleteActivityByLead(leadId) {
@@ -335,5 +359,6 @@ module.exports = {
   getInboxData,
   getActivacionesPorDia,
   limpiarClicsFalsos,
+  limpiarRechazados,
   deleteActivityByLead,
 };

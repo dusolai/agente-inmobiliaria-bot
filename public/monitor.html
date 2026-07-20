@@ -1119,6 +1119,7 @@
       <button class="btn green" data-act="mark-registrado" ${['reunion_asistio','agenda_1a1','descartado'].includes(s) ? 'disabled' : ''}>${s === 'reunion_registrado' ? 'Reenviar enlace 1-a-1 ahora' : 'Enviar enlace 1-a-1'}</button>
       <button class="btn green" data-act="mark-asistio" ${s === 'reunion_registrado' ? '' : 'disabled'}>Marcar 1-a-1 reservado</button>
       <button class="btn warn" data-act="descartar" ${s === 'descartado' ? 'disabled' : ''}>Descartar</button>
+      <button class="btn" data-act="limpiar-rechazados" style="border:1px solid #ccc" title="Borra del historial los envíos que Meta rechazó">🧹 Limpiar rechazados</button>
       <button class="btn danger" data-act="eliminar">Eliminar lead</button>
     </div>
     <div class="actions" style="margin-top:6px;align-items:center">
@@ -1233,6 +1234,13 @@
         if (!confirm('¿Descartar este lead?')) { btn.disabled = false; return; }
         await fetchJSON(`/api/leads/${id}/state`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: 'descartado' }) });
         toast('Lead descartado');
+      } else if (act === 'limpiar-rechazados') {
+        if (!confirm('¿Borrar del historial de este lead los envíos que Meta rechazó?\n\nNo toca los mensajes que sí salieron ni los recibidos.')) { btn.disabled = false; return; }
+        const r = await fetchJSON('/api/mantenimiento/limpiar-rechazados', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ leadId: id }),
+        });
+        toast(`🧹 ${r.eliminados || 0} rechazados borrados`);
       } else if (act === 'eliminar') {
         if (!confirm('¿Eliminar este lead del sistema?\n\nNo se puede deshacer.')) { btn.disabled = false; return; }
         // Preguntar también si queremos borrar su registro de actividad

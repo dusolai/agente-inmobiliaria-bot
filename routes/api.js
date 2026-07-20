@@ -407,6 +407,24 @@ router.post('/mantenimiento/limpiar-clics-falsos', (req, res) => {
 });
 
 /**
+ * POST /api/mantenimiento/limpiar-rechazados
+ * Borra del histórico los envíos que Meta RECHAZÓ (message_sent ok:false). Sirve
+ * para limpiar el "flood" de recordatorios rechazados. No toca lo que sí salió.
+ * Body: { dryRun?: true (solo contar), leadId?: 'xxx' (limitar a un lead) }
+ */
+router.post('/mantenimiento/limpiar-rechazados', (req, res) => {
+  try {
+    const dryRun = Boolean(req.body && req.body.dryRun);
+    const leadId = (req.body && req.body.leadId) || null;
+    const r = activityLog.limpiarRechazados({ dryRun, leadId });
+    res.json({ success: true, dryRun, leadId, eliminados: r.eliminados });
+  } catch (err) {
+    console.error('❌ [API] Error limpiar-rechazados:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/import
  * Importa una lista de leads (desde el CSV en el CRM) en modo SEGURO: los crea
  * en estado "nuevo" SIN enviar ningún mensaje. El activador diario los va
