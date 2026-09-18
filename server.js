@@ -16,25 +16,42 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' })); // 10mb: para importar listas grandes de leads desde el CRM
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ─── Protección del CRM y la API (ADMIN_TOKEN) ────────────────────
-// Con ADMIN_TOKEN definido en Seenode, el panel y la API de leads piden
-// usuario/contraseña (Basic auth: cualquier usuario + el token). Quedan
+// ─── Protección del CRM y la API (usuario + contraseña) ──────────
+// Con las variables puestas en Seenode, el panel y la API de leads piden
+// usuario y contraseña (el cuadro de Basic auth del navegador). Quedan
 // públicos solo los endpoints que necesitan las landings y los webhooks:
 // /tracking, /webhook, /r, /health, /api/config y la raíz (QR).
-// Sin ADMIN_TOKEN no se protege nada (compatible con el comportamiento actual).
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-if (!ADMIN_TOKEN) {
-  console.warn('⚠️  ADMIN_TOKEN no configurado: el CRM y /api/leads quedan PÚBLICOS. Configúralo en Seenode.');
+//
+//   ADMIN_USER → el usuario. Si se deja vacío, vale cualquier usuario.
+//   ADMIN_PASS → la contraseña. ADMIN_TOKEN sigue valiendo como alias, por
+//                compatibilidad con el despliegue anterior.
+//
+// Sin ADMIN_PASS ni ADMIN_TOKEN no se protege nada.
+const crypto = require('crypto');
+
+const ADMIN_USER = process.env.ADMIN_USER || '';
+const ADMIN_PASS = process.env.ADMIN_PASS || process.env.ADMIN_TOKEN || '';
+if (!ADMIN_PASS) {
+  console.warn('⚠️  ADMIN_PASS no configurado: el CRM y /api/leads quedan PÚBLICOS. Configúralo en Seenode.');
+}
+
+// Comparación en tiempo constante. Se comparan los hashes y no las cadenas
+// porque timingSafeEqual exige que los dos búferes midan lo mismo.
+function igual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
 }
 
 function requireAdmin(req, res, next) {
-  if (!ADMIN_TOKEN) return next();
+  if (!ADMIN_PASS) return next();
   const hdr = req.headers.authorization || '';
   if (hdr.startsWith('Basic ')) {
     const decoded = Buffer.from(hdr.slice(6), 'base64').toString('utf-8');
     const idx = decoded.indexOf(':');
+    const user = idx >= 0 ? decoded.slice(0, idx) : '';
     const pass = idx >= 0 ? decoded.slice(idx + 1) : decoded;
-    if (pass === ADMIN_TOKEN) return next();
+    if ((!ADMIN_USER || igual(user, ADMIN_USER)) && igual(pass, ADMIN_PASS)) return next();
   }
   res.set('WWW-Authenticate', 'Basic realm="CRM Three Inmobiliaria"');
   return res.status(401).send('Autenticación requerida');
