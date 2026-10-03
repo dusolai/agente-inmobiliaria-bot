@@ -148,6 +148,23 @@
   .badge-reunion_asistio{background:#c5dafc;color:#1e3a78}
   .badge-agenda_1a1{background:#cdf3da;color:#1f6b3e}
   .badge-descartado{background:#f4d2d2;color:#993339}
+  /* Segmentos de la lista (viejos / verano / septiembre / directo) */
+  .seg{display:inline-block;font-size:.6rem;font-weight:800;padding:.12rem .45rem;border-radius:50px;text-transform:uppercase;letter-spacing:.3px;margin-left:.35rem;vertical-align:middle;white-space:nowrap}
+  .seg-viejos{background:#e8e4f3;color:#4a3a86} .seg-verano{background:#ffe6c7;color:#9a5a00} .seg-septiembre{background:#d7f0e2;color:#1f6b3e} .seg-directo{background:#fde2e2;color:#a33}
+  .seg-rows{display:grid;gap:.4rem;margin-top:.7rem}
+  .seg-row{display:grid;grid-template-columns:170px repeat(4,1fr) auto;gap:.6rem;align-items:center;background:#faf8fc;border:1px solid var(--line);border-radius:10px;padding:.45rem .7rem;font-size:.8rem}
+  .seg-row b{color:var(--purple)} .seg-row .seg-ko{color:var(--red);font-weight:700;font-size:.72rem}
+  .seg-row .seg-ok{color:var(--muted);font-size:.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  @media (max-width:880px){.seg-row{grid-template-columns:1fr 1fr 1fr;row-gap:.2rem}}
+  /* Selector de campaña (cabecera) */
+  .campana-bar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+  .campana-bar select{padding:.45rem .6rem;border:1px solid var(--line);border-radius:9px;font-weight:700;color:var(--purple);background:#fff;font-size:.85rem;max-width:320px}
+  .campana-bar .btn{font-size:.78rem;padding:.45rem .7rem}
+  .campana-archivada{display:inline-block;background:#fff3d6;color:#a67400;font-size:.68rem;font-weight:800;padding:.2rem .55rem;border-radius:50px;margin-left:.4rem;text-transform:uppercase}
+  /* Datos extra del lead (campaña, segmento, formulario) */
+  .lead-extra{font-size:.74rem;color:var(--muted);margin:.2rem 0 .6rem;line-height:1.6}
+  .lead-extra b{color:var(--ink)}
+  .lead-extra .resp{display:block;padding-left:.6rem;border-left:2px solid var(--line);margin-top:.2rem}
 
   .lead-head{display:flex;justify-content:space-between;align-items:start;gap:1rem;flex-wrap:wrap;margin-bottom:.9rem;padding-bottom:.7rem;border-bottom:1px solid var(--line)}
   .lead-head .who h3{font-size:1.1rem;color:var(--purple);font-weight:800;margin-bottom:.15rem}
@@ -273,7 +290,13 @@
         <small id="lastUpdate">Conectando…</small>
       </div>
     </div>
-    <div class="live"><span class="dot"></span> En vivo · auto-refresco 3 s</div>
+    <div class="campana-bar">
+      <label for="campanaSel" style="font-size:.78rem;font-weight:700;color:var(--muted)">🗂️ Campaña</label>
+      <select id="campanaSel" title="Campaña que se muestra en el panel"><option value="activa">Cargando…</option></select>
+      <span id="campanaEstado"></span>
+      <button id="campanaNueva" class="btn green" title="Archiva la campaña actual (queda de historial) y empieza una nueva, limpia">➕ Nueva campaña</button>
+      <div class="live"><span class="dot"></span> En vivo · 3 s</div>
+    </div>
   </header>
 
   <nav class="tabs">
@@ -322,6 +345,7 @@
         <span id="csv-dias" class="csv-hint"></span>
       </div>
       <div id="csv-history" class="csv-history"></div>
+      <div id="csv-segmentos" class="seg-rows"></div>
     </div>
 
     <div class="atencion">
@@ -365,6 +389,13 @@
             <option value="createdAt">Antiguo</option>
             <option value="nombre">A-Z</option>
             <option value="estado">Por estado</option>
+          </select>
+          <select id="leadSegmento" title="Segmento de la lista">
+            <option value="">Todos los segmentos</option>
+            <option value="viejos">Viejos (dic-jun)</option>
+            <option value="verano">Verano (jul-ago)</option>
+            <option value="septiembre">Septiembre y después</option>
+            <option value="directo">Nuevos en directo</option>
           </select>
         </div>
         <div id="leads" class="leads-list">
@@ -412,7 +443,12 @@
   <div id="tab-importar" class="tab">
     <div class="panel">
       <h2>📥 Importar leads desde CSV <small>los crea SIN enviar nada — el activador diario los suelta luego</small></h2>
-      <p class="info">Arrastra tu CSV (export de Meta Lead Ads, o columnas <b>nombre / telefono / email</b>). Se limpian los teléfonos a formato español, se quitan duplicados y filas de prueba, y verás un resumen <b>antes</b> de crear nada. Nada se envía por WhatsApp: solo se crean en la cola.</p>
+      <p class="info">Arrastra el CSV que exporta Karen (Meta Lead Ads) o uno con columnas <b>nombre / telefono / email</b>. Se limpian los teléfonos, se quitan duplicados y filas de prueba, y cada lead se clasifica por la <b>fecha en que rellenó el formulario</b> en su segmento (cada segmento tiene su propio primer mensaje). Verás el resumen <b>antes</b> de crear nada. Nada se envía por WhatsApp: se crean en la cola de la <b>campaña activa</b>. Si un teléfono ya estaba en una campaña anterior se vuelve a crear (marcado), salvo que pidiera la baja o no tuviera WhatsApp.</p>
+      <div class="csv-controls" style="margin-bottom:.8rem">
+        <label>🗓️ Verano desde <input type="date" id="imp-corte-verano" value="2026-07-01" style="width:auto;font-weight:600"></label>
+        <label>🗓️ Septiembre desde <input type="date" id="imp-corte-sep" value="2026-09-01" style="width:auto;font-weight:600"></label>
+        <label title="Los números no españoles también se importan (WhatsApp funciona igual)"><input type="checkbox" id="imp-extranjeros" style="width:auto"> Incluir teléfonos extranjeros</label>
+      </div>
       <div id="dropZone" class="drop">
         <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none">
         <div class="drop-inner">
@@ -428,6 +464,7 @@
           <div class="csv-num"><b id="imp-total">—</b><span>Filas leídas</span></div>
           <div class="csv-num"><b id="imp-test">—</b><span>Descartados</span></div>
         </div>
+        <div id="imp-segmentos" class="csv-hint" style="margin-bottom:.5rem"></div>
         <div id="imp-revisar-list" class="csv-hint" style="margin-bottom:.9rem"></div>
         <div style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap">
           <button id="importBtn" class="btn green">✅ Importar los <span id="imp-btn-n">0</span> válidos (crear sin enviar)</button>
@@ -591,8 +628,16 @@
   let selectedLeadId = null;
   let currentTab = 'inicio';
   let leadFilter = ''; // '' = todos; o un estado concreto
+  let leadSegmento = ''; // '' = todos; o viejos / verano / septiembre / directo
   let leadSearch = '';
   let leadSort = 'updatedAt';
+  // Campaña que se muestra: 'activa' (por defecto) o el id de una archivada.
+  let campanaSel = 'activa';
+  let campanasCache = { activa: null, lista: [] };
+  const Q = () => `?campana=${encodeURIComponent(campanaSel)}`;
+  const escH = (s) => String(s || '').replace(/</g, '&lt;');
+  const SEG_LABEL = { viejos: 'Viejos (dic-jun)', verano: 'Verano (jul-ago)', septiembre: 'Septiembre+', directo: 'Nuevos en directo' };
+  const segBadge = (seg) => seg ? `<span class="seg seg-${escH(seg)}" title="${SEG_LABEL[seg] || seg}">${escH(seg)}</span>` : '';
   let leadPage = 1;
   const LEADS_PER_PAGE = 30;
 
@@ -691,7 +736,10 @@
   function describe(ev) {
     const m = ev.meta || {};
     switch (ev.type) {
-      case 'lead_created':       return `creado · fuente ${m.fuente || '?'}`;
+      case 'lead_created':       return `creado · fuente ${m.fuente || '?'}${m.segmento ? ` · segmento ${m.segmento}` : ''}${m.campana ? ` · campaña ${m.campana}` : ''}`;
+      case 'auto_alta':          return `🆕 escribió al WhatsApp sin ser lead → alta automática${m.nombrePerfil ? ` (perfil: ${m.nombrePerfil})` : ''}`;
+      case 'presentacion_reservada': return `📅 reservó la presentación en directo${m.inicio ? ` (${fmtDateTime(m.inicio)})` : ''}`;
+      case 'presentacion_asistida':  return `🤝 asistió a la presentación en directo${m.minutos != null ? ` (${m.minutos} min)` : ''} → 1-a-1 enviado`;
       case 'pilot_started':      return `reset del piloto (nuevo /start)`;
       case 'question_resent':    return `cuestionario reenviado manualmente`;
       case 'state_changed':      return `${lblEstado(m.from) || '∅'} → ${lblEstado(m.to)}`;
@@ -706,7 +754,7 @@
                                    : `✓✓ entregado en el móvil`;
       case 'llm_reply':          return `🧠 respuesta generada por IA (${m.proveedor || '?'})`;
       case 'opt_out':            return `🛑 pidió la BAJA: "${m.texto || ''}"`;
-      case 'lead_activated':     return `activado del import (${m.activadosHoy || '?'}/${m.cupo || '?'} hoy)`;
+      case 'lead_activated':     return m.motivo ? `activado: ${m.motivo}` : `activado del import (${m.activadosHoy || '?'}/${m.cupo || '?'} hoy)${m.segmento ? ` · ${m.segmento}` : ''}`;
       case 'landing_view':       return `landing ${m.perfil || ''}`;
       case 'video_play':         return m.videoId ? `play (${m.videoId})` : 'play del vídeo';
       case 'video_progress_25':  return m.videoId ? `25% (${m.videoId})` : 'llegó al 25%';
@@ -831,18 +879,75 @@
     $('csv-history').innerHTML = hist.length === 0
       ? '<div class="csv-hint">Aún no se ha contactado a nadie de la lista.</div>'
       : hist.map(d => `<div class="csv-day"><b>${d.n}</b><span>${d.fecha.slice(5)}</span></div>`).join('');
+
+    // Desglose por segmento: cada lista avanza a la vez (por turnos) y cada
+    // una usa su plantilla. Se puede pausar una sin tocar las demás.
+    const segs = a.porSegmento || [];
+    $('csv-segmentos').innerHTML = segs.length === 0 ? '' : segs.map(s => `<div class="seg-row">
+        <span><span class="seg seg-${escH(s.segmento)}" style="margin-left:0">${escH(s.label)}</span></span>
+        <span><b>${s.total}</b> en lista</span>
+        <span><b>${s.contactados}</b> contactados · <b>${s.respondieron}</b> respondieron</span>
+        <span><b>${s.enCola}</b> en cola${s.pausado ? ' · <span class="seg-ko">EN PAUSA</span>' : ''}</span>
+        <span>${s.plantilla ? `<span class="seg-ok" title="${escH(s.plantilla)}">plantilla: ${escH(s.plantilla)}</span>` : '<span class="seg-ko" title="Pon el nombre de la plantilla aprobada en Meta en la variable de Seenode">⚠️ sin plantilla aprobada → en espera</span>'}</span>
+        <button class="btn" data-seg="${escH(s.segmento)}" data-pausar="${s.pausado ? '0' : '1'}" style="border:1px solid #ccc;font-size:.72rem" ${s.enCola === 0 && !s.pausado ? 'disabled' : ''}>${s.pausado ? '▶ Reanudar' : '⏸ Pausar'}</button>
+      </div>`).join('');
+    $('csv-segmentos').querySelectorAll('button[data-seg]').forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await fetchJSON('/api/activation/segmento', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ segmento: b.dataset.seg, pausado: b.dataset.pausar === '1' }) });
+        toast(b.dataset.pausar === '1' ? `⏸ Segmento ${b.dataset.seg} en pausa` : `▶ Segmento ${b.dataset.seg} reanudado`);
+        refresh();
+      } catch (e) { toast('Error: ' + e.message); b.disabled = false; }
+    }));
   }
+
+  // ── Campañas: desplegable de la cabecera ──
+  async function loadCampanas() {
+    try {
+      const c = await fetchJSON('/api/campanas');
+      campanasCache = c;
+      const sel = $('campanaSel');
+      const actual = campanaSel;
+      sel.innerHTML = c.lista
+        .slice()
+        .sort((a, b) => (a.activa ? -1 : b.activa ? 1 : String(b.creada).localeCompare(String(a.creada))))
+        .map(x => `<option value="${x.activa ? 'activa' : escH(x.id)}">${escH(x.nombre)} · ${x.total} leads${x.activa ? ' (ACTIVA)' : ' (archivada)'}</option>`)
+        .join('');
+      sel.value = actual;
+      if (sel.value !== actual) { campanaSel = 'activa'; sel.value = 'activa'; }
+      const viendo = c.lista.find(x => campanaSel === 'activa' ? x.activa : x.id === campanaSel);
+      $('campanaEstado').innerHTML = viendo && !viendo.activa
+        ? `<span class="campana-archivada" title="Esta campaña está archivada: no se contacta ni se recuerda nada a sus leads">archivada · solo lectura</span>`
+        : '';
+    } catch (e) { /* el panel sigue con la activa */ }
+  }
+  $('campanaSel').addEventListener('change', (e) => { campanaSel = e.target.value; leadPage = 1; selectedLeadId = null; loadCampanas(); refresh(); });
+  $('campanaNueva').addEventListener('click', async () => {
+    const activa = (campanasCache.lista || []).find(x => x.activa);
+    const nombre = prompt(`Nombre de la nueva campaña (p. ej. "Lanzamiento octubre 2026"):`, '');
+    if (!nombre || !nombre.trim()) return;
+    if (!confirm(`Se creará la campaña "${nombre.trim()}" y pasará a ser la ACTIVA.\n\n` +
+      `La campaña actual${activa ? ` ("${activa.nombre}", ${activa.total} leads)` : ''} se ARCHIVA: sus leads se conservan de historial (podrás verlos eligiéndola en el desplegable), pero se dejan de contactar y de recordar.\n\n` +
+      `Después, importa el CSV nuevo en la pestaña Importar.`)) return;
+    try {
+      await fetchJSON('/api/campanas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nombre: nombre.trim() }) });
+      campanaSel = 'activa'; selectedLeadId = null; leadPage = 1;
+      await loadCampanas();
+      toast('🗂️ Campaña creada y activada');
+      refresh();
+    } catch (e) { toast('Error creando la campaña: ' + e.message); }
+  });
 
   async function refresh() {
     if (currentTab !== 'inicio') return; // ahorra si no estamos viendo el dashboard
     try {
       const [stats, leadsResp, statsActivity, live, inbox, activation] = await Promise.all([
-        fetchJSON('/api/stats'),
-        fetchJSON('/api/leads'),
-        fetchJSON('/api/stats/activity'),
-        fetchJSON('/api/live?minutes=10'),
-        fetchJSON('/api/inbox'),
-        fetchJSON('/api/activation'),
+        fetchJSON('/api/stats' + Q()),
+        fetchJSON('/api/leads' + Q()),
+        fetchJSON('/api/stats/activity' + Q()),
+        fetchJSON('/api/live?minutes=10&campana=' + encodeURIComponent(campanaSel)),
+        fetchJSON('/api/inbox' + Q()),
+        fetchJSON('/api/activation' + Q()),
       ]);
 
       // ── Flujo de la lista importada (CSV) ──
@@ -959,8 +1064,9 @@
       });
 
       let allLeads = (leadsResp.leads || []).slice();
-      // 1) Filtro por estado (tabs)
+      // 1) Filtro por estado (tabs) y por segmento
       if (leadFilter) allLeads = allLeads.filter(l => l.estado === leadFilter);
+      if (leadSegmento) allLeads = allLeads.filter(l => (l.segmento || 'viejos') === leadSegmento);
       // 2) Búsqueda libre (nombre, teléfono, email)
       if (leadSearch) {
         const q = leadSearch.toLowerCase();
@@ -987,7 +1093,7 @@
 
       // Contador
       const totalSinFiltrar = leadsResp.leads ? leadsResp.leads.length : 0;
-      $('lead-count').textContent = (leadFilter || leadSearch)
+      $('lead-count').textContent = (leadFilter || leadSearch || leadSegmento)
         ? `${allLeads.length} de ${totalSinFiltrar}`
         : (totalSinFiltrar ? `${totalSinFiltrar} totales` : '');
 
@@ -1003,11 +1109,11 @@
       }
 
       if (leads.length === 0) {
-        const emptyMsg = (leadSearch || leadFilter)
+        const emptyMsg = (leadSearch || leadFilter || leadSegmento)
           ? `Sin coincidencias para ${leadSearch ? `"${leadSearch}"` : 'este filtro'}.`
           : `Esperando actividad…<br><br><span class="info">En Telegram, manda <kbd>/start</kbd> al agente para entrar al embudo.</span>`;
         $('leads').innerHTML = `<div class="empty">${emptyMsg}</div>`;
-        if (!leadSearch && !leadFilter) {
+        if (!leadSearch && !leadFilter && !leadSegmento) {
           $('leadDetail').innerHTML = `<div class="empty">Selecciona un lead a la izquierda para ver su recorrido y actuar sobre él.</div>`;
           selectedLeadId = null;
         }
@@ -1028,7 +1134,7 @@
             : '';
           return `<div class="lead ${active}" data-id="${l.id}">
             <div>
-              <div class="name">${stale}${(l.nombre || 'Sin nombre').replace(/</g,'&lt;')}</div>
+              <div class="name">${stale}${(l.nombre || 'Sin nombre').replace(/</g,'&lt;')}${segBadge(l.segmento)}${l.contactadoAntesEn ? '<span class="seg" style="background:#eee;color:#666" title="Ya se le escribió en la campaña ' + escH(l.contactadoAntesEn) + '">↩ repetido</span>' : ''}</div>
               <div class="meta">${mini}${fmtTime(l.updatedAt)}${perfil}</div>
             </div>
             <span class="badge badge-${l.estado}">${lblEstado(l.estado)}</span>
@@ -1145,6 +1251,15 @@
           <small>${lead.telefono}${lead.email ? ' · ' + lead.email : ''}${lead.perfil && lead.perfil !== 'sin_definir' ? ' · ' + lead.perfil : ''}</small>
         </div>
         <span class="badge badge-${lead.estado}">${lblEstado(lead.estado)}</span>
+      </div>
+      <div class="lead-extra">
+        🗂️ Campaña <b>${escH(lead.campana || 'prueba_sep26')}</b>
+        ${lead.segmento ? ` · segmento ${segBadge(lead.segmento)}` : ''}
+        ${lead.fechaLead ? ` · rellenó el formulario el <b>${fmtDateTime(lead.fechaLead)}</b>` : ''}
+        ${lead.fuente ? ` · fuente <b>${escH(lead.fuente)}</b>` : ''}
+        ${lead.contactadoAntesEn ? ` · <span class="seg" style="background:#eee;color:#666">↩ ya contactado en ${escH(lead.contactadoAntesEn)}</span>` : ''}
+        ${lead.presentacionAt ? ` · presentación reservada para <b>${fmtDateTime(lead.presentacionAt)}</b>` : ''}
+        ${lead.respuestas ? Object.entries(lead.respuestas).map(([p, r]) => `<span class="resp">📝 ${escH(p)} → <b>${escH(r)}</b></span>`).join('') : ''}
       </div>${renderActions(lead)}`;
 
       const videoSummary = renderVideoSummary(eventos);
@@ -1280,16 +1395,31 @@
     return t;
   }
   function _idxCol(header, names) { for (const n of names) { const i = header.indexOf(n); if (i >= 0) return i; } return -1; }
+  // Segmento por la fecha en que el lead rellenó el formulario (mismos cortes
+  // que el servidor; editables en la pestaña por si cambian).
+  function _segmentoPorFecha(iso) {
+    if (!iso) return null;
+    const d = iso.slice(0, 10);
+    const cv = $('imp-corte-verano').value || '2026-07-01';
+    const cs = $('imp-corte-sep').value || '2026-09-01';
+    if (d < cv) return 'viejos';
+    if (d < cs) return 'verano';
+    return 'septiembre';
+  }
   function procesarCSV(text) {
-    const rows = _parseCSV(text);
+    const rows = _parseCSV(String(text || '').replace(/^﻿/, ''));
     if (!rows.length) return { error: 'CSV vacío' };
     const header = rows[0].map(h => h.trim().toLowerCase());
     const iName = _idxCol(header, ['full_name', 'nombre', 'name']);
     const iPhone = _idxCol(header, ['phone_number', 'telefono', 'teléfono', 'phone', 'movil', 'móvil']);
     const iEmail = _idxCol(header, ['email', 'mail', 'correo']);
+    const iFecha = _idxCol(header, ['created_time', 'fecha', 'created', 'fecha_lead', 'date']);
+    const iId = _idxCol(header, ['id', 'lead_id', 'meta_id']);
+    const iPreg = header.map((h, i) => (h.startsWith('¿') || /experiencia|importante|agencia/.test(h)) ? i : -1).filter(i => i >= 0);
     if (iName < 0 || iPhone < 0) return { error: 'No encuentro columnas de nombre y teléfono. Cabeceras: ' + header.slice(0, 10).join(', ') };
-    const stats = { total: 0, test: 0, validos: 0, revisar: 0 };
-    const validos = [], revisar = [], vistos = new Set();
+    const incluirExtranjeros = $('imp-extranjeros').checked;
+    const stats = { total: 0, test: 0, validos: 0, revisar: 0, sinFecha: 0 };
+    const porTel = new Map();
     const esMovil = (t) => /^34[67]\d{8}$/.test(t);
     for (let r = 1; r < rows.length; r++) {
       const f = rows[r]; if (!f || f.every(c => !c || !c.trim())) continue;
@@ -1300,12 +1430,28 @@
       if (/test lead|dummy data/i.test(nombre) || /test lead|dummy data/i.test(telRaw) || /@fb\.com$/i.test(email)) { stats.test++; continue; }
       const tel = _limpiaTel(telRaw);
       if (!tel || tel.length < 8 || !nombre) { stats.test++; continue; }
-      if (vistos.has(tel)) { stats.test++; continue; }
-      vistos.add(tel);
-      const lead = { nombre, telefono: tel, email: email || '' };
-      if (esMovil(tel)) { validos.push(lead); stats.validos++; } else { revisar.push(lead); stats.revisar++; }
+      let fechaLead = null;
+      if (iFecha >= 0 && f[iFecha]) { const d = new Date(f[iFecha]); if (!isNaN(d.getTime())) fechaLead = d.toISOString(); }
+      const respuestas = {};
+      iPreg.forEach(i => { if (f[i]) respuestas[header[i].replace(/_/g, ' ')] = String(f[i]).replace(/_/g, ' '); });
+      const lead = { nombre, telefono: tel, email: email || '', fechaLead, metaLeadId: iId >= 0 ? (f[iId] || null) : null, respuestas: Object.keys(respuestas).length ? respuestas : null };
+      // Duplicado por teléfono: nos quedamos con la entrada MÁS RECIENTE
+      // (si rellenó el formulario dos veces, manda su última vez).
+      const prev = porTel.get(tel);
+      if (prev) { stats.test++; if ((fechaLead || '') >= (prev.fechaLead || '')) porTel.set(tel, lead); continue; }
+      porTel.set(tel, lead);
     }
-    return { stats, validos, revisar };
+    const validos = [], revisar = [], porSegmento = {};
+    for (const lead of porTel.values()) {
+      const seg = _segmentoPorFecha(lead.fechaLead);
+      if (!seg) stats.sinFecha++;
+      lead.segmento = seg || 'viejos';
+      if (!esMovil(lead.telefono) && !incluirExtranjeros) { revisar.push(lead); stats.revisar++; continue; }
+      validos.push(lead); stats.validos++;
+      porSegmento[lead.segmento] = (porSegmento[lead.segmento] || 0) + 1;
+    }
+    validos.sort((a, b) => (a.fechaLead || '').localeCompare(b.fechaLead || ''));
+    return { stats, validos, revisar, porSegmento };
   }
   function renderImportPreview(res) {
     const escI = (s) => String(s || '').replace(/</g, '&lt;');
@@ -1316,8 +1462,13 @@
     $('imp-total').textContent = res.stats.total;
     $('imp-test').textContent = res.stats.test;
     $('imp-btn-n').textContent = res.stats.validos;
+    const ps = res.porSegmento || {};
+    $('imp-segmentos').innerHTML = Object.keys(ps).length
+      ? '📊 Por segmento: ' + ['viejos', 'verano', 'septiembre', 'directo'].filter(s => ps[s]).map(s => `<span class="seg seg-${s}" style="margin-left:0">${SEG_LABEL[s]}</span> <b>${ps[s]}</b>`).join(' &nbsp; ')
+        + (res.stats.sinFecha ? ` &nbsp; <i>(${res.stats.sinFecha} sin fecha → viejos)</i>` : '')
+      : '';
     $('imp-revisar-list').innerHTML = res.revisar.length
-      ? '⚠️ A revisar (NO se importan, teléfono raro): ' + res.revisar.map(l => escI(l.nombre) + ' (' + escI(l.telefono) + ')').join(' · ')
+      ? '⚠️ A revisar (NO se importan: teléfono no español o raro; marca «Incluir teléfonos extranjeros» si quieres meterlos): ' + res.revisar.map(l => escI(l.nombre) + ' (' + escI(l.telefono) + ')').join(' · ')
       : '';
     $('importStatus').textContent = '';
     $('importPreview').style.display = 'block';
@@ -1368,6 +1519,7 @@
     }, 200);
   });
   $('leadSort').addEventListener('change', (e) => { leadSort = e.target.value; leadPage = 1; refresh(); });
+  $('leadSegmento').addEventListener('change', (e) => { leadSegmento = e.target.value; leadPage = 1; selectedLeadId = null; refresh(); });
   $('pagPrev').addEventListener('click', () => { if (leadPage > 1) { leadPage--; selectedLeadId = null; refresh(); } });
   $('pagNext').addEventListener('click', () => { leadPage++; selectedLeadId = null; refresh(); });
 
@@ -1400,13 +1552,14 @@
   _dz.addEventListener('drop', (e) => { e.preventDefault(); _dz.classList.remove('over'); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) leerArchivoCSV(f); });
   $('importBtn').addEventListener('click', async () => {
     if (!_leadsValidos.length) { $('importStatus').textContent = 'No hay leads válidos que importar.'; return; }
-    if (!confirm(`Crear ${_leadsValidos.length} leads en la cola (sin enviar ningún mensaje)?`)) return;
+    const activa = (campanasCache.lista || []).find(x => x.activa);
+    if (!confirm(`Crear ${_leadsValidos.length} leads en la cola de la campaña ${activa ? `"${activa.nombre}"` : 'activa'} (sin enviar ningún mensaje)?`)) return;
     $('importBtn').disabled = true;
     $('importStatus').textContent = `Importando ${_leadsValidos.length}…`;
     try {
-      const r = await fetchJSON('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leads: _leadsValidos, ignorarDuplicados: true }) });
+      const r = await fetchJSON('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leads: _leadsValidos }) });
       const x = r.resultado || {};
-      $('importStatus').textContent = `✅ ${x.creados} creados · ${x.duplicados} ya existían · ${x.errores} errores. Ve a Inicio para poner el ritmo.`;
+      $('importStatus').textContent = `✅ ${x.creados} creados en la campaña activa · ${x.duplicados} ya estaban · ${x.excluidosBaja || 0} excluidos (pidieron la baja / sin WhatsApp) · ${x.repetidosDeOtraCampana || 0} ya contactados en otra campaña (marcados) · ${x.errores} errores. Ve a Inicio para poner el ritmo.`;
       refresh();
     } catch (e) { $('importStatus').textContent = '❌ error al importar: ' + e.message; }
     $('importBtn').disabled = false;
@@ -1421,9 +1574,10 @@
 
   // Arranque
   refreshStatus();
-  refresh();
+  loadCampanas().then(refresh);
   setInterval(refresh, 3000);
   setInterval(refreshStatus, 10000);
+  setInterval(loadCampanas, 30000);
 </script>
 </body>
 </html>

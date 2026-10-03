@@ -14,7 +14,7 @@ const messages = require('../templates/messages');
  */
 router.post('/new-lead', async (req, res) => {
   try {
-    const { nombre, email, telefono, fuente } = req.body;
+    const { nombre, email, telefono, fuente, segmento } = req.body;
     // Por defecto SÍ se envía (comportamiento del formulario real). Para
     // pruebas del equipo se pasa enviarPrimerMensaje:false → se crea el lead
     // en "esperando_cualificacion" pero NO se le escribe (así se prueba el
@@ -37,7 +37,9 @@ router.post('/new-lead', async (req, res) => {
     }
 
     // 1. Crear lead
-    const lead = leadManager.createLead({ nombre, email, telefono, fuente });
+    // Un lead que entra por el formulario/webhook es "nuevo en directo" salvo
+    // que se indique otro segmento: usa la plantilla de bienvenida inmediata.
+    const lead = leadManager.createLead({ nombre, email, telefono, fuente, segmento: segmento || 'directo' });
 
     // 2. Transicionar a "esperando_cualificacion" (reunión 29-05)
     leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
@@ -50,7 +52,7 @@ router.post('/new-lead', async (req, res) => {
     if (enviar) {
       const personalizer = require('../services/personalizer');
       const texto = await personalizer.personalizarMensaje(
-        messages.mensajeReactivacion({ nombre }),
+        messages.mensajeReactivacion({ nombre, segmento: lead.segmento }),
         lead
       );
       waResult = await messaging.sendPrimerContacto(lead, texto);
@@ -106,14 +108,10 @@ router.post('/calendly', async (req, res) => {
     activityLog.appendActivity(lead.id, 'calendly_booked', { via: 'webhook', evento: nombreEvento });
 
     if (lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
-      // Reservó el GRUPAL → le llega el acceso a la landing
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_VISTO);
-      const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
-      await messaging.sendTextMessage(
-        lead.telefono,
-        messages.mensajeAccesoVideoTrasReserva({ nombre: lead.nombre, enlaceLanding, perfil: lead.perfil })
-      );
-      console.log(`📅 [CalendlyWebhook] Reserva GRUPAL de ${lead.nombre} → landing enviada`);
+      // Reservó el GRUPAL: landing (modo landing) o plaza en la presentación
+      // en directo (modo presentación). Lo resuelve el flujo.
+      const inicio = (payload.scheduled_event && payload.scheduled_event.start_time) || null;
+      await conversationFlow.procesarReservaGrupal(lead, { via: 'webhook', evento: nombreEvento, inicio });
     } else if (lead.estado === leadManager.LEAD_STATES.REUNION_REGISTRADO) {
       // Reservó el 1-A-1 → confirmación
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
@@ -156,15 +154,13 @@ router.post('/zoom-attendance', async (req, res) => {
         const duracionMinutos = req.body.duration || null;
         activityLog.appendActivity(lead.id, 'meeting_joined', { duracionMinutos });
 
-        // La reunión que se atiende ES el 1-a-1 (la grupal está omitida por
-        // fricción). Marcamos asistencia pero NO reenviamos el Calendly del
-        // 1-a-1: ya lo tienen y acaban de asistir. Sería un duplicado absurdo.
-        const result = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
+        // Modo landing: la reunión ES el 1-a-1 → asistió, sin reenviar nada.
+        // Modo presentación: si tenía plaza reservada, asistió a la
+        // presentación → se le manda el 1-a-1. Lo decide el flujo.
+        const result = await conversationFlow.procesarAsistenciaReunion(lead, { minutos: duracionMinutos, via: 'crm' });
         if (result.error) {
           return res.status(400).json({ error: result.error });
         }
-
-        console.log(`🤝 [Webhook] Lead asistió al 1-a-1: ${lead.nombre}`);
       }
 
       return res.json({ success: true, lead: leadManager.getLeadById(lead.id) });
@@ -173,7 +169,10 @@ router.post('/zoom-attendance', async (req, res) => {
     // Modo batch: procesar lista de participantes
     if (participants && Array.isArray(participants)) {
       const resultados = [];
-      const allLeads = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.REUNION_REGISTRADO });
+      const S = leadManager.LEAD_STATES;
+      const allLeads = leadManager.getAllLeads({ campana: 'activa' }).filter(
+        (l) => l.estado === S.REUNION_REGISTRADO || l.estado === S.VIDEO_VISTO
+      );
 
       for (const participant of participants) {
         const match = allLeads.find(
@@ -181,9 +180,8 @@ router.post('/zoom-attendance', async (req, res) => {
         );
 
         if (match) {
-          // Marcamos asistencia al 1-a-1 sin reenviar el Calendly (ya lo tienen).
-          leadManager.transitionState(match.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
-          resultados.push({ lead: match.nombre, status: 'asistio' });
+          const r = await conversationFlow.procesarAsistenciaReunion(match, { via: 'batch' });
+          resultados.push({ lead: match.nombre, status: r.error ? 'sin cambio' : (r.cierreEnviado ? 'asistio_presentacion' : 'asistio') });
         }
       }
 
@@ -221,30 +219,19 @@ router.post('/bulk-import', async (req, res) => {
       return res.status(400).json({ error: 'leads debe ser un array no vacío' });
     }
 
-    const ignorar = ignorarDuplicados !== false; // default true
     const porDia = parseInt(leadsPorDia) || 10;
 
-    const resultado = { creados: 0, duplicados: 0, errores: 0, activados: 0, total: leads.length };
+    // Alta en la campaña activa con las reglas comunes (duplicados en la misma
+    // campaña, bajas, repetidos de campañas anteriores) y segmento por fecha o
+    // el indicado en cada fila / en `segmento` (ignorarDuplicados ya no aplica:
+    // en la misma campaña nunca se duplica).
     const creados = [];
-
-    for (const fila of leads) {
-      try {
-        if (!fila.telefono || !fila.nombre) { resultado.errores++; continue; }
-        const tel = String(fila.telefono).replace(/\s+/g, '');
-        if (ignorar && leadManager.getLeadByPhone(tel)) { resultado.duplicados++; continue; }
-        const lead = leadManager.createLead({
-          nombre: fila.nombre,
-          email: fila.email || '',
-          telefono: tel,
-          fuente: 'excel_import',
-        });
-        resultado.creados++;
-        creados.push(lead);
-      } catch (err) {
-        console.error(`❌ [BulkImport] Error en fila:`, err.message);
-        resultado.errores++;
-      }
-    }
+    const importador = require('../services/importador');
+    const r = importador.importar(
+      leads.map((f) => (f && !f.segmento && req.body.segmento ? { ...f, segmento: req.body.segmento } : f)),
+      { fuente: 'excel_import', segmentoPorDefecto: req.body.segmento || 'viejos', creados }
+    );
+    const resultado = { ...r, activados: 0 };
 
     // Activación: pasa de nuevo → esperando_cualificacion y envía el mensaje.
     // - soloCrear: NO activa ni envía nada (los deja "nuevo" para que el
@@ -258,7 +245,7 @@ router.post('/bulk-import', async (req, res) => {
       try {
         leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
         const texto = await personalizer.personalizarMensaje(
-          messages.mensajeReactivacion({ nombre: lead.nombre }),
+          messages.mensajeReactivacion({ nombre: lead.nombre, segmento: lead.segmento }),
           lead
         );
         // sin delay para el envío masivo (es la primera toma de contacto)

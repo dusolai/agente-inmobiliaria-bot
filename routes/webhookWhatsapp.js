@@ -115,10 +115,15 @@ router.post('/', async (req, res) => {
           } catch (e) { /* nunca romper el webhook por un status */ }
         }
 
+        // Nombre del perfil de WhatsApp del remitente: sirve para el alta
+        // automática de quien nos escribe sin ser lead todavía.
+        const contactos = value.contacts || [];
         for (const msg of mensajes) {
           const telefono = String(msg.from || '').replace(/[^\d]/g, '');
           const texto = _textoDelMensaje(msg);
           if (!telefono || !texto) continue;
+          const contacto = contactos.find((c) => String(c.wa_id || '').replace(/[^\d]/g, '') === telefono) || contactos[0];
+          const nombrePerfil = contacto && contacto.profile && contacto.profile.name ? String(contacto.profile.name) : '';
 
           console.log(`📥 [WhatsAppCloud] Mensaje de ${telefono}: "${texto.slice(0, 60)}"`);
           // Mostrar "escribiendo…" al momento (marca leído + typing), para que
@@ -128,7 +133,7 @@ router.post('/', async (req, res) => {
             whatsappCloud.sendTyping(msg.id).catch(() => {});
           } catch (e) { /* opcional */ }
           try {
-            await conversationFlow.handleIncoming(telefono, texto);
+            await conversationFlow.handleIncoming(telefono, texto, { nombre: nombrePerfil, canal: 'whatsapp' });
           } catch (err) {
             console.error('❌ [WhatsAppCloud] Error procesando mensaje entrante:', err.message);
           }

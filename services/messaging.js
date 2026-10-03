@@ -115,6 +115,21 @@ function _marcarBienvenida(telefono) {
   } catch (e) { /* nunca romper el envío por esto */ }
 }
 
+/**
+ * Plantilla de Meta para el PRIMER contacto de un lead según su segmento
+ * (reunión 01-10: cada segmento tiene su mensaje). Devuelve { name, lang } o
+ * null si ese segmento aún no tiene plantilla aprobada (y no se permite usar
+ * la genérica): entonces el lead espera en cola, no se le manda otra cosa.
+ */
+function plantillaParaSegmento(segmento) {
+  const seg = segmento || 'viejos';
+  const porSeg = config.whatsapp.templatesPorSegmento || {};
+  let name = porSeg[seg] || '';
+  if (!name && (seg === 'viejos' || config.whatsapp.usarPlantillaGenericaSiFalta)) name = config.whatsapp.templateName;
+  if (!name) return null;
+  return { name, lang: config.whatsapp.templateLang };
+}
+
 async function sendPrimerContacto(lead, textoFallback, opts = {}) {
   const telefono = lead.telefono;
   let resultado;
@@ -125,8 +140,14 @@ async function sendPrimerContacto(lead, textoFallback, opts = {}) {
   } else {
     // API oficial → plantilla (sin typing/delay: es un envío server-to-server)
     const nombre = lead.nombre && lead.nombre !== 'Sin nombre' ? lead.nombre : 'hola';
+    const plantilla = plantillaParaSegmento(lead.segmento);
+    if (!plantilla) {
+      const msg = `sin plantilla aprobada para el segmento "${lead.segmento || 'viejos'}" (WHATSAPP_TEMPLATE_${String(lead.segmento || 'viejos').toUpperCase()})`;
+      console.warn(`⚠️  [Messaging] ${lead.nombre}: ${msg}`);
+      return { success: false, mode: 'sin_plantilla', error: msg };
+    }
     try {
-      resultado = await whatsapp.sendTemplate(telefono, [nombre]);
+      resultado = await whatsapp.sendTemplate(telefono, [nombre], { name: plantilla.name, lang: plantilla.lang });
     } catch (err) {
       console.error('⚠️  [Messaging] Error enviando plantilla:', err.message);
       resultado = { success: false, error: err.message };
@@ -140,24 +161,17 @@ async function sendPrimerContacto(lead, textoFallback, opts = {}) {
     let botones = [];
     try {
       if (typeof whatsapp.renderTemplate === 'function') {
-        textoReal = await whatsapp.renderTemplate(
-          config.whatsapp.templateName,
-          config.whatsapp.templateLang,
-          [nombre]
-        );
+        textoReal = await whatsapp.renderTemplate(plantilla.name, plantilla.lang, [nombre]);
       }
       if (typeof whatsapp.getTemplateBotones === 'function') {
-        botones = await whatsapp.getTemplateBotones(
-          config.whatsapp.templateName,
-          config.whatsapp.templateLang
-        );
+        botones = await whatsapp.getTemplateBotones(plantilla.name, plantilla.lang);
       }
     } catch (e) { /* si falla, etiqueta honesta */ }
     _registrarEnvio(
       telefono,
-      textoReal || `[plantilla ${config.whatsapp.templateName} · texto aprobado en Meta]`,
+      textoReal || `[plantilla ${plantilla.name} · texto aprobado en Meta]`,
       resultado,
-      { plantilla: config.whatsapp.templateName, ...(botones.length ? { botones } : {}) }
+      { plantilla: plantilla.name, segmento: lead.segmento || null, ...(botones.length ? { botones } : {}) }
     );
   }
   _marcarBienvenida(telefono);
@@ -176,4 +190,4 @@ async function sendTemplate(telefono, params = [], opts = {}) {
   return resultado;
 }
 
-module.exports = { sendTextMessage, sendPrimerContacto, sendTemplate, esTelegram, TG_PREFIX };
+module.exports = { sendTextMessage, sendPrimerContacto, sendTemplate, plantillaParaSegmento, esTelegram, TG_PREFIX };

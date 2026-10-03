@@ -11,23 +11,40 @@ const messages = require('../templates/messages');
 /**
  * Scheduler de Recordatorios Automáticos.
  * Recorre los leads cada 5 min y hace follow-up según el estado:
- *  - Fase 0 (nuevo): activación diaria del import masivo — LEADS_POR_DIA
- *    leads al día, espaciados con intervalos aleatorios en horario laboral
+ *  - Fase 0 (nuevo): activación diaria del import — LEADS_POR_DIA leads al
+ *    día, repartidos POR TURNOS entre los segmentos de la lista (viejos /
+ *    verano / septiembre / directo), cada uno con su plantilla (reunión
+ *    01-10: "los tres a la vez")
  *  - Fase 1 (esperando_cualificacion): reenvía la pregunta de filtrado
- *  - Fase 2 (video_enviado): no reservó el grupal → reenvía el Calendly grupal
- *  - Fase 2B (video_visto): entró al funnel y lo dejó a medias → reenvía la
- *    landing de su perfil, con copy según la etapa (inicio / vsl / webinar)
+ *  - Fase 2 (video_enviado · modo presentación): no reservó la presentación
+ *    en directo → reenvía el Calendly grupal
+ *  - Fase 2B (video_enviado/video_visto · modo landing): entró al funnel y lo
+ *    dejó a medias → reenvía la landing de su perfil según la etapa
+ *  - Fase 2C (video_visto · modo presentación): reservó la presentación pero
+ *    no entró al Zoom → le ofrece otra
  *  - Fase 3 (reunion_registrado): no reservó el 1-a-1 → reenvía el individual
  *  - Máximo MAX_REMINDERS intentos por fase antes de descartar
+ *
+ * SOLO se tocan leads de la CAMPAÑA ACTIVA: archivar una campaña congela sus
+ * automatismos (reunión 01-10: la campaña de prueba queda de historial).
  */
 
 const MAX_REMINDERS = config.agent.maxReminders;
 
+// Leads de la campaña activa (los únicos que automatizamos)
+function _leadsActivos(filtro = {}) {
+  return leadManager.getAllLeads({ ...filtro, campana: 'activa' });
+}
+
+function _modoPresentacion() {
+  return config.flujo.trasCualificar === 'presentacion';
+}
+
 // ─── Fase 0: activación diaria del import masivo ──────────────────
-// Los leads de /webhook/bulk-import se crean en estado "nuevo". Esta fase
-// los va activando poco a poco: cupo diario, horario laboral y espaciado
-// aleatorio entre envíos, para no disparar los filtros antispam de WhatsApp.
-// Config por env: LEADS_POR_DIA (10), ACTIVACION_HORA_INICIO (10),
+// Los leads de /api/import y /webhook/bulk-import se crean en estado "nuevo".
+// Esta fase los va activando poco a poco: cupo diario, horario laboral y
+// espaciado aleatorio entre envíos, para no disparar los filtros antispam de
+// WhatsApp. Config por env: LEADS_POR_DIA (10), ACTIVACION_HORA_INICIO (10),
 // ACTIVACION_HORA_FIN (20). Horas en la zona del servidor (poner
 // TZ=Europe/Madrid en Seenode para que coincidan con España).
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -49,6 +66,7 @@ function _guardarEstadoActivacion(st) {
 // Cupo diario configurable EN CALIENTE desde el CRM (persistido en
 // activation.json). Prioridad: valor guardado desde el panel > env
 // LEADS_POR_DIA > 10. Así se cambia el ritmo sin tocar Seenode.
+// Reunión 24-09: no pasar de 20-25/día — Meta puede tomar el número por bot.
 function getLeadsPorDia() {
   const st = _leerEstadoActivacion();
   if (st && Number.isFinite(st.leadsPorDia) && st.leadsPorDia >= 0) return st.leadsPorDia;
@@ -62,6 +80,21 @@ function setLeadsPorDia(n) {
   st.leadsPorDia = v;
   _guardarEstadoActivacion(st);
   return v;
+}
+
+// Segmentos en pausa (desde el CRM): sus leads se quedan en cola.
+function getSegmentosPausados() {
+  const st = _leerEstadoActivacion();
+  return Array.isArray(st.segmentosPausados) ? st.segmentosPausados : [];
+}
+
+function setSegmentoPausado(segmento, pausado) {
+  const st = _leerEstadoActivacion();
+  const set = new Set(Array.isArray(st.segmentosPausados) ? st.segmentosPausados : []);
+  if (pausado) set.add(segmento); else set.delete(segmento);
+  st.segmentosPausados = Array.from(set);
+  _guardarEstadoActivacion(st);
+  return st.segmentosPausados;
 }
 
 // ¿Está listo el canal por el que se enviaría a este lead?
@@ -85,6 +118,38 @@ function _rechazoDeMeta(res) {
   return Boolean(res) && res.success === false && res.mode === 'production';
 }
 
+// Orden de los segmentos en el turno. "directo" (leads que entran hoy) va
+// siempre el primero: están calientes y conviene contactarlos cuanto antes.
+const ORDEN_SEGMENTOS = ['directo', 'viejos', 'verano', 'septiembre'];
+
+/**
+ * Elige el siguiente lead de la cola. Los "directo" primero; el resto por
+ * turnos entre segmentos (viejos → verano → septiembre → viejos…) para que las
+ * tres listas avancen a la vez. Dentro de un segmento, el más antiguo (por
+ * fecha del formulario). Se saltan los segmentos en pausa y los que aún no
+ * tienen plantilla aprobada en Meta.
+ */
+function _siguienteLead(nuevos, st) {
+  const pausados = new Set(getSegmentosPausados());
+  const porSeg = new Map();
+  for (const l of nuevos) {
+    const seg = l.segmento || 'viejos';
+    if (pausados.has(seg)) continue;
+    if (!messaging.plantillaParaSegmento(seg)) continue;
+    if (!porSeg.has(seg)) porSeg.set(seg, []);
+    porSeg.get(seg).push(l);
+  }
+  if (!porSeg.size) return null;
+  const masAntiguo = (arr) => arr
+    .slice()
+    .sort((a, b) => String(a.fechaLead || a.createdAt || '').localeCompare(String(b.fechaLead || b.createdAt || '')))[0];
+  if (porSeg.has('directo')) return masAntiguo(porSeg.get('directo'));
+  const resto = ORDEN_SEGMENTOS.filter((s) => s !== 'directo' && porSeg.has(s));
+  const idx = resto.indexOf(st.ultimoSegmento);
+  const seg = resto[(idx + 1) % resto.length];
+  return masAntiguo(porSeg.get(seg));
+}
+
 async function procesarActivacionDiaria() {
   const cupo = getLeadsPorDia();
   if (cupo <= 0) return;
@@ -97,7 +162,7 @@ async function procesarActivacionDiaria() {
 
   let st = _leerEstadoActivacion();
   const hoy = ahora.toISOString().slice(0, 10);
-  if (st.fecha !== hoy) st = { fecha: hoy, activadosHoy: 0, ultimaActivacion: null, leadsPorDia: st.leadsPorDia };
+  if (st.fecha !== hoy) st = { ...st, fecha: hoy, activadosHoy: 0, ultimaActivacion: null };
   if (st.activadosHoy >= cupo) return;
 
   // Espaciado: repartimos el cupo por la ventana horaria, con jitter ±30%
@@ -109,10 +174,19 @@ async function procesarActivacionDiaria() {
     if (minDesdeUltima < objetivo) return;
   }
 
-  // El más antiguo primero (getAllLeads ordena por creación descendente)
-  const nuevos = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.NUEVO });
+  const nuevos = _leadsActivos({ estado: leadManager.LEAD_STATES.NUEVO });
   if (nuevos.length === 0) return;
-  const lead = nuevos[nuevos.length - 1];
+  const lead = _siguienteLead(nuevos, st);
+  if (!lead) {
+    // Hay cola pero todos sus segmentos están en pausa o sin plantilla: lo
+    // decimos una vez por hora, no cada 5 min.
+    if (!st.avisoColaBloqueada || Date.now() - st.avisoColaBloqueada > 3600 * 1000) {
+      console.warn(`⏸️  [Activación] ${nuevos.length} leads en cola, pero sus segmentos están en pausa o sin plantilla aprobada (WHATSAPP_TEMPLATE_VERANO / _SEPTIEMBRE / _DIRECTO)`);
+      st.avisoColaBloqueada = Date.now();
+      _guardarEstadoActivacion(st);
+    }
+    return;
+  }
 
   // Si el canal está desconectado, NO activamos: no gastamos el cupo del día
   // en un envío que no saldría. La activación se reanuda sola al reconectar.
@@ -127,13 +201,13 @@ async function procesarActivacionDiaria() {
   // ciclo / día siguiente.
   const personalizer = require('./personalizer');
   const texto = await personalizer.personalizarMensaje(
-    messages.mensajeReactivacion({ nombre: lead.nombre }),
+    messages.mensajeReactivacion({ nombre: lead.nombre, segmento: lead.segmento }),
     lead
   );
-  // Primer contacto: plantilla en la API oficial, texto en Baileys.
+  // Primer contacto: plantilla del SEGMENTO en la API oficial, texto en Baileys.
   const envio = await messaging.sendPrimerContacto(lead, texto, { delaySeconds: 0 });
   if (!_envioOk(envio)) {
-    console.warn(`⚠️  [Activación] Envío a ${lead.nombre} no salió — sigue en la cola (no cuenta cupo)`);
+    console.warn(`⚠️  [Activación] Envío a ${lead.nombre} no salió (${(envio && envio.error) || 'sin detalle'}) — sigue en la cola (no cuenta cupo)`);
     return;
   }
 
@@ -150,12 +224,13 @@ async function procesarActivacionDiaria() {
       fase1: { enviados: 0, ultimoEnvio: new Date().toISOString() },
     },
   });
-  activityLog.appendActivity(lead.id, 'lead_activated', { cupo, activadosHoy: st.activadosHoy + 1 });
+  activityLog.appendActivity(lead.id, 'lead_activated', { cupo, activadosHoy: st.activadosHoy + 1, segmento: lead.segmento || null });
 
   st.activadosHoy++;
   st.ultimaActivacion = new Date().toISOString();
+  st.ultimoSegmento = lead.segmento || 'viejos';
   _guardarEstadoActivacion(st);
-  console.log(`🚀 [Activación] ${lead.nombre} activado (${st.activadosHoy}/${cupo} hoy, quedan ${nuevos.length - 1} en cola)`);
+  console.log(`🚀 [Activación] ${lead.nombre} [${lead.segmento || 'viejos'}] activado (${st.activadosHoy}/${cupo} hoy, quedan ${nuevos.length - 1} en cola)`);
 }
 
 // Devuelve el intervalo en ms que se debe esperar antes del recordatorio
@@ -175,37 +250,49 @@ const grupalReminders = [
   messages.recordatorioGrupal3, // 4º reintento usa el mismo copy duro que el 3º
 ];
 
-const funnelReminders = [
-  messages.recordatorioFunnel1,
-  messages.recordatorioFunnel2,
-  messages.recordatorioFunnel3,
-  messages.recordatorioFunnel3,
+const noAsistioReminders = [
+  messages.recordatorioReunion1,
+  messages.recordatorioReunion2,
+  messages.recordatorioReunion3,
+  messages.recordatorioReunion3,
 ];
 
-const reminders1a1 = [
-  messages.recordatorio1a1Primero,
-  messages.recordatorio1a1Segundo,
-  messages.recordatorio1a1Tercero,
-  messages.recordatorio1a1Tercero,
-];
+// Guarda el contador de una fase sin pisar las demás
+function _marcarIntento(lead, fase, sumar) {
+  const actual = (lead.recordatorios && lead.recordatorios[fase]) || { enviados: 0, ultimoEnvio: null };
+  leadManager.updateLead(lead.id, {
+    recordatorios: {
+      ...lead.recordatorios,
+      [fase]: { enviados: actual.enviados + (sumar ? 1 : 0), ultimoEnvio: new Date().toISOString() },
+    },
+  });
+}
+
+// Descarta un lead que agotó los recordatorios (si el mensaje de despedida
+// sale; si el canal está caído, se intenta en el próximo ciclo).
+async function _descartarPorAgotamiento(lead, motivo) {
+  const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+  if (!_envioOk(envio)) return false;
+  console.log(`🗑  [Scheduler] Descartando lead (${motivo}): ${lead.nombre}`);
+  leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
+  return true;
+}
 
 /**
  * Procesa recordatorios de Fase 1: leads a los que se envió la pregunta de
  * filtrado pero aún no han respondido (estado esperando_cualificacion).
- * Reenvía la pregunta cada 24 h, máximo 3 veces, y luego descarta.
+ * Reenvía la pregunta (plantilla de su segmento), máximo MAX_REMINDERS veces,
+ * y luego descarta.
  */
 async function procesarRecordatoriosFase1() {
-  const leads = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION });
+  const leads = _leadsActivos({ estado: leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION });
   const ahora = Date.now();
 
   for (const lead of leads) {
     const fase1 = (lead.recordatorios && lead.recordatorios.fase1) || { enviados: 0, ultimoEnvio: null };
 
     if (fase1.enviados >= MAX_REMINDERS) {
-      const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
-      if (!_envioOk(envio)) continue; // canal caído: no descartamos todavía
-      console.log(`🗑  [Scheduler] Descartando lead (no respondió la cualificación): ${lead.nombre}`);
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
+      await _descartarPorAgotamiento(lead, 'no respondió la cualificación');
       continue;
     }
 
@@ -220,82 +307,64 @@ async function procesarRecordatoriosFase1() {
     // API oficial también va como plantilla (el primer contacto reintentado).
     const envio = await messaging.sendPrimerContacto(
       lead,
-      messages.mensajeReactivacion({ nombre: lead.nombre })
+      messages.mensajeReactivacion({ nombre: lead.nombre, segmento: lead.segmento })
     );
-    if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
-
-    leadManager.updateLead(lead.id, {
-      recordatorios: {
-        ...lead.recordatorios,
-        fase1: {
-          enviados: fase1.enviados + 1,
-          ultimoEnvio: new Date().toISOString(),
-        },
-      },
-    });
+    if (!_envioOk(envio)) {
+      if (_rechazoDeMeta(envio)) _marcarIntento(lead, 'fase1', false); // backoff
+      continue; // no salió (desconectado): se reintenta
+    }
+    _marcarIntento(lead, 'fase1', true);
   }
 }
 
 /**
- * Procesa recordatorios de Fase 2: leads que recibieron el Calendly grupal
- * tras cualificar pero aún no han reservado (estado video_enviado).
- * Se les reenvía el enlace de reserva del grupal — la landing llega sola
- * al confirmar la reserva (/tracking/calendly-booked).
+ * Fase 2 (solo modo PRESENTACIÓN): leads que recibieron la invitación a la
+ * presentación en directo tras cualificar pero aún no han reservado (estado
+ * video_enviado). Se les reenvía el enlace de reserva del grupal.
+ * Con plantilla (WHATSAPP_TEMPLATE_RECORDATORIO_GRUPAL) llega siempre; sin
+ * ella va como texto, que solo entra dentro de la ventana de 24h.
  */
 async function procesarRecordatoriosFase2() {
-  const leads = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.VIDEO_ENVIADO });
+  const leads = _leadsActivos({ estado: leadManager.LEAD_STATES.VIDEO_ENVIADO });
   const ahora = Date.now();
 
   for (const lead of leads) {
-    const { recordatorios } = lead;
-    const fase2 = recordatorios.fase2;
+    const fase2 = (lead.recordatorios && lead.recordatorios.fase2) || { enviados: 0, ultimoEnvio: null };
 
-    // ¿Ya alcanzó el máximo de recordatorios?
     if (fase2.enviados >= MAX_REMINDERS) {
-      const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
-      if (!_envioOk(envio)) continue; // canal caído: no descartamos todavía
-      console.log(`🗑  [Scheduler] Descartando lead (máx recordatorios Fase 2): ${lead.nombre}`);
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
+      await _descartarPorAgotamiento(lead, 'no reservó la presentación');
       continue;
     }
 
-    // ¿Han pasado las horas necesarias desde el último envío?
     const referencia = fase2.ultimoEnvio
       ? new Date(fase2.ultimoEnvio).getTime()
-      : new Date(lead.createdAt).getTime();
+      : new Date(lead.updatedAt || lead.createdAt).getTime();
 
     if (ahora - referencia < _intervaloMs(fase2.enviados)) continue;
 
-    // Enviar recordatorio con el enlace del Calendly grupal
     const idx = Math.min(fase2.enviados, grupalReminders.length - 1);
-    const msgFn = grupalReminders[idx];
     const enlaceCalendly = conversationFlow.enlaceRedirectorCalendly(lead, 'grupal');
+    console.log(`🔔 [Scheduler] Recordatorio Presentación #${fase2.enviados + 1} → ${lead.nombre}`);
 
-    console.log(`🔔 [Scheduler] Recordatorio Grupal #${fase2.enviados + 1} → ${lead.nombre}`);
-    const envio = await messaging.sendTextMessage(
-      lead.telefono,
-      msgFn({ nombre: lead.nombre, enlaceCalendly })
-    );
-    if (!_envioOk(envio)) continue; // no salió (desconectado): se reintenta
-
-    // Actualizar contadores
-    leadManager.updateLead(lead.id, {
-      recordatorios: {
-        ...lead.recordatorios,
-        fase2: {
-          enviados: fase2.enviados + 1,
-          ultimoEnvio: new Date().toISOString(),
-        },
-      },
-    });
+    let envio;
+    if (config.whatsapp.templateRecordatorioGrupal && !messaging.esTelegram(lead.telefono)) {
+      envio = await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: config.whatsapp.templateRecordatorioGrupal, lang: 'es' });
+    } else {
+      envio = await messaging.sendTextMessage(lead.telefono, grupalReminders[idx]({ nombre: lead.nombre, enlaceCalendly }));
+    }
+    if (!_envioOk(envio)) {
+      if (_rechazoDeMeta(envio)) _marcarIntento(lead, 'fase2', false);
+      continue;
+    }
+    _marcarIntento(lead, 'fase2', true);
   }
 }
 
 /**
- * Procesa recordatorios de Fase 2B: leads que reservaron el grupal y
- * recibieron la landing, pero abandonaron el funnel sin pulsar agendar
- * (estado video_visto). Se les reenvía la landing de su perfil con un
- * copy según dónde lo dejaron (deducido del registro de actividad).
+ * Procesa recordatorios de Fase 2B (modo LANDING): leads que recibieron la
+ * landing pero la dejaron a medias (video_enviado / video_visto). Se les
+ * reenvía la landing de su perfil con un copy según dónde lo dejaron
+ * (deducido del registro de actividad).
  */
 async function procesarRecordatoriosFase2B() {
   // Cubre a los leads que están "dentro de la landing" pero aún no han pulsado
@@ -303,7 +372,7 @@ async function procesarRecordatoriosFase2B() {
   // como los que empezaron a verla y la dejaron a medias (video_visto). A ambos
   // se les reenvía la landing con el copy según dónde lo dejaron.
   const S = leadManager.LEAD_STATES;
-  const leads = leadManager.getAllLeads().filter(
+  const leads = _leadsActivos().filter(
     (l) => l.estado === S.VIDEO_ENVIADO || l.estado === S.VIDEO_VISTO
   );
   const ahora = Date.now();
@@ -361,10 +430,7 @@ async function procesarRecordatoriosFase2B() {
     // A partir de aquí, leads que NO han terminado el webinar: recordatorio de
     // landing para que retomen la presentación donde la dejaron.
     if (fase2b.enviados >= MAX_REMINDERS) {
-      const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
-      if (!_envioOk(envio)) continue; // canal caído: no descartamos todavía
-      console.log(`🗑  [Scheduler] Descartando lead (máx recordatorios Fase 2B): ${lead.nombre}`);
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
+      await _descartarPorAgotamiento(lead, 'máx recordatorios Fase 2B');
       continue;
     }
 
@@ -406,26 +472,61 @@ async function procesarRecordatoriosFase2B() {
     // cada 5 min. Registramos el intento para que respete el intervalo. Solo el
     // canal caído (development) reintenta en el próximo ciclo sin gastar intento.
     if (!_envioOk(envio)) {
-      if (_rechazoDeMeta(envio)) {
-        leadManager.updateLead(lead.id, {
-          recordatorios: {
-            ...lead.recordatorios,
-            fase2b: { enviados: fase2b.enviados, ultimoEnvio: new Date().toISOString() },
-          },
-        });
-      }
+      if (_rechazoDeMeta(envio)) _marcarIntento(lead, 'fase2b', false);
+      continue;
+    }
+    _marcarIntento(lead, 'fase2b', true);
+  }
+}
+
+/**
+ * Fase 2C (solo modo PRESENTACIÓN): reservó la presentación (video_visto)
+ * pero NO entró al Zoom. Pasada la hora reservada (+90 min de margen) se le
+ * ofrece otra; si no hay hora conocida, a las 48 h de la reserva. Máximo
+ * MAX_REMINDERS y luego descarte. Si asiste, el webhook de Zoom lo saca de
+ * aquí (pasa a reunion_registrado con el 1-a-1 enviado).
+ */
+async function procesarRecordatoriosFase2C() {
+  const leads = _leadsActivos({ estado: leadManager.LEAD_STATES.VIDEO_VISTO });
+  const ahora = Date.now();
+
+  for (const lead of leads) {
+    const fase2c = (lead.recordatorios && lead.recordatorios.fase2c) || { enviados: 0, ultimoEnvio: null };
+
+    if (fase2c.enviados >= MAX_REMINDERS) {
+      await _descartarPorAgotamiento(lead, 'no asistió a la presentación');
       continue;
     }
 
-    leadManager.updateLead(lead.id, {
-      recordatorios: {
-        ...lead.recordatorios,
-        fase2b: {
-          enviados: fase2b.enviados + 1,
-          ultimoEnvio: new Date().toISOString(),
-        },
-      },
-    });
+    let referencia;
+    if (fase2c.ultimoEnvio) {
+      referencia = new Date(fase2c.ultimoEnvio).getTime();
+      if (ahora - referencia < _intervaloMs(fase2c.enviados)) continue;
+    } else {
+      const inicio = lead.presentacionAt ? new Date(lead.presentacionAt).getTime() : NaN;
+      if (!isNaN(inicio)) {
+        if (ahora < inicio + 90 * 60 * 1000) continue; // la presentación aún no ha pasado
+      } else {
+        const reserva = new Date(lead.presentacionReservadaAt || lead.videoVistoAt || lead.updatedAt).getTime();
+        if (ahora - reserva < 48 * 3600 * 1000) continue;
+      }
+    }
+
+    const idx = Math.min(fase2c.enviados, noAsistioReminders.length - 1);
+    const enlaceReunion = conversationFlow.enlaceRedirectorCalendly(lead, 'grupal');
+    console.log(`🔔 [Scheduler] Recordatorio No-asistió #${fase2c.enviados + 1} → ${lead.nombre}`);
+
+    let envio;
+    if (config.whatsapp.templateRecordatorioGrupal && !messaging.esTelegram(lead.telefono)) {
+      envio = await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: config.whatsapp.templateRecordatorioGrupal, lang: 'es' });
+    } else {
+      envio = await messaging.sendTextMessage(lead.telefono, noAsistioReminders[idx]({ nombre: lead.nombre, enlaceReunion }));
+    }
+    if (!_envioOk(envio)) {
+      if (_rechazoDeMeta(envio)) _marcarIntento(lead, 'fase2c', false);
+      continue;
+    }
+    _marcarIntento(lead, 'fase2c', true);
   }
 }
 
@@ -434,7 +535,7 @@ async function procesarRecordatoriosFase2B() {
  * el enlace del 1-a-1 pero no han reservado (estado reunion_registrado).
  */
 async function procesarRecordatoriosFase3() {
-  const leads = leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.REUNION_REGISTRADO });
+  const leads = _leadsActivos({ estado: leadManager.LEAD_STATES.REUNION_REGISTRADO });
   const ahora = Date.now();
 
   for (const lead of leads) {
@@ -442,10 +543,7 @@ async function procesarRecordatoriosFase3() {
     const fase3 = (lead.recordatorios && lead.recordatorios.fase3) || { enviados: 0, ultimoEnvio: null };
 
     if (fase3.enviados >= MAX_REMINDERS) {
-      const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
-      if (!_envioOk(envio)) continue; // canal caído: no descartamos todavía
-      console.log(`🗑  [Scheduler] Descartando lead (máx recordatorios Fase 3): ${lead.nombre}`);
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
+      await _descartarPorAgotamiento(lead, 'máx recordatorios Fase 3');
       continue;
     }
 
@@ -467,26 +565,10 @@ async function procesarRecordatoriosFase3() {
     // Igual que Fase 2B: si Meta lo rechaza (permanente) no reintentamos cada
     // 5 min; registramos el intento para respetar el intervalo.
     if (!_envioOk(envio)) {
-      if (_rechazoDeMeta(envio)) {
-        leadManager.updateLead(lead.id, {
-          recordatorios: {
-            ...lead.recordatorios,
-            fase3: { enviados: fase3.enviados, ultimoEnvio: new Date().toISOString() },
-          },
-        });
-      }
+      if (_rechazoDeMeta(envio)) _marcarIntento(lead, 'fase3', false);
       continue;
     }
-
-    leadManager.updateLead(lead.id, {
-      recordatorios: {
-        ...lead.recordatorios,
-        fase3: {
-          enviados: fase3.enviados + 1,
-          ultimoEnvio: new Date().toISOString(),
-        },
-      },
-    });
+    _marcarIntento(lead, 'fase3', true);
   }
 }
 
@@ -513,16 +595,21 @@ async function ejecutarCiclo() {
   }
 
   await procesarRecordatoriosFase1();
-  // Fase 2 (recordatorio del Calendly grupal) queda retirada: el flujo actual
-  // no obliga a reservar el grupal. Los leads con la landing enviada se cubren
-  // en la Fase 2B junto con los que la están viendo.
-  await procesarRecordatoriosFase2B();
+  if (_modoPresentacion()) {
+    // Modo presentación en directo: recordar la reserva y, tras la hora, la
+    // inasistencia. La landing no entra en juego.
+    await procesarRecordatoriosFase2();
+    await procesarRecordatoriosFase2C();
+  } else {
+    // Modo landing (flujo actual): los leads con la landing enviada o a medias.
+    await procesarRecordatoriosFase2B();
+  }
   await procesarRecordatoriosFase3();
   console.log(`✅ [Scheduler] Ciclo completado\n`);
 }
 
 /**
- * Arranca el cron job (cada hora).
+ * Arranca el cron job (cada 5 min).
  */
 function iniciar() {
   console.log('🕐 [Scheduler] Programador de recordatorios iniciado (cada 5 min)');
@@ -542,4 +629,12 @@ function iniciar() {
   }, 10000);
 }
 
-module.exports = { iniciar, ejecutarCiclo, getLeadsPorDia, setLeadsPorDia };
+module.exports = {
+  iniciar,
+  ejecutarCiclo,
+  procesarActivacionDiaria,
+  getLeadsPorDia,
+  setLeadsPorDia,
+  getSegmentosPausados,
+  setSegmentoPausado,
+};

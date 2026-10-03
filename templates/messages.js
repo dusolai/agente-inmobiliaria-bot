@@ -38,7 +38,67 @@ const VARIANTES_REACTIVACION = [
     `Dime el número que toque y seguimos 🙂`,
 ];
 
-function mensajeReactivacion({ nombre }) {
+// ─── Mensajes por SEGMENTO (lanzamiento octubre 2026) ────────────
+// Textos acordados por Arkaitz y Diego (30-09, tras la reunión del 24-09).
+// En la API oficial el primer contacto va como PLANTILLA aprobada en Meta
+// con estos mismos cuerpos (PLANTILLAS_META, con {{nombre}} y dos botones de
+// respuesta rápida). Estos textos se usan tal cual en Baileys/Telegram y
+// como referencia para dar de alta las plantillas; en texto libre se añaden
+// las opciones 1/2 porque ahí no hay botones.
+const OPCIONES_TEXTO =
+  `\n\n1️⃣ Trabajo en el sector inmobiliario\n` +
+  `2️⃣ Busco ingresos extra\n\n` +
+  `Respóndeme con el 1 o el 2 y seguimos 🙂`;
+
+const PLANTILLAS_META = {
+  verano: {
+    nombreSugerido: 'reactivacion_verano',
+    variable: 'WHATSAPP_TEMPLATE_VERANO',
+    cuerpo:
+      `¡Hola, {{nombre}}! 👋 Soy del equipo de Three Inmobiliaria.\n\n` +
+      `Con el verano de por medio, estamos retomando estos días el contacto con las personas que mostraron interés en nuestro proyecto durante julio y agosto.\n\n` +
+      `Antes de enviarte toda la información, quería preguntarte algo muy rápido para saber qué puede encajarte mejor:\n\n` +
+      `👉 ¿Actualmente trabajas en el sector inmobiliario 🏠 o estás buscando una oportunidad para generar ingresos extra? 💰`,
+  },
+  septiembre: {
+    nombreSugerido: 'reactivacion_septiembre',
+    variable: 'WHATSAPP_TEMPLATE_SEPTIEMBRE',
+    cuerpo:
+      `¡Hola, {{nombre}}! 👋 Soy del equipo de Three Inmobiliaria.\n\n` +
+      `Hace unos días mostraste interés en nuestro proyecto y quería ponerme en contacto contigo para contarte cómo funciona y las novedades que tenemos actualmente. 😊\n\n` +
+      `Antes de enviarte información, una pregunta rápida para orientarte mejor:\n\n` +
+      `👉 ¿Actualmente trabajas en el sector inmobiliario 🏠 o estás buscando una oportunidad para generar ingresos extra?`,
+  },
+  directo: {
+    nombreSugerido: 'bienvenida_directo',
+    variable: 'WHATSAPP_TEMPLATE_DIRECTO',
+    cuerpo:
+      `¡Hola, {{nombre}}! 👋 Soy del equipo de Three Inmobiliaria.\n\n` +
+      `He visto que acabas de mostrar interés en nuestro proyecto y quería contactar contigo para conocer un poquito mejor qué estás buscando 😊\n\n` +
+      `Antes de enviarte información, una pregunta rápida:\n\n` +
+      `👉 ¿Ya trabajas en el sector inmobiliario 🏠 o estás buscando una nueva oportunidad para generar ingresos? 💰`,
+  },
+  // Botones de respuesta rápida de las tres plantillas (máx. 25 caracteres).
+  // El flujo los reconoce por las palabras "agente" / "ingreso(s)".
+  botones: ['Soy agente inmobiliario', 'Busco ingresos extra'],
+};
+
+function _textoSegmento(segmento, nombre) {
+  const p = PLANTILLAS_META[segmento];
+  if (!p || !p.cuerpo) return null;
+  // Sin nombre (alta automática sin nombre de perfil): "¡Hola!" a secas.
+  const n = !nombre || nombre === 'Sin nombre' ? '' : String(nombre).trim();
+  return p.cuerpo.split('{{nombre}}').join(n).replace('¡Hola, !', '¡Hola!') + OPCIONES_TEXTO;
+}
+
+/**
+ * Primer mensaje (pregunta de filtrado). `segmento` decide el texto:
+ *   viejos / sin segmento → variantes "reabrimos plazas" (como hasta ahora)
+ *   verano / septiembre / directo → texto acordado para ese segmento
+ */
+function mensajeReactivacion({ nombre, segmento }) {
+  const porSegmento = _textoSegmento(segmento, nombre);
+  if (porSegmento) return porSegmento;
   const variante = VARIANTES_REACTIVACION[Math.floor(Math.random() * VARIANTES_REACTIVACION.length)];
   return variante({ nombre });
 }
@@ -348,7 +408,7 @@ function recordatorioReunion3({ nombre, enlaceReunion }) {
 function mensajeCierre({ nombre, enlaceCalendly }) {
   return (
     `¡${nombre}! Mil gracias por sumarte hoy 🙌\n\n` +
-    `Ya tienes una idea bastante completa del proyecto. Si te ves dentro y quieres dar el paso, te toca una reunión 1 a 1 conmigo para verlo a tu caso concreto.\n\n` +
+    `Ya tienes una idea bastante completa del proyecto. Si te ves dentro y quieres dar el paso, te toca una reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}, para verlo con tu caso concreto.\n\n` +
     `Agenda aquí tu hueco (van por orden, intenta cogerlo cuanto antes):\n` +
     `${enlaceCalendly}`
   );
@@ -365,9 +425,35 @@ function mensajeDescarte({ nombre }) {
   );
 }
 
+// ─── G. Presentación EN DIRECTO (FLUJO_TRAS_CUALIFICAR=presentacion) ─
+// Reunión 01-10: en vez de la landing con vídeos, el lead cualificado recibe
+// la invitación a la presentación en directo (formato 30 + preguntas), una al
+// día alternando mañana/tarde. Tras asistir se le manda el 1-a-1 (mensajeCierre).
+function mensajeInvitacionPresentacion({ nombre, enlaceGrupal }) {
+  return (
+    `¡Genial ${nombre}!\n\n` +
+    `El siguiente paso es la presentación del proyecto EN DIRECTO por Zoom: unos 30 minutos y al final puedes preguntar lo que quieras. Hacemos una al día.\n\n` +
+    `Reserva el hueco que mejor te encaje aquí:\n` +
+    `${enlaceGrupal}\n\n` +
+    `Al terminar la presentación se te abre la opción de reservar una reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}, para ver tu caso.`
+  );
+}
+
+function mensajeReservaPresentacionConfirmada({ nombre }) {
+  return (
+    `¡Listo ${nombre}! Tu plaza en la presentación está reservada ✅\n\n` +
+    `El enlace de Zoom te llega por email con la confirmación. Te mando un recordatorio antes.\n\n` +
+    `Nos vemos allí 🙌`
+  );
+}
+
 module.exports = {
+  PLANTILLAS_META,
+  OPCIONES_TEXTO,
   mensajeReactivacion,
   mensajeReintentarCualificacion,
+  mensajeInvitacionPresentacion,
+  mensajeReservaPresentacionConfirmada,
   mensajeRamaProfesional,
   mensajeRamaEmprendedor,
   mensajeAccesoVideoTrasReserva,

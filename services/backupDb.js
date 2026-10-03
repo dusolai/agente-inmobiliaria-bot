@@ -31,6 +31,8 @@ const FICHEROS = [
   { kind: 'leads', ruta: () => path.join(DATA_DIR, 'leads.json') },
   { kind: 'activity', ruta: () => path.join(DATA_DIR, 'activity.json') },
   { kind: 'activation', ruta: () => path.join(DATA_DIR, 'activation.json') },
+  { kind: 'campanas', ruta: () => path.join(DATA_DIR, 'campanas.json') },
+  { kind: 'sheets_state', ruta: () => path.join(DATA_DIR, 'sheets_state.json') },
 ];
 
 function _leerDirComoObjeto(dir) {

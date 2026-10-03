@@ -87,17 +87,66 @@ function esOptOut(texto) {
   return OPTOUT_REGEX.test(normalizar(texto));
 }
 
-async function handleIncoming(telefono, texto) {
-  const lead = leadManager.getLeadByPhone(telefono);
-  if (!lead) {
-    // No es un lead conocido: no respondemos, pero lo dejamos dicho en el
-    // log para que "no responde" nunca sea un misterio.
-    console.log(`🤷 [Flujo] Mensaje de ${telefono} SIN lead asociado — ignorado: "${String(texto).slice(0, 50)}"`);
-    return;
-  }
+// ─── Alta automática de números desconocidos ─────────────────────
+// Reunión 24-09: el número del agente va en el formulario de Karen y hay
+// gente que, en vez de esperar, escribe directamente. Antes se ignoraba; ahora
+// se da de alta en la campaña activa como lead "directo" y se le hace la
+// pregunta de filtrado como texto libre (él ha escrito primero: la ventana de
+// 24h está abierta y no hace falta plantilla). Límite por hora para que un
+// bot o un spammer no nos llene el CRM.
+const _altasRecientes = [];
+function _puedeAutoAlta() {
+  const ahora = Date.now();
+  while (_altasRecientes.length && ahora - _altasRecientes[0] > 3600 * 1000) _altasRecientes.shift();
+  if (_altasRecientes.length >= config.flujo.autoAltaMaxPorHora) return false;
+  _altasRecientes.push(ahora);
+  return true;
+}
 
-  // Registramos toda la actividad inbound del lead, esté en el estado que esté
+async function _autoAlta(telefono, texto, extra) {
+  if (!config.flujo.autoAltaWhatsapp) return null;
+  if (messaging.esTelegram(telefono)) return null;
+  if (esOptOut(texto)) return null;
+  if (!_puedeAutoAlta()) {
+    console.warn(`⚠️  [Flujo] Alta automática de ${telefono} bloqueada: límite por hora (${config.flujo.autoAltaMaxPorHora})`);
+    return null;
+  }
+  const nombre = (extra && extra.nombre && String(extra.nombre).trim()) || 'Sin nombre';
+  const lead = leadManager.createLead({ nombre, telefono, fuente: 'whatsapp_entrante', segmento: 'directo' });
+  leadManager.transitionState(lead.id, LEAD_STATES.ESPERANDO_CUALIFICACION);
+  leadManager.updateLead(lead.id, {
+    recordatorios: { ...lead.recordatorios, fase1: { enviados: 0, ultimoEnvio: new Date().toISOString() } },
+  });
+  activityLog.appendActivity(lead.id, 'auto_alta', { texto: String(texto).slice(0, 200), nombrePerfil: nombre });
   activityLog.appendActivity(lead.id, 'message_received', { texto });
+  console.log(`🆕 [Flujo] ${nombre} (${telefono}) escribió sin ser lead → alta automática como "directo"`);
+  return leadManager.getLeadById(lead.id);
+}
+
+async function handleIncoming(telefono, texto, extra = {}) {
+  let lead = leadManager.getLeadByPhone(telefono);
+  if (!lead) {
+    lead = await _autoAlta(telefono, texto, extra);
+    if (!lead) {
+      // No es un lead conocido y no procede el alta: no respondemos, pero lo
+      // dejamos dicho en el log para que "no responde" nunca sea un misterio.
+      console.log(`🤷 [Flujo] Mensaje de ${telefono} SIN lead asociado — ignorado: "${String(texto).slice(0, 50)}"`);
+      return;
+    }
+    // Recién creado: si ya nos dice 1/2 se procesa abajo como cualquier lead;
+    // si no, le hacemos la pregunta de filtrado (texto libre, ventana abierta).
+    if (!interpretarRespuesta(texto)) {
+      activityLog.appendActivity(lead.id, 'welcome_sent', null);
+      await messaging.sendTextMessage(
+        lead.telefono,
+        messages.mensajeReactivacion({ nombre: lead.nombre, segmento: 'directo' })
+      );
+      return;
+    }
+  } else {
+    // Registramos toda la actividad inbound del lead, esté en el estado que esté
+    activityLog.appendActivity(lead.id, 'message_received', { texto });
+  }
 
   // ─── Opt-out: prioridad absoluta sobre cualquier fase ───────────
   if (esOptOut(texto) && lead.estado !== LEAD_STATES.DESCARTADO) {
@@ -132,7 +181,7 @@ async function handleIncoming(telefono, texto) {
         console.log(`👋 [Flujo] ${lead.nombre} escribió sin bienvenida previa → enviando bienvenida completa`);
         await messaging.sendTextMessage(
           lead.telefono,
-          messages.mensajeReactivacion({ nombre: lead.nombre })
+          messages.mensajeReactivacion({ nombre: lead.nombre, segmento: lead.segmento })
         );
         return;
       }
@@ -149,6 +198,26 @@ async function handleIncoming(telefono, texto) {
     }
     leadManager.updateLead(lead.id, { perfil });
     activityLog.appendActivity(lead.id, 'profile_set', { perfil });
+
+    // ─── Modo PRESENTACIÓN EN DIRECTO (reunión 01-10) ─────────────
+    // En vez de la landing, invitación a reservar la presentación en directo
+    // (Calendly grupal). Estado "video_enviado" = invitación enviada; al
+    // reservar (webhook de Calendly) pasa a "video_visto" = plaza reservada.
+    if (config.flujo.trasCualificar === 'presentacion') {
+      const r = leadManager.transitionState(lead.id, LEAD_STATES.VIDEO_ENVIADO);
+      if (r.error) {
+        console.error(`❌ [Flujo] No se pudo avanzar el lead ${lead.id}: ${r.error}`);
+        return;
+      }
+      const enlaceGrupal = enlaceRedirectorCalendly(lead, 'grupal');
+      console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → invitación a la presentación en directo`);
+      await messaging.sendTextMessage(
+        lead.telefono,
+        messages.mensajeInvitacionPresentacion({ nombre: lead.nombre, enlaceGrupal })
+      );
+      return;
+    }
+
     // Se le ENVÍA la landing, pero AÚN NO la ha visto → estado "video_enviado".
     // Solo pasa a "video_visto" cuando la propia landing (vsl.js) avise de que
     // realmente ha visto el VSL (evento de progreso 90% / completado). Así el
@@ -247,8 +316,63 @@ function leadIdDesdeUtm(utmContent) {
   return m ? m[1] : null;
 }
 
+/**
+ * Reserva en el Calendly GRUPAL confirmada (webhook de Calendly o página de
+ * confirmación). Qué significa depende del modo:
+ *  - landing: reservó la sesión grabada → le llega el acceso a la landing
+ *  - presentacion: reservó la presentación en directo → confirmación; el
+ *    1-a-1 se le manda cuando asista (webhook de Zoom)
+ * Solo actúa si el lead está en video_enviado; si no, no-op (idempotente con
+ * el redirect y el webhook, que pueden llegar los dos).
+ */
+async function procesarReservaGrupal(lead, { via = 'webhook', evento = null, inicio = null } = {}) {
+  if (!lead || lead.estado !== LEAD_STATES.VIDEO_ENVIADO) return false;
+  leadManager.transitionState(lead.id, LEAD_STATES.VIDEO_VISTO);
+  if (config.flujo.trasCualificar === 'presentacion') {
+    leadManager.updateLead(lead.id, { presentacionAt: inicio || null, presentacionReservadaAt: new Date().toISOString() });
+    activityLog.appendActivity(lead.id, 'presentacion_reservada', { via, evento, inicio });
+    console.log(`📅 [Flujo] ${lead.nombre} reservó la PRESENTACIÓN en directo (${inicio || 'hora sin informar'})`);
+    await messaging.sendTextMessage(lead.telefono, messages.mensajeReservaPresentacionConfirmada({ nombre: lead.nombre }));
+    return true;
+  }
+  const enlaceLanding = enlaceLandingPorPerfil(lead.perfil, lead.id);
+  console.log(`📅 [Flujo] Reserva GRUPAL de ${lead.nombre} (${via}) → landing enviada`);
+  await messaging.sendTextMessage(
+    lead.telefono,
+    messages.mensajeAccesoVideoTrasReserva({ nombre: lead.nombre, enlaceLanding, perfil: lead.perfil })
+  );
+  return true;
+}
+
+/**
+ * El lead ASISTIÓ a una reunión de Zoom (webhook de Zoom o botón del CRM).
+ *  - modo presentación + estado video_visto (plaza reservada): asistió a la
+ *    presentación en directo → se le manda el enlace del 1-a-1 (cierre) y
+ *    pasa a reunion_registrado (la Fase 3 le recuerda reservar).
+ *  - en cualquier otro caso la reunión ES el 1-a-1 → reunion_asistio, sin
+ *    reenviar nada (ya lo tiene y acaba de asistir).
+ */
+async function procesarAsistenciaReunion(lead, { minutos = null, via = 'zoom' } = {}) {
+  if (!lead) return { error: 'lead no encontrado', lead: null };
+  if (config.flujo.trasCualificar === 'presentacion' && lead.estado === LEAD_STATES.VIDEO_VISTO) {
+    const r = leadManager.transitionState(lead.id, LEAD_STATES.REUNION_REGISTRADO);
+    if (r.error) return r;
+    leadManager.updateLead(lead.id, { reunionRegistradoAt: new Date().toISOString() });
+    activityLog.appendActivity(lead.id, 'presentacion_asistida', { minutos, via });
+    const enlaceCalendly = enlaceRedirectorCalendly(lead, 'individual');
+    console.log(`🤝 [Flujo] ${lead.nombre} asistió a la presentación (${minutos != null ? minutos + ' min' : via}) → 1-a-1 enviado`);
+    await messaging.sendTextMessage(lead.telefono, messages.mensajeCierre({ nombre: lead.nombre, enlaceCalendly }));
+    return { error: null, lead: leadManager.getLeadById(lead.id), cierreEnviado: true };
+  }
+  const r = leadManager.transitionState(lead.id, LEAD_STATES.REUNION_ASISTIO);
+  if (!r.error) console.log(`🤝 [Flujo] ${lead.nombre} asistió al 1-a-1 (${minutos != null ? minutos + ' min' : via})`);
+  return { ...r, cierreEnviado: false };
+}
+
 module.exports = {
   handleIncoming,
+  procesarReservaGrupal,
+  procesarAsistenciaReunion,
   interpretarRespuesta,
   enlaceLandingPorPerfil,
   enlaceCalendlyConTracking,

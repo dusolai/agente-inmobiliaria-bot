@@ -137,10 +137,9 @@ router.post('/', async (req, res) => {
         // así que reofrecerlo tras asistir no tiene sentido.
         const umbral = config.zoom.minutosAsistenciaValida;
         if (minutos !== null && minutos >= umbral) {
-          const ok = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
-          if (!ok.error) {
-            console.log(`🤝 [ZoomWebhook] ${lead.nombre} asistió al 1-a-1 (${minutos} min)`);
-          }
+          // Presentación en directo (modo presentación) → se le manda el 1-a-1;
+          // si no, la reunión ES el 1-a-1 → asistió. Lo decide el flujo.
+          await conversationFlow.procesarAsistenciaReunion(lead, { minutos, via: 'zoom' });
         } else {
           // Salió pronto: lo dejamos avisado para que el equipo pueda recuperar
           console.log(`⏰ [ZoomWebhook] ${lead.nombre} solo estuvo ${minutos} min (umbral ${umbral})`);
@@ -163,8 +162,7 @@ router.post('/', async (req, res) => {
           if (lead) {
             activityLog.appendActivity(lead.id, 'meeting_left', { meetingId, minutos, reason: 'meeting_ended' });
             if (minutos >= config.zoom.minutosAsistenciaValida) {
-              // Asistió al 1-a-1: marcamos estado, sin reenviar el Calendly.
-              leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
+              await conversationFlow.procesarAsistenciaReunion(lead, { minutos, via: 'zoom' });
             }
           }
         }

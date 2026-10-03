@@ -174,6 +174,17 @@ async function arrancar() {
     console.error('⚠️  [BackupDB] Error en el arranque (seguimos sin copia):', err.message);
   }
 
+  // Campañas: los leads anteriores al sistema de campañas pasan a la campaña
+  // legado (prueba de septiembre). Va DESPUÉS de restaurar la copia.
+  try {
+    require('./services/leadManager').migrarCampanas();
+    const campanas = require('./services/campanas');
+    const activa = campanas.get(campanas.getActiva());
+    console.log(`🗂️  [Campañas] Activa: ${activa ? activa.nombre : campanas.getActiva()}`);
+  } catch (err) {
+    console.error('⚠️  [Campañas] Error migrando campañas:', err.message);
+  }
+
   app.listen(config.port, () => {
     console.log(`
 ╔══════════════════════════════════════════════════════╗
@@ -202,6 +213,10 @@ async function arrancar() {
     // Si TELEGRAM_BOT_TOKEN está vacío, el adaptador se salta solo.
     const telegram = require('./services/telegram');
     telegram.initialize();
+
+    // ─── Lector automático de la hoja de Google (leads nuevos en directo) ─
+    const sheetsPoller = require('./services/sheetsPoller');
+    sheetsPoller.iniciar();
   });
 }
 

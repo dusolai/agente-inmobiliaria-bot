@@ -134,17 +134,8 @@ router.get('/calendly-booked', async (req, res) => {
     //      → transicionamos a REUNION_ASISTIO y mandamos confirmación
     try {
       if (lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
-        leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_VISTO);
-        console.log(`📅 [Tracking] Reserva GRUPAL confirmada: ${lead.nombre}`);
-        const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
-        await messaging.sendTextMessage(
-          lead.telefono,
-          messages.mensajeAccesoVideoTrasReserva({
-            nombre: lead.nombre,
-            enlaceLanding,
-            perfil: lead.perfil,
-          })
-        );
+        // Landing (modo landing) o plaza en la presentación (modo presentación)
+        await conversationFlow.procesarReservaGrupal(lead, { via: 'redirect' });
       } else if (lead.estado === leadManager.LEAD_STATES.REUNION_REGISTRADO) {
         leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
         console.log(`📅 [Tracking] Reserva 1-A-1 confirmada: ${lead.nombre}`);

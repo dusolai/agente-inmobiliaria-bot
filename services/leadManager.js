@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const activityLog = require('./activityLog');
+const campanas = require('./campanas');
 
 // DATA_DIR permite apuntar los datos a un disco persistente (Seenode) para
 // que un redeploy no borre los leads. Sin la variable, ./data como siempre.
@@ -86,7 +87,10 @@ function writeLeads(leads) {
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────
-function createLead({ nombre, email, telefono, fuente = 'formulario' }) {
+function createLead({
+  nombre, email, telefono, fuente = 'formulario',
+  campana, segmento = null, fechaLead = null, metaLeadId = null, respuestas = null, contactadoAntesEn = null,
+}) {
   const leads = readLeads();
   const now = new Date().toISOString();
 
@@ -96,6 +100,14 @@ function createLead({ nombre, email, telefono, fuente = 'formulario' }) {
     email: email || '',
     telefono: normalizarTelefono(telefono),
     fuente,
+    // Campaña a la que pertenece (por defecto la activa) y segmento de la
+    // lista (viejos / verano / septiembre / directo) → decide la plantilla.
+    campana: campana || campanas.getActiva(),
+    segmento: segmento || null,
+    fechaLead: fechaLead || null,                 // cuándo rellenó el formulario (Meta)
+    metaLeadId: metaLeadId || null,               // id del lead en Meta (l:…), para no repetir
+    respuestas: respuestas || null,               // respuestas del formulario de Meta
+    contactadoAntesEn: contactadoAntesEn || null, // campaña anterior donde ya se le escribió
     perfil: LEAD_PROFILES.SIN_DEFINIR,
     estado: LEAD_STATES.NUEVO,
     createdAt: now,
@@ -116,10 +128,20 @@ function createLead({ nombre, email, telefono, fuente = 'formulario' }) {
 
   leads.push(lead);
   writeLeads(leads);
-  activityLog.appendActivity(lead.id, 'lead_created', { fuente, telefono });
+  activityLog.appendActivity(lead.id, 'lead_created', { fuente, telefono, campana: lead.campana, segmento: lead.segmento });
   return lead;
 }
 
+// Campaña de un lead: los anteriores al sistema de campañas cuentan como la
+// campaña legado (prueba de septiembre).
+function campanaDe(lead) {
+  return (lead && lead.campana) || campanas.CAMPANA_LEGADO;
+}
+
+/**
+ * filtro.campana: id de campaña | 'activa' | 'todas' | undefined (= todas,
+ * por compatibilidad). filtro.segmento: viejos | verano | septiembre | directo.
+ */
 function getAllLeads(filtro = {}) {
   let leads = readLeads();
 
@@ -128,6 +150,13 @@ function getAllLeads(filtro = {}) {
   }
   if (filtro.fuente) {
     leads = leads.filter((l) => l.fuente === filtro.fuente);
+  }
+  if (filtro.campana && filtro.campana !== 'todas') {
+    const id = filtro.campana === 'activa' ? campanas.getActiva() : filtro.campana;
+    leads = leads.filter((l) => campanaDe(l) === id);
+  }
+  if (filtro.segmento) {
+    leads = leads.filter((l) => (l.segmento || 'viejos') === filtro.segmento);
   }
 
   // Ordenar por fecha de creación descendente
@@ -145,7 +174,15 @@ function getLeadByPhone(telefono) {
   // Comparamos normalizado por ambos lados: así un lead antiguo guardado con
   // espacios sigue encontrándose cuando WhatsApp entrega el número limpio.
   const buscado = normalizarTelefono(telefono);
-  return leads.find((l) => normalizarTelefono(l.telefono) === buscado) || null;
+  const coincidencias = leads.filter((l) => normalizarTelefono(l.telefono) === buscado);
+  if (coincidencias.length <= 1) return coincidencias[0] || null;
+  // El mismo teléfono puede estar en una campaña archivada y en la activa
+  // (reimportado). Un mensaje entrante es para el lead de la campaña ACTIVA;
+  // si no está en ella, para el más reciente.
+  const activa = campanas.getActiva();
+  const enActiva = coincidencias.filter((l) => campanaDe(l) === activa);
+  const candidatos = enActiva.length ? enActiva : coincidencias;
+  return candidatos.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0];
 }
 
 function updateLead(id, updates) {
@@ -215,8 +252,8 @@ function deleteLead(id) {
   return true;
 }
 
-function getStats() {
-  const leads = readLeads();
+function getStats(filtro = {}) {
+  const leads = getAllLeads(filtro);
   const total = leads.length;
 
   const porEstado = {};
@@ -235,8 +272,25 @@ function getStats() {
     descartados: porEstado[LEAD_STATES.DESCARTADO] || 0,
     tasaConversion: `${tasaConversion}%`,
     porEstado,
-    ultimoLead: leads.length > 0 ? leads[leads.length - 1].createdAt : null,
+    ultimoLead: leads.length > 0 ? leads[0].createdAt : null, // getAllLeads ordena del más reciente al más antiguo
   };
+}
+
+/**
+ * Asigna la campaña legado a los leads anteriores al sistema de campañas.
+ * Se ejecuta al arrancar, DESPUÉS de restaurar la copia de Postgres.
+ */
+function migrarCampanas() {
+  const leads = readLeads();
+  let n = 0;
+  for (const l of leads) {
+    if (!l.campana) { l.campana = campanas.CAMPANA_LEGADO; n++; }
+  }
+  if (n) {
+    writeLeads(leads);
+    console.log(`🗂️  [Leads] ${n} leads sin campaña asignados a "${campanas.CAMPANA_LEGADO}"`);
+  }
+  return n;
 }
 
 module.exports = {
@@ -244,6 +298,8 @@ module.exports = {
   LEAD_PROFILES,
   VALID_TRANSITIONS,
   normalizarTelefono,
+  campanaDe,
+  migrarCampanas,
   createLead,
   getAllLeads,
   getLeadById,

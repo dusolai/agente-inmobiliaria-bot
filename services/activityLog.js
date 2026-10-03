@@ -86,8 +86,9 @@ function getRecentActivity(limit = 100) {
  * Estadísticas agregadas: cuántos leads han pasado por cada tipo de evento,
  * en cuántos minutos de mediana ocurrió tras la creación, etc.
  */
-function getStats() {
-  const all = readAll();
+function getStats(soloIds = null) {
+  // soloIds: Set de leadIds a los que limitar las cuentas (p. ej. una campaña)
+  const all = soloIds ? readAll().filter((e) => soloIds.has(e.leadId)) : readAll();
   // Sets de leadIds que han alcanzado cada tipo de evento
   const leadsPorTipo = new Map(); // type -> Set(leadId)
   const leadsCalGrupal = new Set();
@@ -338,6 +339,18 @@ function limpiarRechazados({ dryRun = false, leadId = null } = {}) {
   return { eliminados, total: eliminados };
 }
 
+/**
+ * Leads que pidieron la BAJA o cuyo número NO tiene WhatsApp (en cualquier
+ * campaña). No se les vuelve a escribir aunque reaparezcan en una lista nueva.
+ */
+function getLeadsConBaja() {
+  const set = new Set();
+  for (const e of readAll()) {
+    if (e.type === 'opt_out' || e.type === 'sin_whatsapp') set.add(e.leadId);
+  }
+  return set;
+}
+
 // Borra del archivo todos los eventos asociados a un leadId.
 // Útil para "empezar de cero" en pruebas tras eliminar el lead.
 function deleteActivityByLead(leadId) {
@@ -360,5 +373,6 @@ module.exports = {
   getActivacionesPorDia,
   limpiarClicsFalsos,
   limpiarRechazados,
+  getLeadsConBaja,
   deleteActivityByLead,
 };
