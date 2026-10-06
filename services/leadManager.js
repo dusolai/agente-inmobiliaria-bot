@@ -102,7 +102,7 @@ function createLead({
     fuente,
     // Campaña a la que pertenece (por defecto la activa) y segmento de la
     // lista (viejos / verano / septiembre / directo) → decide la plantilla.
-    campana: campana || campanas.getActiva(),
+    campana: campana || campanas.porDefecto(segmento),
     segmento: segmento || null,
     fechaLead: fechaLead || null,                 // cuándo rellenó el formulario (Meta)
     metaLeadId: metaLeadId || null,               // id del lead en Meta (l:…), para no repetir
@@ -139,8 +139,9 @@ function campanaDe(lead) {
 }
 
 /**
- * filtro.campana: id de campaña | 'activa' | 'todas' | undefined (= todas,
- * por compatibilidad). filtro.segmento: viejos | verano | septiembre | directo.
+ * filtro.campana: id de campaña | 'activas' (= todas las NO archivadas; alias
+ * 'activa') | 'todas' | undefined (= todas, por compatibilidad).
+ * filtro.segmento: viejos | verano | septiembre | directo.
  */
 function getAllLeads(filtro = {}) {
   let leads = readLeads();
@@ -152,8 +153,12 @@ function getAllLeads(filtro = {}) {
     leads = leads.filter((l) => l.fuente === filtro.fuente);
   }
   if (filtro.campana && filtro.campana !== 'todas') {
-    const id = filtro.campana === 'activa' ? campanas.getActiva() : filtro.campana;
-    leads = leads.filter((l) => campanaDe(l) === id);
+    if (filtro.campana === 'activas' || filtro.campana === 'activa') {
+      const vivas = new Set(campanas.vivas());
+      leads = leads.filter((l) => vivas.has(campanaDe(l)));
+    } else {
+      leads = leads.filter((l) => campanaDe(l) === filtro.campana);
+    }
   }
   if (filtro.segmento) {
     leads = leads.filter((l) => (l.segmento || 'viejos') === filtro.segmento);
@@ -176,11 +181,11 @@ function getLeadByPhone(telefono) {
   const buscado = normalizarTelefono(telefono);
   const coincidencias = leads.filter((l) => normalizarTelefono(l.telefono) === buscado);
   if (coincidencias.length <= 1) return coincidencias[0] || null;
-  // El mismo teléfono puede estar en una campaña archivada y en la activa
-  // (reimportado). Un mensaje entrante es para el lead de la campaña ACTIVA;
-  // si no está en ella, para el más reciente.
-  const activa = campanas.getActiva();
-  const enActiva = coincidencias.filter((l) => campanaDe(l) === activa);
+  // El mismo teléfono puede estar en una campaña archivada y en una viva
+  // (reimportado). Un mensaje entrante es para el lead de una campaña VIVA
+  // (activa o pausada); si no está en ninguna, para el más reciente.
+  const vivas = new Set(campanas.vivas());
+  const enActiva = coincidencias.filter((l) => vivas.has(campanaDe(l)));
   const candidatos = enActiva.length ? enActiva : coincidencias;
   return candidatos.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0];
 }

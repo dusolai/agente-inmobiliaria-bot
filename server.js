@@ -179,8 +179,8 @@ async function arrancar() {
   try {
     require('./services/leadManager').migrarCampanas();
     const campanas = require('./services/campanas');
-    const activa = campanas.get(campanas.getActiva());
-    console.log(`🗂️  [Campañas] Activa: ${activa ? activa.nombre : campanas.getActiva()}`);
+    const act = campanas.listar().filter((c) => c.estado === 'activa');
+    console.log(`🗂️  [Campañas] ${act.length} activa(s): ${act.map((c) => `${c.nombre} (${c.leadsPorDia}/día)`).join(' · ') || 'ninguna'}`);
   } catch (err) {
     console.error('⚠️  [Campañas] Error migrando campañas:', err.message);
   }

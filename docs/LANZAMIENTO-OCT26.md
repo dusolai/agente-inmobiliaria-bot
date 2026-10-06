@@ -11,9 +11,9 @@ Prueba automática de todo lo nuevo (sin enviar nada): `node scripts/test-lanzam
 | Decisión (reunión) | Qué hace el sistema ahora |
 |---|---|
 | Dividir la lista en **viejos / verano (jul-ago) / septiembre** y mandar a cada uno su mensaje (24-09, 01-10) | Cada lead lleva `segmento`. El importador lo asigna por la fecha del formulario. Cada segmento usa **su plantilla de Meta** (`WHATSAPP_TEMPLATE_VERANO`, `_SEPTIEMBRE`, `_DIRECTO`; los viejos siguen con la actual). |
-| "Los tres a la vez", máx. 20-25/día (01-10, 24-09) | La activación diaria reparte el cupo **por turnos** entre segmentos (viejos → verano → septiembre). Cupo global en el CRM (Inicio → "Contactar por día"). Cada segmento se puede **pausar** por separado. |
+| "Los tres a la vez" como **campañas independientes**, 20/día cada una (01-10, 06-10) | **Varias campañas activas a la vez.** El importador crea una por segmento (Viejos · Verano · Septiembre) y "Nuevos en directo" se crea sola. Cada una tiene su cupo diario (20 por defecto), su plantilla y su estado: activa / en pausa / archivada. Como mucho un envío cada 5 min en total, sin ráfagas. |
 | Leads nuevos "en directo" se contactan nada más entrar (24-09) | **Lector de la hoja de Google de Karen** cada 10 min: fila nueva → lead `directo` → mensaje al momento (9-22h; si no, a primera hora). Y si alguien **escribe al WhatsApp del agente** sin ser lead (número del formulario de Karen) se da de alta solo y recibe la pregunta de filtrado. |
-| Archivar la campaña de prueba, empezar con registro limpio, guardar historial (01-10) | **Campañas**: botón "➕ Nueva campaña" en el CRM archiva la actual (sus leads se conservan y se pueden consultar, pero se dejan de contactar) y abre otra limpia. El panel entero (KPIs, embudo, leads) filtra por campaña. |
+| Archivar la campaña de prueba, empezar con registro limpio, guardar historial (01-10) | La prueba de septiembre queda **archivada** (`prueba_sep26`), consultable en el desplegable. Crear una campaña ya **no** archiva las demás; las vacías se pueden borrar. El panel muestra por defecto "Todas las activas" y se puede filtrar por una. |
 | No volver a escribir a quien no quiere (24-09, calidad del número) | Al importar: si un teléfono pidió la **baja** o **no tiene WhatsApp** en cualquier campaña, se excluye. Si ya se le escribió en una campaña anterior, se crea pero **marcado** (`↩ repetido`). |
 | Pasar a presentaciones **en directo** (formato 30-30, una al día, 1-a-1 en el turno opuesto) — siguiente fase (01-10) | Listo detrás de un interruptor: `FLUJO_TRAS_CUALIFICAR=presentacion`. Al responder 1/2 el lead recibe la invitación al Calendly grupal; al reservar, confirmación; al **asistir al Zoom** (webhook) recibe el 1-a-1; si reserva y no entra, se le ofrece otra. Por defecto sigue `landing` (vídeos → botón 1-a-1), que es lo acordado para este lanzamiento. |
 | Nueva presentación grabada y vídeos cortos en la landing (01-10) | **No es del SaaS**: va en los repos de las landings (`LANDING-THREE-INMOBILIARIA`, `three-inmobiliaria-emprende`). Pendiente de que Arkaitz pase el material. |
@@ -85,7 +85,7 @@ Notas: el mensaje de verano tal cual lo pasaste empezaba por "Hola, MAVI!" sin "
 WHATSAPP_TEMPLATE_VERANO=reactivacion_verano
 WHATSAPP_TEMPLATE_SEPTIEMBRE=reactivacion_septiembre
 WHATSAPP_TEMPLATE_DIRECTO=bienvenida_directo
-LEADS_POR_DIA=25                 # se cambia también desde el CRM
+LEADS_POR_DIA_CAMPANA=20         # cupo por defecto de cada campaña nueva (se cambia en el CRM)
 GOOGLE_SHEETS_ID=1BupIB3Pv7ASdfjY5Ss9pCcaImR0p98eIBHiJtWL93j4
 GOOGLE_SHEETS_TAB=DIC25
 SHEETS_DESDE=2026-10-03          # lo anterior ya está en el CSV (los solapes se deduplican por teléfono)
@@ -108,13 +108,13 @@ FLUJO_TRAS_CUALIFICAR=landing    # 'presentacion' cuando Marta/Arkaitz tengan la
 
 **Lunes 5 (revisión con Arkaitz, en el CRM)**
 6. Comprobar en Inicio → "Flujo de la lista" que los tres segmentos muestran su plantilla (sin "⚠️").
-7. **➕ Nueva campaña** → "Lanzamiento octubre 2026" (archiva la prueba de septiembre; se puede seguir consultando en el desplegable).
-8. Pestaña **Importar** → arrastrar el CSV completo → revisar el reparto por segmento (185 / 72 / 25) → Importar. Nada se envía.
-9. Dejar **"Contactar por día" en 0** hasta el martes.
+7. Borrar con 🗑 las campañas vacías de prueba (Inicio → Campañas). La de septiembre ya está archivada.
+8. Pestaña **Importar** → arrastrar el CSV completo → Destino "Repartir en una campaña por segmento", sufijo `oct26` → Importar. Crea Viejos / Verano / Septiembre activas con 20/día. Nada se envía al importar.
+9. Si aún no queréis que salga nada, poner el cupo de cada campaña en 0 (o pausarlas).
 10. Arkaitz: Calendly con disponibilidad del 1-a-1 configurado (lo hace él) y **activo** antes de que el primer lead termine el webinar; nueva presentación grabada + vídeos cortos pasados a Diego para la landing.
 
 **Martes 6 (lanzamiento)**
-11. Poner "Contactar por día" en **25** (o 20). El sistema suelta uno cada ~25 min entre 10 y 20 h, alternando segmentos.
+11. Cupo **20/día por campaña** (60 en total). Cada campaña suelta uno cada ~30 min entre 10 y 20 h; en total, como mucho uno cada 5 min.
 12. Vigilar el primer día: entregas (acuses en el chat del CRM), respuestas en "Sin responder", calidad del número (`node scripts/check-whatsapp.js`). Si la calidad baja a amarillo, bajar a 10/día.
 
 **Después**

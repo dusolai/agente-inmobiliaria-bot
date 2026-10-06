@@ -70,11 +70,13 @@ const paraTel = (tel) => enviados.filter((e) => e.to === tel);
 let paso = 0;
 function ok(msg) { paso++; console.log(`  ✅ ${paso}. ${msg}`); }
 
+// Borra la última activación de cada campaña: así el siguiente ciclo no
+// espera el intervalo (en la vida real, ~30 min entre envíos de una campaña).
 function activationReset() {
   const f = path.join(tmp, 'activation.json');
   let st = {};
   try { st = JSON.parse(fs.readFileSync(f, 'utf-8')); } catch (e) {}
-  st.ultimaActivacion = null;
+  for (const c of Object.values(st.porCampana || {})) c.ultimaActivacion = null;
   fs.writeFileSync(f, JSON.stringify(st, null, 2));
 }
 
@@ -82,7 +84,7 @@ function activationReset() {
   console.log(`\n🧪 Prueba del lanzamiento (datos en ${tmp})\n`);
 
   // ── 1. Campañas ───────────────────────────────────────────────
-  assert.strictEqual(campanas.getActiva(), campanas.CAMPANA_LEGADO);
+  assert.deepStrictEqual(campanas.activas(), [campanas.CAMPANA_LEGADO]);
   const ana = leadManager.createLead({ nombre: 'Ana Legado', telefono: '34600000001', fuente: 'excel_import' });
   leadManager.transitionState(ana.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
   leadManager.updateLead(ana.id, { recordatorios: { ...ana.recordatorios, fase1: { enviados: 1, ultimoEnvio: '2026-09-20T10:00:00.000Z' } } });
@@ -92,12 +94,13 @@ function activationReset() {
   assert.strictEqual(leadManager.getLeadById(ana.id).campana, campanas.CAMPANA_LEGADO);
   ok('leads antiguos quedan en la campaña legado "prueba_sep26"');
 
-  const nueva = campanas.crear({ nombre: 'Lanzamiento octubre 2026' });
-  assert.strictEqual(campanas.getActiva(), nueva.id);
-  assert.strictEqual(nueva.id, 'lanzamiento_octubre_2026');
-  const legado = campanas.get(campanas.CAMPANA_LEGADO);
-  assert.ok(legado.archivadaEn, 'la campaña anterior debe quedar archivada');
-  ok(`nueva campaña "${nueva.nombre}" (${nueva.id}) activa; la anterior archivada`);
+  campanas.setEstado(campanas.CAMPANA_LEGADO, 'archivada');
+  const vacia = campanas.crearCampana({ nombre: 'Lanzamiento octubre 26' });
+  const otra = campanas.crearCampana({ nombre: 'Otra prueba', leadsPorDia: 5 });
+  assert.deepStrictEqual(campanas.activas().sort(), [vacia.id, otra.id].sort(), 'crear una campaña NO archiva las demás');
+  assert.strictEqual(vacia.leadsPorDia, 20, 'cupo por defecto 20/día');
+  assert.ok(campanas.eliminar(vacia.id) && campanas.eliminar(otra.id));
+  ok('varias campañas activas a la vez; crear una no toca las demás; las vacías se borran');
 
   // ── 2. Importador ─────────────────────────────────────────────
   let filas;
@@ -121,7 +124,7 @@ function activationReset() {
       fila('l:7', '2026-10-02T04:50:22-05:00', 'Sept Dos', 'p:+34611000007', 's2@x.com'),
       fila('l:8', '2026-02-01T10:00:00-05:00', 'Repetido Antiguo', 'p:+34611000004', 'ver1@x.com'), // mismo tel que Verano Uno, más antiguo
       fila('l:9', '2026-05-01T10:00:00-05:00', 'Extranjera', 'p:+33769700635', 'fr@x.com'),
-      fila('l:10', '2026-04-01T10:00:00-05:00', 'Ana Legado', 'p:+34600000001', 'ana@x.com'), // ya contactada en la campaña anterior
+      fila('l:10', '2026-04-01T10:00:00-05:00', 'Ana Legado', 'p:+34600000001', 'ana@x.com'), // ya contactada en la campaña archivada
       fila('l:11', '2026-04-02T10:00:00-05:00', 'Luis Baja', 'p:+34600000002', 'luis@x.com'), // pidió la baja
     ];
   }
@@ -136,57 +139,71 @@ function activationReset() {
   }
   ok('metaLeads: limpieza, dedupe (se conserva la entrada más reciente), segmento por fecha');
 
-  const r1 = importador.importar(proc.validos, { fuente: 'excel_import' });
+  const r1 = importador.importar(proc.validos, { fuente: 'excel_import', campana: 'auto', sufijo: 'oct26' });
   console.log(`  import → ${JSON.stringify(r1)}`);
+  const cViejos = campanas.paraSegmento('viejos');
+  const cVerano = campanas.paraSegmento('verano');
+  const cSept = campanas.paraSegmento('septiembre');
+  assert.ok(cViejos && cVerano && cSept, 'se crean las tres campañas');
+  assert.strictEqual(cVerano.nombre, 'Verano (jul-ago) · oct26');
+  assert.deepStrictEqual(campanas.activas().sort(), [cViejos.id, cVerano.id, cSept.id].sort(), 'las tres activas a la vez');
+  assert.ok([cViejos, cVerano, cSept].every((c) => c.leadsPorDia === 20), '20/día cada una');
   if (!csvReal) {
     assert.strictEqual(r1.creados, 8);
+    assert.deepStrictEqual(r1.porCampana, { [cViejos.id]: 4, [cVerano.id]: 2, [cSept.id]: 2 });
     assert.strictEqual(r1.excluidosBaja, 1, 'Luis Baja no se vuelve a crear');
     assert.strictEqual(r1.repetidosDeOtraCampana, 1, 'Ana Legado se crea marcada');
     const ana2 = leadManager.getLeadByPhone('34600000001');
-    assert.strictEqual(ana2.campana, nueva.id, 'getLeadByPhone prefiere el lead de la campaña activa');
+    assert.strictEqual(ana2.campana, cViejos.id, 'getLeadByPhone prefiere el lead de una campaña viva');
     assert.strictEqual(ana2.contactadoAntesEn, campanas.CAMPANA_LEGADO);
-    assert.strictEqual(leadManager.getLeadByPhone('34611000007').segmento, 'septiembre');
+    assert.strictEqual(leadManager.getLeadByPhone('34611000007').campana, cSept.id);
     assert.strictEqual(leadManager.getLeadByPhone('34611000007').fechaLead.slice(0, 10), '2026-10-02');
   }
-  const r2 = importador.importar(proc.validos, { fuente: 'excel_import' });
+  const r2 = importador.importar(proc.validos, { fuente: 'excel_import', campana: 'auto', sufijo: 'oct26' });
   assert.strictEqual(r2.creados, 0);
-  assert.strictEqual(r2.duplicados, r1.creados, 'reimportar no duplica');
-  ok('importador: crea en la campaña activa, excluye bajas, marca repetidos, no duplica');
+  assert.strictEqual(r2.duplicados, r1.creados, 'reimportar no duplica (ni en otra campaña viva)');
+  assert.strictEqual(campanas.listar().length, 4, 'reimportar no crea campañas nuevas');
+  ok('importador: una campaña por segmento (activas, 20/día), excluye bajas, marca repetidos, no duplica');
 
-  assert.strictEqual(leadManager.getStats({ campana: 'activa' }).total, r1.creados);
+  assert.strictEqual(leadManager.getStats({ campana: 'activas' }).total, r1.creados);
+  assert.strictEqual(leadManager.getStats({ campana: cVerano.id }).total, r1.porCampana[cVerano.id] || 0);
   assert.strictEqual(leadManager.getStats({ campana: 'todas' }).total, r1.creados + 2);
-  ok('stats filtran por campaña (activa vs todas)');
+  ok('stats filtran por campaña (todas las activas / una / todas)');
 
-  // ── 3. Activación por turnos ──────────────────────────────────
+  // ── 3. Activación por campaña ─────────────────────────────────
   if (!csvReal) {
     const antes = enviados.length;
-    const orden = [];
+    const porCamp = {};
     for (let i = 0; i < 6; i++) {
       activationReset();
       await scheduler.procesarActivacionDiaria();
       const ultimo = enviados[enviados.length - 1];
       const lead = leadManager.getLeadByPhone(ultimo.to);
-      orden.push(`${lead.segmento}:${ultimo.plantilla}`);
+      const k = `${lead.campana}:${ultimo.plantilla}`;
+      porCamp[k] = (porCamp[k] || 0) + 1;
     }
-    console.log(`  orden de activación → ${orden.join(' · ')}`);
-    assert.strictEqual(enviados.length - antes, 6);
-    assert.deepStrictEqual(orden.slice(0, 3).map((s) => s.split(':')[0]).sort(), ['septiembre', 'verano', 'viejos'], 'las tres listas avanzan a la vez');
-    assert.ok(orden.includes('verano:reactivacion_verano') && orden.includes('septiembre:reactivacion_septiembre') && orden.includes('viejos:reactivacion_leads'), 'cada segmento usa su plantilla');
-    assert.ok(orden.every((o) => o.split(':')[0] !== 'directo'));
-    ok('activación por turnos viejos → verano → septiembre, cada uno con su plantilla');
+    console.log(`  envíos por campaña → ${JSON.stringify(porCamp)}`);
+    assert.strictEqual(enviados.length - antes, 6, 'un envío por ciclo, nunca ráfagas');
+    assert.ok(porCamp[`${cViejos.id}:reactivacion_leads`] && porCamp[`${cVerano.id}:reactivacion_verano`] && porCamp[`${cSept.id}:reactivacion_septiembre`],
+      'las tres campañas avanzan a la vez, cada una con su plantilla');
+    assert.strictEqual(scheduler.activadosHoy(cViejos.id) + scheduler.activadosHoy(cVerano.id) + scheduler.activadosHoy(cSept.id), 6);
+    ok('activación: las tres campañas a la vez, cada una con su plantilla y su contador');
 
-    scheduler.setSegmentoPausado('viejos', true);
-    activationReset();
-    await scheduler.procesarActivacionDiaria();
-    const l = leadManager.getLeadByPhone(enviados[enviados.length - 1].to);
-    assert.notStrictEqual(l.segmento, 'viejos', 'un segmento en pausa no se activa');
-    scheduler.setSegmentoPausado('viejos', false);
-    ok('pausar un segmento desde el CRM lo deja en cola');
+    campanas.setCupo(cViejos.id, scheduler.activadosHoy(cViejos.id)); // cupo agotado hoy
+    campanas.setEstado(cVerano.id, 'pausada');
+    const nAntes = enviados.length;
+    for (let i = 0; i < 3; i++) { activationReset(); await scheduler.procesarActivacionDiaria(); }
+    const nuevos = enviados.slice(nAntes).map((e) => leadManager.getLeadByPhone(e.to).campana);
+    assert.ok(nuevos.every((id) => id === cSept.id), 'con viejos en su cupo y verano en pausa, solo sale septiembre');
+    campanas.setEstado(cVerano.id, 'activa');
+    campanas.setCupo(cViejos.id, 20);
+    ok('cupo propio por campaña y pausa de una campaña sin tocar las demás');
 
-    // Sin plantilla para "directo": el lead espera en cola
+    // Lead "directo": se crea solo su campaña; sin plantilla espera
     config.whatsapp.templatesPorSegmento.directo = '';
     const dir = leadManager.createLead({ nombre: 'Directa Nocturna', telefono: '34611000099', fuente: 'meta_sheet', segmento: 'directo' });
-    const n0 = enviados.length;
+    const cDir = campanas.paraSegmento('directo');
+    assert.ok(cDir && dir.campana === cDir.id && cDir.nombre === 'Nuevos en directo', 'se crea la campaña "Nuevos en directo"');
     activationReset();
     await scheduler.procesarActivacionDiaria();
     assert.notStrictEqual(enviados[enviados.length - 1].to, '34611000099', 'sin plantilla, el directo no sale');
@@ -196,8 +213,7 @@ function activationReset() {
     assert.strictEqual(enviados[enviados.length - 1].to, '34611000099', 'con plantilla, el directo va el primero');
     assert.strictEqual(enviados[enviados.length - 1].plantilla, 'bienvenida_directo');
     assert.strictEqual(leadManager.getLeadById(dir.id).estado, 'esperando_cualificacion');
-    assert.ok(enviados.length - n0 === 2);
-    ok('un lead "directo" espera si falta su plantilla y sale el primero en cuanto la tiene');
+    ok('los leads "directo" van a su propia campaña, esperan si falta plantilla y salen los primeros');
   }
 
   // ── 4. Alta automática por WhatsApp ───────────────────────────
@@ -206,7 +222,7 @@ function activationReset() {
   assert.ok(pepe, 'se crea el lead');
   assert.strictEqual(pepe.segmento, 'directo');
   assert.strictEqual(pepe.fuente, 'whatsapp_entrante');
-  assert.strictEqual(pepe.campana, nueva.id);
+  assert.strictEqual(pepe.campana, campanas.paraSegmento('directo').id);
   assert.strictEqual(pepe.estado, 'esperando_cualificacion');
   const msgPepe = paraTel('34611222333');
   assert.strictEqual(msgPepe.length, 1);

@@ -9,12 +9,28 @@ const activityLog = require('../services/activityLog');
  * GET /api/leads
  * Lista todos los leads. Query params opcionales: ?estado=video_enviado&fuente=formulario
  */
-// Campaña por la que filtra el CRM: ?campana=<id> | activa | todas. Sin el
-// parámetro se muestra la ACTIVA (la que se trabaja a diario); las archivadas
-// se consultan eligiéndolas en el desplegable del panel.
+// Campaña por la que filtra el CRM: ?campana=<id> | activas | todas. Sin el
+// parámetro se muestran TODAS LAS VIVAS (activas + pausadas), que son las que
+// se trabajan a diario; una campaña concreta (o una archivada) se elige en el
+// desplegable del panel.
 function _campana(req) {
   const c = req.query && req.query.campana;
-  return c ? String(c) : 'activa';
+  return c ? String(c) : 'activas';
+}
+
+// Leads de hoy activados en un conjunto de campañas
+function _activadosHoy(ids) {
+  const scheduler = require('../services/scheduler');
+  return ids.reduce((s, id) => s + scheduler.activadosHoy(id), 0);
+}
+
+// Ids de campaña que abarca el filtro del panel
+function _idsCampanas(req) {
+  const campanas = require('../services/campanas');
+  const c = _campana(req);
+  if (c === 'todas') return campanas.listar().map((x) => x.id);
+  if (c === 'activas' || c === 'activa') return campanas.vivas();
+  return [c];
 }
 
 router.get('/leads', (req, res) => {
@@ -103,15 +119,13 @@ router.get('/inbox', (req, res) => {
   sinResponder.sort((a, b) => new Date(b.ts) - new Date(a.ts));
   calientes.sort((a, b) => new Date(b.ts) - new Date(a.ts));
 
-  // Estado de la cola de activación (fichero que mantiene el scheduler)
-  let importQueue = { enCola, activadosHoy: 0, cupo: require('../services/scheduler').getLeadsPorDia(), ultimaActivacion: null };
-  try {
-    const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-    const st = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'activation.json'), 'utf-8'));
-    const hoy = new Date().toISOString().slice(0, 10);
-    importQueue.activadosHoy = st.fecha === hoy ? st.activadosHoy : 0;
-    importQueue.ultimaActivacion = st.ultimaActivacion;
-  } catch (e) { /* sin fichero aún = sin activaciones */ }
+  // Estado de la cola de activación: suma de las campañas del filtro
+  const campanasSvc = require('../services/campanas');
+  const ids = _idsCampanas(req);
+  const cupo = campanasSvc.listar()
+    .filter((c) => ids.includes(c.id) && c.estado === 'activa')
+    .reduce((t, c) => t + (c.leadsPorDia || 0), 0);
+  const importQueue = { enCola, activadosHoy: _activadosHoy(ids), cupo };
 
   res.json({ sinResponder, calientes, importQueue });
 });
@@ -445,7 +459,7 @@ router.post('/mantenimiento/limpiar-rechazados', (req, res) => {
  */
 router.post('/import', (req, res) => {
   try {
-    const { leads, segmento } = req.body || {};
+    const { leads, segmento, campana, sufijo } = req.body || {};
     if (!Array.isArray(leads) || leads.length === 0) {
       return res.status(400).json({ error: 'leads debe ser un array no vacío' });
     }
@@ -455,9 +469,12 @@ router.post('/import', (req, res) => {
     const importador = require('../services/importador');
     const r = importador.importar(
       leads.map((f) => (f && !f.segmento && segmento ? { ...f, segmento } : f)),
-      { fuente: 'excel_import', segmentoPorDefecto: segmento || 'viejos' }
+      // campana: id de una campaña, o 'auto' = cada lead a la campaña de su
+      // segmento (se crean las que falten con el sufijo, p. ej. "oct26").
+      { fuente: 'excel_import', segmentoPorDefecto: segmento || 'viejos', campana: campana || 'auto', sufijo: sufijo || '' }
     );
-    console.log(`📥 [API/import] ${r.creados} creados · ${r.duplicados} ya en la campaña · ${r.excluidosBaja} con baja · ${r.repetidosDeOtraCampana} repetidos de otra campaña · ${r.errores} errores (sin enviar)`);
+    if (r.error) return res.status(400).json({ error: r.error });
+    console.log(`📥 [API/import] ${r.creados} creados ${JSON.stringify(r.porCampana)} · ${r.duplicados} ya en una campaña viva · ${r.excluidosBaja} con baja · ${r.repetidosDeOtraCampana} repetidos de otra campaña · ${r.errores} errores (sin enviar)`);
     res.json({ success: true, resultado: r });
   } catch (err) {
     console.error('❌ [API] Error /import:', err.message);
@@ -466,60 +483,57 @@ router.post('/import', (req, res) => {
 });
 
 /**
- * GET /api/activation
- * Estado del flujo de la lista importada (CSV): cuántos hay, cuántos ya
- * contactados, cuántos en cola, cuántos hoy, el cupo diario actual y el
- * historial de contactos por día. Para el panel "Flujo de la lista" del CRM.
+ * GET /api/activation?campana=…
+ * "Flujo de la lista" del CRM: totales de las campañas del filtro, contactos
+ * de hoy, historial por día (solo de esas campañas) y una fila POR CAMPAÑA
+ * con su cola, su cupo, su plantilla y su estado.
  */
 router.get('/activation', (req, res) => {
   try {
-    const scheduler = require('../services/scheduler');
     const messaging = require('../services/messaging');
     const metaLeads = require('../services/metaLeads');
-    const stats = leadManager.getStats({ campana: _campana(req) });
+    const campanas = require('../services/campanas');
     const S = leadManager.LEAD_STATES;
-    const enCola = (stats.porEstado && stats.porEstado[S.NUEVO]) || 0;
-    const total = stats.total || 0;
-    const descartados = (stats.porEstado && stats.porEstado[S.DESCARTADO]) || 0;
-    const contactados = total - enCola;
-    const leadsPorDia = scheduler.getLeadsPorDia();
+    const ids = _idsCampanas(req);
+    const leads = leadManager.getAllLeads({ campana: _campana(req) });
 
-    // Desglose por segmento (viejos / verano / septiembre / directo): cuántos
-    // hay, en cola, contactados, si está en pausa y si tiene plantilla aprobada.
-    const pausados = new Set(scheduler.getSegmentosPausados());
-    const porSegmento = {};
-    for (const l of leadManager.getAllLeads({ campana: _campana(req) })) {
-      const seg = l.segmento || 'viejos';
-      const s = porSegmento[seg] || (porSegmento[seg] = {
-        segmento: seg, label: metaLeads.SEGMENTO_LABEL[seg] || seg,
-        total: 0, enCola: 0, contactados: 0, respondieron: 0, descartados: 0,
-      });
-      s.total++;
-      if (l.estado === S.NUEVO) s.enCola++; else s.contactados++;
-      if (l.estado === S.DESCARTADO) s.descartados++;
-      if (l.perfil && l.perfil !== 'sin_definir') s.respondieron++;
+    const porCampana = {};
+    for (const c of campanas.listar()) {
+      if (!ids.includes(c.id)) continue;
+      const p = c.segmento ? messaging.plantillaParaSegmento(c.segmento) : null;
+      porCampana[c.id] = {
+        id: c.id, nombre: c.nombre, estado: c.estado, segmento: c.segmento,
+        segmentoLabel: c.segmento ? metaLeads.SEGMENTO_LABEL[c.segmento] : 'por fecha',
+        leadsPorDia: c.leadsPorDia, activadosHoy: require('../services/scheduler').activadosHoy(c.id),
+        plantilla: c.segmento ? (p ? p.name : null) : 'según fecha',
+        total: 0, enCola: 0, contactados: 0, respondieron: 0, descartados: 0, sinPlantilla: 0,
+      };
     }
-    for (const seg of Object.keys(porSegmento)) {
-      const p = messaging.plantillaParaSegmento(seg);
-      porSegmento[seg].pausado = pausados.has(seg);
-      porSegmento[seg].plantilla = p ? p.name : null;
+    for (const l of leads) {
+      const f = porCampana[leadManager.campanaDe(l)];
+      if (!f) continue;
+      f.total++;
+      if (l.estado === S.NUEVO) {
+        f.enCola++;
+        if (!messaging.plantillaParaSegmento(l.segmento || 'viejos')) f.sinPlantilla++;
+      } else f.contactados++;
+      if (l.estado === S.DESCARTADO) f.descartados++;
+      if (l.perfil && l.perfil !== 'sin_definir') f.respondieron++;
     }
-    const ORDEN = ['directo', 'viejos', 'verano', 'septiembre'];
-    const segmentos = Object.values(porSegmento).sort((a, b) => ORDEN.indexOf(a.segmento) - ORDEN.indexOf(b.segmento));
+    const filas = Object.values(porCampana).sort((x, y) => {
+      const o = { activa: 0, pausada: 1, archivada: 2 };
+      return (o[x.estado] - o[y.estado]) || String(x.nombre).localeCompare(String(y.nombre));
+    });
 
-    // Cuántos activados HOY (de activation.json)
-    let activadosHoy = 0;
-    try {
-      const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-      const act = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'activation.json'), 'utf-8'));
-      const hoy = new Date().toISOString().slice(0, 10);
-      if (act.fecha === hoy) activadosHoy = act.activadosHoy || 0;
-    } catch (e) {}
-
-    const porDia = activityLog.getActivacionesPorDia();
+    const total = leads.length;
+    const enCola = leads.filter((l) => l.estado === S.NUEVO).length;
+    const descartados = leads.filter((l) => l.estado === S.DESCARTADO).length;
+    const leadsPorDia = filas.filter((f) => f.estado === 'activa').reduce((t, f) => t + (f.leadsPorDia || 0), 0);
+    const activadosHoy = filas.reduce((t, f) => t + f.activadosHoy, 0);
+    const porDia = activityLog.getActivacionesPorDia(new Set(leads.map((l) => l.id)));
     const diasRestantes = leadsPorDia > 0 ? Math.ceil(enCola / leadsPorDia) : null;
 
-    res.json({ total, contactados, enCola, descartados, activadosHoy, leadsPorDia, diasRestantes, porDia, porSegmento: segmentos, segmentosPausados: Array.from(pausados) });
+    res.json({ total, contactados: total - enCola, enCola, descartados, activadosHoy, leadsPorDia, diasRestantes, porDia, porCampana: filas });
   } catch (err) {
     console.error('❌ [API] Error /activation:', err.message);
     res.status(500).json({ error: err.message });
@@ -527,103 +541,118 @@ router.get('/activation', (req, res) => {
 });
 
 /**
- * POST /api/activation/rate
- * Cambia el cupo diario (leads por día) EN CALIENTE, sin tocar Seenode.
- * Body: { leadsPorDia: <número> }. Se persiste en activation.json.
+ * POST /api/activation/rate  Body: { campana, leadsPorDia }
+ * Cambia EN CALIENTE el cupo diario de una campaña.
  */
 router.post('/activation/rate', (req, res) => {
   try {
-    const scheduler = require('../services/scheduler');
-    const n = req.body && req.body.leadsPorDia;
-    if (n === undefined || n === null || isNaN(parseInt(n, 10))) {
+    const campanas = require('../services/campanas');
+    const { campana, leadsPorDia } = req.body || {};
+    if (leadsPorDia === undefined || isNaN(parseInt(leadsPorDia, 10))) {
       return res.status(400).json({ error: 'Falta leadsPorDia (número)' });
     }
-    const leadsPorDia = scheduler.setLeadsPorDia(n);
-    console.log(`⚙️  [API] Cupo diario cambiado a ${leadsPorDia}/día desde el CRM`);
-    res.json({ success: true, leadsPorDia });
+    const c = campanas.setCupo(campana || campanas.getActiva(), leadsPorDia);
+    if (!c) return res.status(404).json({ error: 'Campaña no encontrada' });
+    console.log(`⚙️  [API] Cupo de ${c.nombre} → ${c.leadsPorDia}/día desde el CRM`);
+    res.json({ success: true, campana: c, leadsPorDia: c.leadsPorDia });
   } catch (err) {
     console.error('❌ [API] Error /activation/rate:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-/**
- * POST /api/activation/segmento
- * Pausa o reanuda un segmento de la cola (sus leads se quedan en "nuevo").
- * Body: { segmento: 'viejos'|'verano'|'septiembre'|'directo', pausado: true|false }
- */
-router.post('/activation/segmento', (req, res) => {
-  try {
-    const scheduler = require('../services/scheduler');
-    const metaLeads = require('../services/metaLeads');
-    const { segmento, pausado } = req.body || {};
-    if (!metaLeads.SEGMENTOS.includes(segmento)) {
-      return res.status(400).json({ error: `segmento desconocido: ${segmento}` });
-    }
-    const pausados = scheduler.setSegmentoPausado(segmento, Boolean(pausado));
-    console.log(`⚙️  [API] Segmento ${segmento} ${pausado ? 'EN PAUSA' : 'reanudado'} desde el CRM`);
-    res.json({ success: true, segmentosPausados: pausados });
-  } catch (err) {
-    console.error('❌ [API] Error /activation/segmento:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ─── Campañas ─────────────────────────────────────────────────────
-// Reunión 01-10: la campaña de prueba se archiva (queda de historial) y el
-// lanzamiento empieza con un registro limpio. Una sola campaña activa.
+// Reunión 06-10: VARIAS campañas activas a la vez (viejos / verano /
+// septiembre / directo), cada una con su cupo, su plantilla y su estado.
+// Crear una campaña no toca las demás. Solo se borran las vacías.
 
-/**
- * GET /api/campanas → { activa, lista: [{ id, nombre, creada, archivadaEn,
- * activa, total, activos, cerrados }] }
- */
+function _resumenCampana(c, todos) {
+  const suyos = todos.filter((l) => leadManager.campanaDe(l) === c.id);
+  return {
+    ...c,
+    total: suyos.length,
+    enCola: suyos.filter((l) => l.estado === 'nuevo').length,
+    activos: suyos.filter((l) => l.estado !== 'descartado').length,
+    cerrados: suyos.filter((l) => l.estado === 'agenda_1a1' || l.estado === 'reunion_asistio').length,
+    activadosHoy: require('../services/scheduler').activadosHoy(c.id),
+  };
+}
+
+/** GET /api/campanas → { lista: [{ id, nombre, estado, segmento, leadsPorDia, total, enCola, … }] } */
 router.get('/campanas', (req, res) => {
   try {
     const campanas = require('../services/campanas');
     const todos = leadManager.getAllLeads({ campana: 'todas' });
-    const lista = campanas.listar().map((c) => {
-      const suyos = todos.filter((l) => leadManager.campanaDe(l) === c.id);
-      return {
-        ...c,
-        total: suyos.length,
-        activos: suyos.filter((l) => l.estado !== 'descartado').length,
-        cerrados: suyos.filter((l) => l.estado === 'agenda_1a1' || l.estado === 'reunion_asistio').length,
-      };
-    });
-    res.json({ activa: campanas.getActiva(), lista });
+    const lista = campanas.listar().map((c) => _resumenCampana(c, todos));
+    res.json({ lista, activas: campanas.activas(), cupoTotal: require('../services/scheduler').getLeadsPorDia() });
   } catch (err) {
     console.error('❌ [API] Error /campanas:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-/**
- * POST /api/campanas  Body: { nombre, notas? }
- * Crea una campaña nueva y la deja activa; la que estaba activa se archiva
- * (sus leads se conservan, sus automatismos se paran).
- */
+/** POST /api/campanas  Body: { nombre, segmento?, leadsPorDia?, notas? } → crea una campaña ACTIVA (las demás no cambian). */
 router.post('/campanas', (req, res) => {
   try {
     const campanas = require('../services/campanas');
     const nombre = req.body && String(req.body.nombre || '').trim();
     if (!nombre) return res.status(400).json({ error: 'Falta el nombre de la campaña' });
-    const nueva = campanas.crear({ nombre, notas: req.body.notas });
-    res.json({ success: true, campana: nueva, activa: campanas.getActiva() });
+    const nueva = campanas.crearCampana({
+      nombre,
+      segmento: req.body.segmento || null,
+      leadsPorDia: req.body.leadsPorDia,
+      notas: req.body.notas,
+    });
+    res.json({ success: true, campana: nueva });
   } catch (err) {
     console.error('❌ [API] Error creando campaña:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-/** POST /api/campanas/:id/activar → reabre una campaña archivada (la activa pasa a archivada). */
-router.post('/campanas/:id/activar', (req, res) => {
+/** POST /api/campanas/:id/estado  Body: { estado: 'activa'|'pausada'|'archivada' } */
+router.post('/campanas/:id/estado', (req, res) => {
   try {
     const campanas = require('../services/campanas');
-    const c = campanas.activar(req.params.id);
-    if (!c) return res.status(404).json({ error: 'Campaña no encontrada' });
-    res.json({ success: true, campana: c, activa: campanas.getActiva() });
+    const c = campanas.setEstado(req.params.id, req.body && req.body.estado);
+    if (!c) return res.status(400).json({ error: 'Campaña o estado no válidos' });
+    res.json({ success: true, campana: c });
   } catch (err) {
-    console.error('❌ [API] Error activando campaña:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/campanas/:id/activar → compat: estado 'activa'. */
+router.post('/campanas/:id/activar', (req, res) => {
+  const campanas = require('../services/campanas');
+  const c = campanas.setEstado(req.params.id, 'activa');
+  if (!c) return res.status(404).json({ error: 'Campaña no encontrada' });
+  res.json({ success: true, campana: c });
+});
+
+/** PUT /api/campanas/:id  Body: { nombre?, segmento?, leadsPorDia? } */
+router.put('/campanas/:id', (req, res) => {
+  try {
+    const campanas = require('../services/campanas');
+    const b = req.body || {};
+    let c = campanas.editar(req.params.id, { nombre: b.nombre, segmento: b.segmento === undefined ? undefined : (b.segmento || null), notas: b.notas });
+    if (!c) return res.status(404).json({ error: 'Campaña no encontrada' });
+    if (b.leadsPorDia !== undefined) c = campanas.setCupo(req.params.id, b.leadsPorDia) || c;
+    res.json({ success: true, campana: c });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /api/campanas/:id → solo si NO tiene leads. */
+router.delete('/campanas/:id', (req, res) => {
+  try {
+    const campanas = require('../services/campanas');
+    const n = leadManager.getAllLeads({ campana: req.params.id }).length;
+    if (n > 0) return res.status(400).json({ error: `La campaña tiene ${n} leads: archívala en vez de borrarla` });
+    if (!campanas.eliminar(req.params.id)) return res.status(404).json({ error: 'Campaña no encontrada' });
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

@@ -152,7 +152,15 @@
   .seg{display:inline-block;font-size:.6rem;font-weight:800;padding:.12rem .45rem;border-radius:50px;text-transform:uppercase;letter-spacing:.3px;margin-left:.35rem;vertical-align:middle;white-space:nowrap}
   .seg-viejos{background:#e8e4f3;color:#4a3a86} .seg-verano{background:#ffe6c7;color:#9a5a00} .seg-septiembre{background:#d7f0e2;color:#1f6b3e} .seg-directo{background:#fde2e2;color:#a33}
   .seg-rows{display:grid;gap:.4rem;margin-top:.7rem}
-  .seg-row{display:grid;grid-template-columns:170px repeat(4,1fr) auto;gap:.6rem;align-items:center;background:#faf8fc;border:1px solid var(--line);border-radius:10px;padding:.45rem .7rem;font-size:.8rem}
+  .seg-row{display:grid;grid-template-columns:minmax(190px,1.4fr) repeat(3,1fr) 1.1fr auto;gap:.6rem;align-items:center;background:#faf8fc;border:1px solid var(--line);border-radius:10px;padding:.5rem .7rem;font-size:.8rem}
+  .seg-row.pausada{background:#fffaf0} .seg-row.archivada{background:#f3f3f5;opacity:.75}
+  .seg-row .camp-nombre{font-weight:800;color:var(--ink)}
+  .seg-row .camp-cupo{display:flex;align-items:center;gap:.3rem}
+  .seg-row .camp-cupo input{width:58px;padding:.25rem .3rem;border:1px solid var(--line);border-radius:6px;font-weight:800;text-align:center}
+  .seg-row .camp-acc{display:flex;gap:.3rem;flex-wrap:wrap;justify-content:flex-end}
+  .seg-row .camp-acc .btn{font-size:.7rem;padding:.3rem .5rem;border:1px solid #ccc}
+  .estado-pill{display:inline-block;font-size:.6rem;font-weight:800;padding:.12rem .45rem;border-radius:50px;text-transform:uppercase;margin-left:.3rem}
+  .estado-activa{background:#d7f0e2;color:#1f6b3e} .estado-pausada{background:#fff3d6;color:#a67400} .estado-archivada{background:#e5e5ea;color:#666}
   .seg-row b{color:var(--purple)} .seg-row .seg-ko{color:var(--red);font-weight:700;font-size:.72rem}
   .seg-row .seg-ok{color:var(--muted);font-size:.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   @media (max-width:880px){.seg-row{grid-template-columns:1fr 1fr 1fr;row-gap:.2rem}}
@@ -292,9 +300,9 @@
     </div>
     <div class="campana-bar">
       <label for="campanaSel" style="font-size:.78rem;font-weight:700;color:var(--muted)">🗂️ Campaña</label>
-      <select id="campanaSel" title="Campaña que se muestra en el panel"><option value="activa">Cargando…</option></select>
+      <select id="campanaSel" title="Qué campañas se muestran en el panel"><option value="activas">Todas las activas</option></select>
       <span id="campanaEstado"></span>
-      <button id="campanaNueva" class="btn green" title="Archiva la campaña actual (queda de historial) y empieza una nueva, limpia">➕ Nueva campaña</button>
+      <button id="campanaNueva" class="btn green" title="Crea una campaña más; las demás siguen como están">➕ Nueva campaña</button>
       <div class="live"><span class="dot"></span> En vivo · 3 s</div>
     </div>
   </header>
@@ -337,14 +345,11 @@
       </div>
       <div class="csv-bar"><div id="csv-bar-fill"></div><span id="csv-bar-pct">0%</span></div>
       <div class="csv-controls">
-        <label>📨 Contactar por día:
-          <input type="number" id="csv-rate-input" min="0" max="500" step="1" value="0">
-        </label>
-        <button id="csv-rate-save" class="btn green">Guardar ritmo</button>
-        <span id="csv-rate-status" class="csv-hint"></span>
+        <span id="csv-cupo-total" class="csv-hint"></span>
         <span id="csv-dias" class="csv-hint"></span>
       </div>
       <div id="csv-history" class="csv-history"></div>
+      <h2 style="margin-top:1rem">🗂️ Campañas <small>cada una con su cupo diario, su mensaje y su estado — corren a la vez</small></h2>
       <div id="csv-segmentos" class="seg-rows"></div>
     </div>
 
@@ -443,7 +448,13 @@
   <div id="tab-importar" class="tab">
     <div class="panel">
       <h2>📥 Importar leads desde CSV <small>los crea SIN enviar nada — el activador diario los suelta luego</small></h2>
-      <p class="info">Arrastra el CSV que exporta Karen (Meta Lead Ads) o uno con columnas <b>nombre / telefono / email</b>. Se limpian los teléfonos, se quitan duplicados y filas de prueba, y cada lead se clasifica por la <b>fecha en que rellenó el formulario</b> en su segmento (cada segmento tiene su propio primer mensaje). Verás el resumen <b>antes</b> de crear nada. Nada se envía por WhatsApp: se crean en la cola de la <b>campaña activa</b>. Si un teléfono ya estaba en una campaña anterior se vuelve a crear (marcado), salvo que pidiera la baja o no tuviera WhatsApp.</p>
+      <p class="info">Arrastra el CSV que exporta Karen (Meta Lead Ads) o uno con columnas <b>nombre / telefono / email</b>. Se limpian los teléfonos, se quitan duplicados y filas de prueba, y cada lead se clasifica por la <b>fecha en que rellenó el formulario</b> en su segmento (cada segmento tiene su propio primer mensaje). Verás el resumen <b>antes</b> de crear nada. Nada se envía por WhatsApp: se crean en cola. <b>Por defecto cada lead va a la campaña de su segmento</b> (viejos / verano / septiembre), y las que no existan se crean activas con 20/día. Si un teléfono ya está en otra campaña activa no se duplica; si solo estaba en una archivada se vuelve a crear (marcado), salvo que pidiera la baja o no tuviera WhatsApp.</p>
+      <div class="csv-controls" style="margin-bottom:.4rem">
+        <label>🎯 Destino
+          <select id="imp-destino" style="padding:.4rem .5rem;border:1px solid var(--line);border-radius:8px;font-weight:700"><option value="auto">Repartir en una campaña por segmento</option></select>
+        </label>
+        <label title="Se añade al nombre de las campañas que se creen, p. ej. «Verano (jul-ago) · oct26»">Sufijo <input type="text" id="imp-sufijo" value="oct26" style="width:90px;font-weight:600"></label>
+      </div>
       <div class="csv-controls" style="margin-bottom:.8rem">
         <label>🗓️ Verano desde <input type="date" id="imp-corte-verano" value="2026-07-01" style="width:auto;font-weight:600"></label>
         <label>🗓️ Septiembre desde <input type="date" id="imp-corte-sep" value="2026-09-01" style="width:auto;font-weight:600"></label>
@@ -632,8 +643,9 @@
   let leadSearch = '';
   let leadSort = 'updatedAt';
   // Campaña que se muestra: 'activa' (por defecto) o el id de una archivada.
-  let campanaSel = 'activa';
-  let campanasCache = { activa: null, lista: [] };
+  let campanaSel = 'activas';
+  let campanasCache = { lista: [] };
+  const nombreCampana = (id) => { const c = (campanasCache.lista || []).find(x => x.id === id); return c ? c.nombre : id; };
   const Q = () => `?campana=${encodeURIComponent(campanaSel)}`;
   const escH = (s) => String(s || '').replace(/</g, '&lt;');
   const SEG_LABEL = { viejos: 'Viejos (dic-jun)', verano: 'Verano (jul-ago)', septiembre: 'Septiembre+', directo: 'Nuevos en directo' };
@@ -871,7 +883,7 @@
     const pct = a.total > 0 ? Math.round((a.contactados / a.total) * 100) : 0;
     $('csv-bar-fill').style.width = pct + '%';
     $('csv-bar-pct').textContent = pct + '% contactado';
-    if (!_rateEditing) $('csv-rate-input').value = a.leadsPorDia ?? 0;
+    $('csv-cupo-total').innerHTML = `📨 Cupo total de las campañas activas: <b>${a.leadsPorDia ?? 0}/día</b>${(a.leadsPorDia || 0) > 25 ? ' · <span style="color:#a67400">por encima de 25/día: vigila la calidad del número en Meta</span>' : ''}`;
     $('csv-dias').textContent = (a.enCola > 0 && a.leadsPorDia > 0)
       ? `A ${a.leadsPorDia}/día quedan ~${a.diasRestantes} día(s) para acabar.`
       : (a.enCola === 0 && a.total > 0 ? '✅ Lista completada' : '');
@@ -880,60 +892,103 @@
       ? '<div class="csv-hint">Aún no se ha contactado a nadie de la lista.</div>'
       : hist.map(d => `<div class="csv-day"><b>${d.n}</b><span>${d.fecha.slice(5)}</span></div>`).join('');
 
-    // Desglose por segmento: cada lista avanza a la vez (por turnos) y cada
-    // una usa su plantilla. Se puede pausar una sin tocar las demás.
-    const segs = a.porSegmento || [];
-    $('csv-segmentos').innerHTML = segs.length === 0 ? '' : segs.map(s => `<div class="seg-row">
-        <span><span class="seg seg-${escH(s.segmento)}" style="margin-left:0">${escH(s.label)}</span></span>
-        <span><b>${s.total}</b> en lista</span>
-        <span><b>${s.contactados}</b> contactados · <b>${s.respondieron}</b> respondieron</span>
-        <span><b>${s.enCola}</b> en cola${s.pausado ? ' · <span class="seg-ko">EN PAUSA</span>' : ''}</span>
-        <span>${s.plantilla ? `<span class="seg-ok" title="${escH(s.plantilla)}">plantilla: ${escH(s.plantilla)}</span>` : '<span class="seg-ko" title="Pon el nombre de la plantilla aprobada en Meta en la variable de Seenode">⚠️ sin plantilla aprobada → en espera</span>'}</span>
-        <button class="btn" data-seg="${escH(s.segmento)}" data-pausar="${s.pausado ? '0' : '1'}" style="border:1px solid #ccc;font-size:.72rem" ${s.enCola === 0 && !s.pausado ? 'disabled' : ''}>${s.pausado ? '▶ Reanudar' : '⏸ Pausar'}</button>
+    // Una fila por campaña: corren a la vez, cada una con su cupo y su mensaje.
+    // Si estás escribiendo un cupo, no repintamos (se refresca cada 3 s).
+    if (_rateEditing) return;
+    const filas = a.porCampana || [];
+    const ESTADO_TXT = { activa: 'activa', pausada: 'en pausa', archivada: 'archivada' };
+    $('csv-segmentos').innerHTML = filas.length === 0
+      ? '<div class="csv-hint">No hay campañas en esta vista. Crea una con «➕ Nueva campaña» o importa el CSV.</div>'
+      : filas.map(f => `<div class="seg-row ${escH(f.estado)}">
+        <span><span class="camp-nombre">${escH(f.nombre)}</span><span class="estado-pill estado-${escH(f.estado)}">${ESTADO_TXT[f.estado] || f.estado}</span><br>
+          ${f.segmento ? `<span class="seg seg-${escH(f.segmento)}" style="margin-left:0">${escH(f.segmentoLabel)}</span>` : '<span class="csv-hint">mensaje según la fecha de cada lead</span>'}</span>
+        <span><b>${f.total}</b> en lista · <b>${f.enCola}</b> en cola</span>
+        <span><b>${f.contactados}</b> contactados · <b>${f.respondieron}</b> respondieron</span>
+        <span class="camp-cupo">hoy <b>${f.activadosHoy}</b>/<input type="number" min="0" max="500" value="${f.leadsPorDia}" data-cupo="${escH(f.id)}" title="Contactos al día de esta campaña"> <button class="btn" data-guardar-cupo="${escH(f.id)}" style="font-size:.68rem;padding:.25rem .45rem;border:1px solid #ccc">💾</button></span>
+        <span>${f.plantilla ? `<span class="seg-ok" title="${escH(f.plantilla)}">plantilla: ${escH(f.plantilla)}</span>` : '<span class="seg-ko" title="Pon el nombre de la plantilla aprobada en Meta en la variable de Seenode">⚠️ sin plantilla aprobada → no sale</span>'}${f.sinPlantilla && f.plantilla === 'según fecha' ? `<br><span class="seg-ko">${f.sinPlantilla} sin plantilla</span>` : ''}</span>
+        <span class="camp-acc">
+          ${f.estado === 'activa' ? `<button class="btn" data-estado="pausada" data-camp="${escH(f.id)}">⏸ Pausar</button>` : ''}
+          ${f.estado !== 'activa' ? `<button class="btn" data-estado="activa" data-camp="${escH(f.id)}">▶ ${f.estado === 'archivada' ? 'Reactivar' : 'Reanudar'}</button>` : ''}
+          ${f.estado !== 'archivada' ? `<button class="btn" data-estado="archivada" data-camp="${escH(f.id)}">🗄 Archivar</button>` : ''}
+          ${f.total === 0 ? `<button class="btn" data-borrar="${escH(f.id)}" title="Solo se pueden borrar campañas vacías">🗑</button>` : ''}
+        </span>
       </div>`).join('');
-    $('csv-segmentos').querySelectorAll('button[data-seg]').forEach(b => b.addEventListener('click', async () => {
-      b.disabled = true;
+    const cont = $('csv-segmentos');
+    cont.querySelectorAll('[data-cupo]').forEach(inp => {
+      inp.addEventListener('focus', () => { _rateEditing = true; });
+      inp.addEventListener('blur', () => { setTimeout(() => { _rateEditing = false; }, 400); });
+    });
+    cont.querySelectorAll('[data-guardar-cupo]').forEach(b => b.addEventListener('click', async () => {
+      const id = b.dataset.guardarCupo;
+      const v = parseInt(cont.querySelector(`[data-cupo="${id}"]`).value, 10);
+      if (isNaN(v) || v < 0) { toast('Número no válido'); return; }
       try {
-        await fetchJSON('/api/activation/segmento', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ segmento: b.dataset.seg, pausado: b.dataset.pausar === '1' }) });
-        toast(b.dataset.pausar === '1' ? `⏸ Segmento ${b.dataset.seg} en pausa` : `▶ Segmento ${b.dataset.seg} reanudado`);
-        refresh();
-      } catch (e) { toast('Error: ' + e.message); b.disabled = false; }
+        await fetchJSON('/api/activation/rate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ campana: id, leadsPorDia: v }) });
+        _rateEditing = false; toast(`✅ ${nombreCampana(id)}: ${v}/día`); loadCampanas(); refresh();
+      } catch (e) { toast('Error: ' + e.message); }
+    }));
+    cont.querySelectorAll('[data-estado]').forEach(b => b.addEventListener('click', async () => {
+      const id = b.dataset.camp, estado = b.dataset.estado;
+      if (estado === 'archivada' && !confirm(`¿Archivar "${nombreCampana(id)}"?\n\nSus leads se conservan de historial, pero se dejan de contactar y de recordar. Las demás campañas no cambian.`)) return;
+      try {
+        await fetchJSON(`/api/campanas/${encodeURIComponent(id)}/estado`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado }) });
+        toast(`${nombreCampana(id)} → ${ESTADO_TXT[estado]}`); await loadCampanas(); refresh();
+      } catch (e) { toast('Error: ' + e.message); }
+    }));
+    cont.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
+      const id = b.dataset.borrar;
+      if (!confirm(`¿Borrar la campaña vacía "${nombreCampana(id)}"?`)) return;
+      try {
+        await fetchJSON(`/api/campanas/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (campanaSel === id) campanaSel = 'activas';
+        toast('Campaña borrada'); await loadCampanas(); refresh();
+      } catch (e) { toast('Error: ' + e.message); }
     }));
   }
 
-  // ── Campañas: desplegable de la cabecera ──
+  // ── Campañas: desplegable de la cabecera + destino del importador ──
   async function loadCampanas() {
     try {
       const c = await fetchJSON('/api/campanas');
       campanasCache = c;
+      const ESTADO_TXT = { activa: 'activa', pausada: 'en pausa', archivada: 'archivada' };
+      const orden = { activa: 0, pausada: 1, archivada: 2 };
+      const lista = c.lista.slice().sort((a, b) => (orden[a.estado] - orden[b.estado]) || String(b.creada).localeCompare(String(a.creada)));
+      const nVivas = lista.filter(x => x.estado !== 'archivada');
       const sel = $('campanaSel');
       const actual = campanaSel;
-      sel.innerHTML = c.lista
-        .slice()
-        .sort((a, b) => (a.activa ? -1 : b.activa ? 1 : String(b.creada).localeCompare(String(a.creada))))
-        .map(x => `<option value="${x.activa ? 'activa' : escH(x.id)}">${escH(x.nombre)} · ${x.total} leads${x.activa ? ' (ACTIVA)' : ' (archivada)'}</option>`)
-        .join('');
+      sel.innerHTML =
+        `<option value="activas">Todas las activas (${nVivas.length}) · ${nVivas.reduce((t, x) => t + x.total, 0)} leads</option>` +
+        `<option value="todas">Todas, incluidas archivadas</option>` +
+        lista.map(x => `<option value="${escH(x.id)}">${escH(x.nombre)} · ${x.total} leads (${ESTADO_TXT[x.estado] || x.estado})</option>`).join('');
       sel.value = actual;
-      if (sel.value !== actual) { campanaSel = 'activa'; sel.value = 'activa'; }
-      const viendo = c.lista.find(x => campanaSel === 'activa' ? x.activa : x.id === campanaSel);
-      $('campanaEstado').innerHTML = viendo && !viendo.activa
-        ? `<span class="campana-archivada" title="Esta campaña está archivada: no se contacta ni se recuerda nada a sus leads">archivada · solo lectura</span>`
+      if (sel.value !== actual) { campanaSel = 'activas'; sel.value = 'activas'; }
+      const viendo = lista.find(x => x.id === campanaSel);
+      $('campanaEstado').innerHTML = viendo && viendo.estado === 'archivada'
+        ? `<span class="campana-archivada" title="Campaña archivada: no se contacta ni se recuerda nada a sus leads">archivada · solo lectura</span>`
         : '';
-    } catch (e) { /* el panel sigue con la activa */ }
+      const dest = $('imp-destino');
+      const dAct = dest.value;
+      dest.innerHTML = '<option value="auto">Repartir en una campaña por segmento</option>' +
+        nVivas.map(x => `<option value="${escH(x.id)}">Todo a: ${escH(x.nombre)}</option>`).join('');
+      dest.value = dAct; if (dest.value !== dAct) dest.value = 'auto';
+    } catch (e) { /* el panel sigue con lo que tenía */ }
   }
   $('campanaSel').addEventListener('change', (e) => { campanaSel = e.target.value; leadPage = 1; selectedLeadId = null; loadCampanas(); refresh(); });
   $('campanaNueva').addEventListener('click', async () => {
-    const activa = (campanasCache.lista || []).find(x => x.activa);
-    const nombre = prompt(`Nombre de la nueva campaña (p. ej. "Lanzamiento octubre 2026"):`, '');
+    const nombre = prompt('Nombre de la nueva campaña (p. ej. "Verano (jul-ago) · oct26"):', '');
     if (!nombre || !nombre.trim()) return;
-    if (!confirm(`Se creará la campaña "${nombre.trim()}" y pasará a ser la ACTIVA.\n\n` +
-      `La campaña actual${activa ? ` ("${activa.nombre}", ${activa.total} leads)` : ''} se ARCHIVA: sus leads se conservan de historial (podrás verlos eligiéndola en el desplegable), pero se dejan de contactar y de recordar.\n\n` +
-      `Después, importa el CSV nuevo en la pestaña Importar.`)) return;
+    const segTxt = prompt('¿Qué mensaje usa? Escribe uno:\n\n  viejos      → "reabrimos plazas" (plantilla actual)\n  verano      → "con el verano de por medio…"\n  septiembre  → "hace unos días mostraste interés…"\n  directo     → "acabas de mostrar interés…"\n  (vacío)     → según la fecha de cada lead', '');
+    if (segTxt === null) return;
+    const segmento = String(segTxt).trim().toLowerCase();
+    if (segmento && !['viejos', 'verano', 'septiembre', 'directo'].includes(segmento)) { toast('Mensaje no reconocido: ' + segmento); return; }
+    const cupoTxt = prompt('¿Cuántos contactos al día para esta campaña?', '20');
+    if (cupoTxt === null) return;
+    const leadsPorDia = parseInt(cupoTxt, 10);
     try {
-      await fetchJSON('/api/campanas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nombre: nombre.trim() }) });
-      campanaSel = 'activa'; selectedLeadId = null; leadPage = 1;
+      await fetchJSON('/api/campanas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nombre: nombre.trim(), segmento: segmento || null, leadsPorDia: isNaN(leadsPorDia) ? 20 : leadsPorDia }) });
       await loadCampanas();
-      toast('🗂️ Campaña creada y activada');
+      toast('🗂️ Campaña creada (las demás siguen igual)');
       refresh();
     } catch (e) { toast('Error creando la campaña: ' + e.message); }
   });
@@ -1253,7 +1308,7 @@
         <span class="badge badge-${lead.estado}">${lblEstado(lead.estado)}</span>
       </div>
       <div class="lead-extra">
-        🗂️ Campaña <b>${escH(lead.campana || 'prueba_sep26')}</b>
+        🗂️ Campaña <b>${escH(nombreCampana(lead.campana || 'prueba_sep26'))}</b>
         ${lead.segmento ? ` · segmento ${segBadge(lead.segmento)}` : ''}
         ${lead.fechaLead ? ` · rellenó el formulario el <b>${fmtDateTime(lead.fechaLead)}</b>` : ''}
         ${lead.fuente ? ` · fuente <b>${escH(lead.fuente)}</b>` : ''}
@@ -1524,24 +1579,6 @@
   $('pagNext').addEventListener('click', () => { leadPage++; selectedLeadId = null; refresh(); });
 
   // ─── Ritmo diario (leads/día) desde el CRM ──────────────
-  $('csv-rate-input').addEventListener('focus', () => { _rateEditing = true; });
-  $('csv-rate-input').addEventListener('blur', () => { setTimeout(() => { _rateEditing = false; }, 400); });
-  $('csv-rate-save').addEventListener('click', async () => {
-    const v = parseInt($('csv-rate-input').value, 10);
-    if (isNaN(v) || v < 0) { $('csv-rate-status').textContent = '⚠️ número no válido'; return; }
-    $('csv-rate-status').textContent = 'Guardando…';
-    try {
-      const r = await fetchJSON('/api/activation/rate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadsPorDia: v }),
-      });
-      _rateEditing = false;
-      $('csv-rate-status').textContent = `✅ ${r.leadsPorDia}/día guardado`;
-      setTimeout(() => { $('csv-rate-status').textContent = ''; }, 3000);
-      refresh();
-    } catch (e) { $('csv-rate-status').textContent = '❌ error al guardar'; }
-  });
-
   // ─── Importador CSV: file input + drag & drop + importar ─
   $('csvPick').addEventListener('click', () => $('csvFile').click());
   $('csvFile').addEventListener('change', (e) => leerArchivoCSV(e.target.files[0]));
@@ -1552,14 +1589,20 @@
   _dz.addEventListener('drop', (e) => { e.preventDefault(); _dz.classList.remove('over'); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) leerArchivoCSV(f); });
   $('importBtn').addEventListener('click', async () => {
     if (!_leadsValidos.length) { $('importStatus').textContent = 'No hay leads válidos que importar.'; return; }
-    const activa = (campanasCache.lista || []).find(x => x.activa);
-    if (!confirm(`Crear ${_leadsValidos.length} leads en la cola de la campaña ${activa ? `"${activa.nombre}"` : 'activa'} (sin enviar ningún mensaje)?`)) return;
+    const destino = $('imp-destino').value || 'auto';
+    const sufijo = ($('imp-sufijo').value || '').trim();
+    const txtDestino = destino === 'auto'
+      ? 'repartidos en una campaña por segmento (las que falten se crean activas, 20/día)'
+      : `todos en la campaña "${nombreCampana(destino)}"`;
+    if (!confirm(`Crear ${_leadsValidos.length} leads ${txtDestino}, sin enviar ningún mensaje?`)) return;
     $('importBtn').disabled = true;
     $('importStatus').textContent = `Importando ${_leadsValidos.length}…`;
     try {
-      const r = await fetchJSON('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leads: _leadsValidos }) });
+      const r = await fetchJSON('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leads: _leadsValidos, campana: destino, sufijo }) });
       const x = r.resultado || {};
-      $('importStatus').textContent = `✅ ${x.creados} creados en la campaña activa · ${x.duplicados} ya estaban · ${x.excluidosBaja || 0} excluidos (pidieron la baja / sin WhatsApp) · ${x.repetidosDeOtraCampana || 0} ya contactados en otra campaña (marcados) · ${x.errores} errores. Ve a Inicio para poner el ritmo.`;
+      await loadCampanas();
+      const reparto = Object.entries(x.porCampana || {}).map(([id, n]) => `${nombreCampana(id)}: ${n}`).join(' · ');
+      $('importStatus').textContent = `✅ ${x.creados} creados${reparto ? ` (${reparto})` : ''} · ${x.duplicados} ya estaban en una campaña activa · ${x.excluidosBaja || 0} excluidos (pidieron la baja / sin WhatsApp) · ${x.repetidosDeOtraCampana || 0} ya contactados en otra campaña (marcados) · ${x.errores} errores. Revisa el cupo de cada campaña en Inicio.`;
       refresh();
     } catch (e) { $('importStatus').textContent = '❌ error al importar: ' + e.message; }
     $('importBtn').disabled = false;

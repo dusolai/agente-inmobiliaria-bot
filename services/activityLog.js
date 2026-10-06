@@ -258,10 +258,11 @@ function getInboxData() {
  * 'lead_activated' que registra el activador diario. Devuelve un array
  * ordenado por fecha descendente: [{ fecha:'YYYY-MM-DD', n: 12 }, ...].
  */
-function getActivacionesPorDia() {
+function getActivacionesPorDia(soloIds = null) {
   const porDia = new Map();
   for (const e of readAll()) {
     if (e.type !== 'lead_activated') continue;
+    if (soloIds && !soloIds.has(e.leadId)) continue;
     const fecha = (e.ts || '').slice(0, 10);
     if (!fecha) continue;
     porDia.set(fecha, (porDia.get(fecha) || 0) + 1);

@@ -11,10 +11,8 @@ const messages = require('../templates/messages');
 /**
  * Scheduler de Recordatorios Automáticos.
  * Recorre los leads cada 5 min y hace follow-up según el estado:
- *  - Fase 0 (nuevo): activación diaria del import — LEADS_POR_DIA leads al
- *    día, repartidos POR TURNOS entre los segmentos de la lista (viejos /
- *    verano / septiembre / directo), cada uno con su plantilla (reunión
- *    01-10: "los tres a la vez")
+ *  - Fase 0 (nuevo): activación diaria POR CAMPAÑA — varias campañas activas
+ *    a la vez, cada una con su cupo diario y su plantilla (reunión 06-10)
  *  - Fase 1 (esperando_cualificacion): reenvía la pregunta de filtrado
  *  - Fase 2 (video_enviado · modo presentación): no reservó la presentación
  *    en directo → reenvía el Calendly grupal
@@ -25,28 +23,31 @@ const messages = require('../templates/messages');
  *  - Fase 3 (reunion_registrado): no reservó el 1-a-1 → reenvía el individual
  *  - Máximo MAX_REMINDERS intentos por fase antes de descartar
  *
- * SOLO se tocan leads de la CAMPAÑA ACTIVA: archivar una campaña congela sus
- * automatismos (reunión 01-10: la campaña de prueba queda de historial).
+ * Solo se tocan leads de campañas VIVAS. Pausada = no se contacta a nadie
+ * nuevo (los ya contactados siguen); archivada = congelada del todo.
  */
 
 const MAX_REMINDERS = config.agent.maxReminders;
+const campanas = require('./campanas');
 
-// Leads de la campaña activa (los únicos que automatizamos)
+// Leads de campañas VIVAS (activas o pausadas): reciben recordatorios y
+// respuestas. Las archivadas quedan congeladas (reunión 01-10).
 function _leadsActivos(filtro = {}) {
-  return leadManager.getAllLeads({ ...filtro, campana: 'activa' });
+  return leadManager.getAllLeads({ ...filtro, campana: 'activas' });
 }
 
 function _modoPresentacion() {
   return config.flujo.trasCualificar === 'presentacion';
 }
 
-// ─── Fase 0: activación diaria del import masivo ──────────────────
-// Los leads de /api/import y /webhook/bulk-import se crean en estado "nuevo".
-// Esta fase los va activando poco a poco: cupo diario, horario laboral y
-// espaciado aleatorio entre envíos, para no disparar los filtros antispam de
-// WhatsApp. Config por env: LEADS_POR_DIA (10), ACTIVACION_HORA_INICIO (10),
-// ACTIVACION_HORA_FIN (20). Horas en la zona del servidor (poner
-// TZ=Europe/Madrid en Seenode para que coincidan con España).
+// ─── Fase 0: activación diaria POR CAMPAÑA ────────────────────────
+// Varias campañas corren a la vez (viejos / verano / septiembre / directo),
+// cada una con su cupo diario propio (reunión 06-10: 20/día cada una). Los
+// leads importados se crean en estado "nuevo" y esta fase los va soltando:
+// horario laboral, espaciado aleatorio dentro de cada campaña y como mucho
+// UN envío por ciclo de 5 min en total (nunca ráfagas desde el número).
+// Config por env: ACTIVACION_HORA_INICIO (10), ACTIVACION_HORA_FIN (20).
+// Horas en la zona del servidor (TZ=Europe/Madrid en Seenode).
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const ACTIVATION_FILE = path.join(DATA_DIR, 'activation.json');
 
@@ -54,7 +55,7 @@ function _leerEstadoActivacion() {
   try {
     return JSON.parse(fs.readFileSync(ACTIVATION_FILE, 'utf-8'));
   } catch (e) {
-    return { fecha: null, activadosHoy: 0, ultimaActivacion: null };
+    return { porCampana: {} };
   }
 }
 
@@ -63,38 +64,32 @@ function _guardarEstadoActivacion(st) {
   fs.writeFileSync(ACTIVATION_FILE, JSON.stringify(st, null, 2), 'utf-8');
 }
 
-// Cupo diario configurable EN CALIENTE desde el CRM (persistido en
-// activation.json). Prioridad: valor guardado desde el panel > env
-// LEADS_POR_DIA > 10. Así se cambia el ritmo sin tocar Seenode.
-// Reunión 24-09: no pasar de 20-25/día — Meta puede tomar el número por bot.
+function _hoy() { return new Date().toISOString().slice(0, 10); }
+
+/** Contador de hoy de una campaña: { fecha, activadosHoy, ultimaActivacion } */
+function _estadoCampana(st, id) {
+  st.porCampana = st.porCampana || {};
+  let c = st.porCampana[id];
+  if (!c || c.fecha !== _hoy()) c = st.porCampana[id] = { fecha: _hoy(), activadosHoy: 0, ultimaActivacion: (c && c.ultimaActivacion) || null };
+  return c;
+}
+
+/** Cuántos se han activado hoy en una campaña (para el CRM). */
+function activadosHoy(id) {
+  const st = _leerEstadoActivacion();
+  const c = st.porCampana && st.porCampana[id];
+  return c && c.fecha === _hoy() ? c.activadosHoy || 0 : 0;
+}
+
+/** Suma de los cupos de las campañas activas (informativo). */
 function getLeadsPorDia() {
-  const st = _leerEstadoActivacion();
-  if (st && Number.isFinite(st.leadsPorDia) && st.leadsPorDia >= 0) return st.leadsPorDia;
-  return parseInt(process.env.LEADS_POR_DIA, 10) || 10;
+  return campanas.listar().filter((c) => c.estado === 'activa').reduce((s, c) => s + (c.leadsPorDia || 0), 0);
 }
 
-function setLeadsPorDia(n) {
-  const v = Math.max(0, Math.min(500, parseInt(n, 10)));
-  if (!Number.isFinite(v)) return getLeadsPorDia();
-  const st = _leerEstadoActivacion();
-  st.leadsPorDia = v;
-  _guardarEstadoActivacion(st);
-  return v;
-}
-
-// Segmentos en pausa (desde el CRM): sus leads se quedan en cola.
-function getSegmentosPausados() {
-  const st = _leerEstadoActivacion();
-  return Array.isArray(st.segmentosPausados) ? st.segmentosPausados : [];
-}
-
-function setSegmentoPausado(segmento, pausado) {
-  const st = _leerEstadoActivacion();
-  const set = new Set(Array.isArray(st.segmentosPausados) ? st.segmentosPausados : []);
-  if (pausado) set.add(segmento); else set.delete(segmento);
-  st.segmentosPausados = Array.from(set);
-  _guardarEstadoActivacion(st);
-  return st.segmentosPausados;
+/** Compat: cambia el cupo de UNA campaña (por defecto, la primera activa). */
+function setLeadsPorDia(n, campanaId) {
+  const c = campanas.setCupo(campanaId || campanas.getActiva(), n);
+  return c ? c.leadsPorDia : null;
 }
 
 // ¿Está listo el canal por el que se enviaría a este lead?
@@ -118,96 +113,90 @@ function _rechazoDeMeta(res) {
   return Boolean(res) && res.success === false && res.mode === 'production';
 }
 
-// Orden de los segmentos en el turno. "directo" (leads que entran hoy) va
-// siempre el primero: están calientes y conviene contactarlos cuanto antes.
-const ORDEN_SEGMENTOS = ['directo', 'viejos', 'verano', 'septiembre'];
-
-/**
- * Elige el siguiente lead de la cola. Los "directo" primero; el resto por
- * turnos entre segmentos (viejos → verano → septiembre → viejos…) para que las
- * tres listas avancen a la vez. Dentro de un segmento, el más antiguo (por
- * fecha del formulario). Se saltan los segmentos en pausa y los que aún no
- * tienen plantilla aprobada en Meta.
- */
-function _siguienteLead(nuevos, st) {
-  const pausados = new Set(getSegmentosPausados());
-  const porSeg = new Map();
-  for (const l of nuevos) {
-    const seg = l.segmento || 'viejos';
-    if (pausados.has(seg)) continue;
-    if (!messaging.plantillaParaSegmento(seg)) continue;
-    if (!porSeg.has(seg)) porSeg.set(seg, []);
-    porSeg.get(seg).push(l);
-  }
-  if (!porSeg.size) return null;
-  const masAntiguo = (arr) => arr
+/** El lead más antiguo (por fecha del formulario) de la cola de una campaña
+ *  cuyo segmento tenga plantilla aprobada. */
+function _siguienteDeCampana(colaCampana) {
+  const conPlantilla = colaCampana.filter((l) => messaging.plantillaParaSegmento(l.segmento || 'viejos'));
+  if (!conPlantilla.length) return null;
+  return conPlantilla
     .slice()
     .sort((a, b) => String(a.fechaLead || a.createdAt || '').localeCompare(String(b.fechaLead || b.createdAt || '')))[0];
-  if (porSeg.has('directo')) return masAntiguo(porSeg.get('directo'));
-  const resto = ORDEN_SEGMENTOS.filter((s) => s !== 'directo' && porSeg.has(s));
-  const idx = resto.indexOf(st.ultimoSegmento);
-  const seg = resto[(idx + 1) % resto.length];
-  return masAntiguo(porSeg.get(seg));
 }
 
 async function procesarActivacionDiaria() {
-  const cupo = getLeadsPorDia();
-  if (cupo <= 0) return;
-
   const horaInicio = parseInt(process.env.ACTIVACION_HORA_INICIO, 10) || 10;
   const horaFin = parseInt(process.env.ACTIVACION_HORA_FIN, 10) || 20;
-  const ahora = new Date();
-  const hora = ahora.getHours();
+  const hora = new Date().getHours();
   if (hora < horaInicio || hora >= horaFin) return;
 
-  let st = _leerEstadoActivacion();
-  const hoy = ahora.toISOString().slice(0, 10);
-  if (st.fecha !== hoy) st = { ...st, fecha: hoy, activadosHoy: 0, ultimaActivacion: null };
-  if (st.activadosHoy >= cupo) return;
+  const st = _leerEstadoActivacion();
+  const ventanaMin = (horaFin - horaInicio) * 60;
+  const ahora = Date.now();
 
-  // Espaciado: repartimos el cupo por la ventana horaria, con jitter ±30%
-  // para que los envíos no caigan a intervalos exactos (patrón de bot).
-  const intervaloMin = Math.max(5, Math.floor(((horaFin - horaInicio) * 60) / cupo));
-  if (st.ultimaActivacion) {
-    const minDesdeUltima = (Date.now() - new Date(st.ultimaActivacion).getTime()) / 60000;
-    const objetivo = intervaloMin * (0.7 + Math.random() * 0.6);
-    if (minDesdeUltima < objetivo) return;
+  // Cola "nuevo" agrupada por campaña
+  const cola = new Map();
+  for (const l of leadManager.getAllLeads({ estado: leadManager.LEAD_STATES.NUEVO, campana: 'activas' })) {
+    const id = leadManager.campanaDe(l);
+    if (!cola.has(id)) cola.set(id, []);
+    cola.get(id).push(l);
   }
 
-  const nuevos = _leadsActivos({ estado: leadManager.LEAD_STATES.NUEVO });
-  if (nuevos.length === 0) return;
-  const lead = _siguienteLead(nuevos, st);
-  if (!lead) {
-    // Hay cola pero todos sus segmentos están en pausa o sin plantilla: lo
-    // decimos una vez por hora, no cada 5 min.
-    if (!st.avisoColaBloqueada || Date.now() - st.avisoColaBloqueada > 3600 * 1000) {
-      console.warn(`⏸️  [Activación] ${nuevos.length} leads en cola, pero sus segmentos están en pausa o sin plantilla aprobada (WHATSAPP_TEMPLATE_VERANO / _SEPTIEMBRE / _DIRECTO)`);
-      st.avisoColaBloqueada = Date.now();
+  // Campañas que pueden mandar AHORA: activas, con cola, cupo libre y su
+  // intervalo cumplido (cupo repartido en la ventana horaria, jitter ±30%).
+  const candidatas = [];
+  let bloqueadas = 0;
+  for (const c of campanas.listar()) {
+    if (c.estado !== 'activa' || !(c.leadsPorDia > 0)) continue;
+    const suCola = cola.get(c.id) || [];
+    if (!suCola.length) continue;
+    const ec = _estadoCampana(st, c.id);
+    if (ec.activadosHoy >= c.leadsPorDia) continue;
+    if (ec.ultimaActivacion) {
+      const intervaloMin = Math.max(5, Math.floor(ventanaMin / c.leadsPorDia));
+      const minDesde = (ahora - new Date(ec.ultimaActivacion).getTime()) / 60000;
+      if (minDesde < intervaloMin * (0.7 + Math.random() * 0.6)) continue;
+    }
+    const lead = _siguienteDeCampana(suCola);
+    if (!lead) { bloqueadas++; continue; }
+    candidatas.push({ c, ec, lead, cola: suCola.length });
+  }
+
+  if (!candidatas.length) {
+    if (bloqueadas && (!st.avisoColaBloqueada || ahora - st.avisoColaBloqueada > 3600 * 1000)) {
+      console.warn(`⏸️  [Activación] ${bloqueadas} campaña(s) con cola pero sin plantilla aprobada para su segmento (WHATSAPP_TEMPLATE_VERANO / _SEPTIEMBRE / _DIRECTO)`);
+      st.avisoColaBloqueada = ahora;
       _guardarEstadoActivacion(st);
     }
     return;
   }
 
-  // Si el canal está desconectado, NO activamos: no gastamos el cupo del día
-  // en un envío que no saldría. La activación se reanuda sola al reconectar.
+  // Un envío por ciclo: la campaña más RETRASADA respecto a su cupo; los
+  // "directo" (leads de hoy, calientes) siempre primero.
+  candidatas.sort((a, b) => {
+    const da = a.c.segmento === 'directo' ? 0 : 1;
+    const db = b.c.segmento === 'directo' ? 0 : 1;
+    if (da !== db) return da - db;
+    return (a.ec.activadosHoy / a.c.leadsPorDia) - (b.ec.activadosHoy / b.c.leadsPorDia);
+  });
+  const { c, ec, lead, cola: enCola } = candidatas[0];
+
+  // Si el canal está desconectado, NO activamos: no gastamos cupo en un
+  // envío que no saldría. Se reanuda solo al reconectar.
   if (!_canalListo(lead.telefono)) {
     console.log('⏸️  [Activación] Canal desconectado — en pausa, reintenta al reconectar');
     return;
   }
 
-  // Enviamos ANTES de avanzar el lead: solo si el mensaje sale de verdad
-  // contamos el cupo y lo pasamos a esperando_cualificacion. Si no sale
-  // (desconexión justo ahora), el lead se queda en la cola para el próximo
-  // ciclo / día siguiente.
+  // Enviamos ANTES de avanzar el lead: solo si sale de verdad contamos cupo.
   const personalizer = require('./personalizer');
   const texto = await personalizer.personalizarMensaje(
     messages.mensajeReactivacion({ nombre: lead.nombre, segmento: lead.segmento }),
     lead
   );
-  // Primer contacto: plantilla del SEGMENTO en la API oficial, texto en Baileys.
   const envio = await messaging.sendPrimerContacto(lead, texto, { delaySeconds: 0 });
   if (!_envioOk(envio)) {
     console.warn(`⚠️  [Activación] Envío a ${lead.nombre} no salió (${(envio && envio.error) || 'sin detalle'}) — sigue en la cola (no cuenta cupo)`);
+    if (_rechazoDeMeta(envio)) { ec.ultimaActivacion = new Date().toISOString(); _guardarEstadoActivacion(st); }
     return;
   }
 
@@ -216,21 +205,19 @@ async function procesarActivacionDiaria() {
     console.error(`❌ [Activación] Enviado pero no pude avanzar a ${lead.nombre}: ${result.error}`);
     return;
   }
-  // Baseline de recordatorios = ahora (no createdAt, que puede ser de hace
-  // días por el import) para que la fase 1 no dispare al instante.
+  // Baseline de recordatorios = ahora (no createdAt) para que la fase 1 no
+  // dispare al instante.
   leadManager.updateLead(lead.id, {
-    recordatorios: {
-      ...lead.recordatorios,
-      fase1: { enviados: 0, ultimoEnvio: new Date().toISOString() },
-    },
+    recordatorios: { ...lead.recordatorios, fase1: { enviados: 0, ultimoEnvio: new Date().toISOString() } },
   });
-  activityLog.appendActivity(lead.id, 'lead_activated', { cupo, activadosHoy: st.activadosHoy + 1, segmento: lead.segmento || null });
+  activityLog.appendActivity(lead.id, 'lead_activated', {
+    cupo: c.leadsPorDia, activadosHoy: ec.activadosHoy + 1, segmento: lead.segmento || null, campana: c.id,
+  });
 
-  st.activadosHoy++;
-  st.ultimaActivacion = new Date().toISOString();
-  st.ultimoSegmento = lead.segmento || 'viejos';
+  ec.activadosHoy++;
+  ec.ultimaActivacion = new Date().toISOString();
   _guardarEstadoActivacion(st);
-  console.log(`🚀 [Activación] ${lead.nombre} [${lead.segmento || 'viejos'}] activado (${st.activadosHoy}/${cupo} hoy, quedan ${nuevos.length - 1} en cola)`);
+  console.log(`🚀 [Activación] ${lead.nombre} · ${c.nombre} (${ec.activadosHoy}/${c.leadsPorDia} hoy, quedan ${enCola - 1} en su cola)`);
 }
 
 // Devuelve el intervalo en ms que se debe esperar antes del recordatorio
@@ -635,6 +622,5 @@ module.exports = {
   procesarActivacionDiaria,
   getLeadsPorDia,
   setLeadsPorDia,
-  getSegmentosPausados,
-  setSegmentoPausado,
+  activadosHoy,
 };
