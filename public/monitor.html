@@ -355,6 +355,13 @@
     </div>
 
     <div class="panel" id="csvFlowPanel">
+      <div id="bloqueoBanner" style="display:none;background:#fee2e2;border:2px solid var(--red);border-radius:12px;padding:.8rem 1rem;margin-bottom:1rem;color:#7f1d1d">
+        <b>🛑 ENVÍOS PARADOS</b> — <span id="bloqueoTxt"></span>
+        <div style="margin-top:.5rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+          <button class="btn" id="bloqueoReanudar" style="background:#fff;border:1px solid var(--red);color:var(--red);font-weight:800">Ya está arreglado en Meta: reanudar envíos</button>
+          <span class="csv-hint" style="color:#7f1d1d">Mientras esté parado no sale nada automático: ni contactos nuevos ni recordatorios.</span>
+        </div>
+      </div>
       <h2>📋 Flujo de la lista <small>cómo se va contactando la lista importada, día a día</small></h2>
       <div class="csv-nums">
         <div class="csv-num"><b id="csv-total">—</b><span>En la lista</span></div>
@@ -586,23 +593,6 @@
         </div>
       </div>
 
-      <div class="link-group">
-        <h3>📚 Repositorios (GitHub)</h3>
-        <div class="link-list">
-          <div class="link-card"><a href="https://github.com/dusolai/agente-inmobiliaria-bot" target="_blank">
-            <span class="lc-icon">🐙</span>
-            <div class="lc-body"><div class="lc-name">agente-inmobiliaria-bot</div><div class="lc-url">github.com/dusolai/agente-inmobiliaria-bot</div></div>
-          </a></div>
-          <div class="link-card"><a href="https://github.com/Digga-coder/LANDING-THREE-INMOBILIARIA" target="_blank">
-            <span class="lc-icon">🐙</span>
-            <div class="lc-body"><div class="lc-name">LANDING-THREE-INMOBILIARIA</div><div class="lc-url">github.com/Digga-coder/LANDING-THREE-INMOBILIARIA</div></div>
-          </a></div>
-          <div class="link-card"><a href="https://github.com/dusolai/three-inmobiliaria-emprende" target="_blank">
-            <span class="lc-icon">🐙</span>
-            <div class="lc-body"><div class="lc-name">three-inmobiliaria-emprende</div><div class="lc-url">github.com/dusolai/three-inmobiliaria-emprende</div></div>
-          </a></div>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -768,6 +758,8 @@
     const m = ev.meta || {};
     switch (ev.type) {
       case 'lead_created':       return `creado · fuente ${m.fuente || '?'}${m.segmento ? ` · segmento ${m.segmento}` : ''}${m.campana ? ` · campaña ${m.campana}` : ''}`;
+      case 'auto_respuesta':     return `🤖 respuesta automática de su WhatsApp (no se contesta): "${m.texto || ''}"`;
+      case 'perfil_por_formulario': return `perfil deducido del formulario de Meta (${m.perfil}) al responder "${m.texto || ''}"`;
       case 'auto_alta':          return `🆕 escribió al WhatsApp sin ser lead → alta automática${m.nombrePerfil ? ` (perfil: ${m.nombrePerfil})` : ''}`;
       case 'presentacion_reservada': return `📅 reservó la presentación en directo${m.inicio ? ` (${fmtDateTime(m.inicio)})` : ''}`;
       case 'presentacion_asistida':  return `🤝 asistió a la presentación en directo${m.minutos != null ? ` (${m.minutos} min)` : ''} → 1-a-1 enviado`;
@@ -902,6 +894,9 @@
     const pct = a.total > 0 ? Math.round((a.contactados / a.total) * 100) : 0;
     $('csv-bar-fill').style.width = pct + '%';
     $('csv-bar-pct').textContent = pct + '% contactado';
+    const bq = a.bloqueo;
+    $('bloqueoBanner').style.display = bq ? 'block' : 'none';
+    if (bq) $('bloqueoTxt').textContent = `${bq.motivo} (Meta ${bq.code}) desde ${fmtDateTime(bq.desde)}.`;
     $('csv-cupo-total').innerHTML = `📨 Cupo total de las campañas activas: <b>${a.leadsPorDia ?? 0}/día</b>${(a.leadsPorDia || 0) > 25 ? ' · <span style="color:#a67400">por encima de 25/día: vigila la calidad del número en Meta</span>' : ''}`;
     $('csv-dias').textContent = (a.enCola > 0 && a.leadsPorDia > 0)
       ? `A ${a.leadsPorDia}/día quedan ~${a.diasRestantes} día(s) para acabar.`
@@ -994,6 +989,13 @@
       $('salud-veredicto').textContent = e.message;
     }
   }
+  $('bloqueoReanudar').addEventListener('click', async (e) => {
+    if (!confirm('¿Seguro que ya está arreglado en Meta (tarjeta, cuenta desbloqueada…)?\n\nSi no, los mensajes volverán a fallar y bajará la calidad del número.')) return;
+    e.target.disabled = true;
+    try { await fetchJSON('/api/envios/reanudar', { method: 'POST' }); toast('▶️ Envíos reanudados'); loadSalud(true); refresh(); }
+    catch (err) { toast('Error: ' + err.message); }
+    e.target.disabled = false;
+  });
   $('salud-refrescar').addEventListener('click', async (e) => { e.target.disabled = true; await loadSalud(true); e.target.disabled = false; });
 
   // ── Campañas: desplegable de la cabecera + destino del importador ──

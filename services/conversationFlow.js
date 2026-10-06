@@ -81,10 +81,38 @@ function interpretarOpcionVerReservar(texto) {
 
 // Palabras de baja: si el lead pide que paremos, paramos — en cualquier estado.
 // Evita denuncias de spam (aceleran el baneo del número) y cumple RGPD.
-const OPTOUT_REGEX = /\b(baja|stop|unsubscribe|no me interesa|no interesa|no quiero|dejame en paz|dejadme en paz|no molestar|no molestes|borrame|borradme)\b/;
+const OPTOUT_REGEX = /\b(baja|stop|unsubscribe|no me interesa|no interesa|no quiero|no estoy interesad[oa]|no gracias|no mas mensajes|no me escrib\w*|dejame en paz|dejadme en paz|no molestar|no molestes|borrame|borradme)\b/;
 
 function esOptOut(texto) {
   return OPTOUT_REGEX.test(normalizar(texto));
+}
+
+// "Sí, envíamelo" (botón de la plantilla actual), "vale", "me interesa"…:
+// el lead quiere la info pero no ha dicho si es agente o busca ingresos. En la
+// prueba 31 personas pulsaron ese botón y el agente les volvió a preguntar
+// 1/2: fricción justo cuando estaban calientes.
+const AFIRMATIVO_REGEX = /^(si|sii+|vale|ok|okey|claro|por supuesto|adelante|perfecto|genial|envi(a|e)?(me)?(lo|la)?|mand(a|e)(me)?(lo|la)?|quiero|me interesa|info|informacion|dale)\b/;
+function esAfirmativo(texto) {
+  return AFIRMATIVO_REGEX.test(normalizar(texto));
+}
+
+/**
+ * Perfil deducido de las respuestas del formulario de Meta (campaña de
+ * captación de agentes inmobiliarios): todos se interesaron por trabajar en
+ * el sector, así que van a la landing PROFESIONAL. Sin respuestas → null.
+ */
+function perfilDesdeFormulario(lead) {
+  const r = lead && lead.respuestas;
+  if (!r || !Object.keys(r).length) return null;
+  return LEAD_PROFILES.PROFESIONAL;
+}
+
+// Respuestas automáticas de cuentas de empresa ("Gracias por comunicarte con
+// nosotros…"). En la prueba el agente IA les contestaba: conversación con un
+// robot. Se registran y no se responden.
+const AUTORESPUESTA_REGEX = /(gracias por (tu|su) mensaje|gracias por comunicarte|gracias por contactar|gracias por escribir(nos)?|mensaje automatico|respuesta automatica|en este momento no (podemos|puedo|estamos)|fuera (del|de) (nuestro )?horario|te (responderemos|contestaremos)|le (responderemos|atenderemos)|nos pondremos en contacto contigo lo antes posible)/;
+function esAutoRespuesta(texto) {
+  return AUTORESPUESTA_REGEX.test(normalizar(texto));
 }
 
 // ─── Alta automática de números desconocidos ─────────────────────
@@ -165,12 +193,23 @@ async function handleIncoming(telefono, texto, extra = {}) {
     return;
   }
 
+  // ─── Respuestas automáticas de empresas: no se contestan ────────
+  if (esAutoRespuesta(texto)) {
+    activityLog.appendActivity(lead.id, 'auto_respuesta', { texto: String(texto).slice(0, 200) });
+    console.log(`🤖 [Flujo] ${lead.nombre}: respuesta automática de su WhatsApp → no se contesta`);
+    return;
+  }
+
   // ─── Fase A: respuesta a la pregunta de cualificación ──────────
   // Tras cualificar enviamos la LANDING directamente (con sus vídeos). En la
   // landing ven primero el VSL, luego el webinar, y al terminarlo aparece el
   // botón de reservar la 1-a-1. El Calendly grupal se ofrece como OPCIÓN.
   if (lead.estado === LEAD_STATES.ESPERANDO_CUALIFICACION) {
-    const perfil = interpretarRespuesta(texto);
+    let perfil = interpretarRespuesta(texto);
+    if (!perfil && esAfirmativo(texto)) {
+      perfil = perfilDesdeFormulario(lead);
+      if (perfil) activityLog.appendActivity(lead.id, 'perfil_por_formulario', { texto: String(texto).slice(0, 80), perfil });
+    }
     if (!perfil) {
       // ¿Ya recibió la bienvenida? Si NO (caso típico: el lead escribe "hola"
       // primero, sin que le hayamos escrito), le mandamos el mensaje de
@@ -361,7 +400,7 @@ async function procesarAsistenciaReunion(lead, { minutos = null, via = 'zoom' } 
     activityLog.appendActivity(lead.id, 'presentacion_asistida', { minutos, via });
     const enlaceCalendly = enlaceRedirectorCalendly(lead, 'individual');
     console.log(`🤝 [Flujo] ${lead.nombre} asistió a la presentación (${minutos != null ? minutos + ' min' : via}) → 1-a-1 enviado`);
-    await messaging.sendTextMessage(lead.telefono, messages.mensajeCierre({ nombre: lead.nombre, enlaceCalendly }));
+    await messaging.sendTextoOPlantilla(lead, messages.mensajeCierre({ nombre: lead.nombre, enlaceCalendly }), messaging.PLANTILLA_1A1);
     return { error: null, lead: leadManager.getLeadById(lead.id), cierreEnviado: true };
   }
   const r = leadManager.transitionState(lead.id, LEAD_STATES.REUNION_ASISTIO);
@@ -370,6 +409,9 @@ async function procesarAsistenciaReunion(lead, { minutos = null, via = 'zoom' } 
 }
 
 module.exports = {
+  esAfirmativo,
+  esAutoRespuesta,
+  perfilDesdeFormulario,
   handleIncoming,
   procesarReservaGrupal,
   procesarAsistenciaReunion,

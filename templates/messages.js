@@ -78,9 +78,22 @@ const PLANTILLAS_META = {
       `Antes de enviarte información, una pregunta rápida:\n\n` +
       `👉 ¿Ya trabajas en el sector inmobiliario 🏠 o estás buscando una nueva oportunidad para generar ingresos? 💰`,
   },
-  // Botones de respuesta rápida de las tres plantillas (máx. 25 caracteres).
-  // El flujo los reconoce por las palabras "agente" / "ingreso(s)".
-  botones: ['Soy agente inmobiliario', 'Busco ingresos extra'],
+  // Recordatorio ÚNICO a quien no contestó (WHATSAPP_TEMPLATE_RECORDATORIO_CUALIFICACION).
+  // Texto distinto al primero y salida fácil: mejor un "No me interesa" que
+  // un bloqueo o una denuncia de spam (es lo que hunde la cuenta).
+  recordatorio: {
+    nombreSugerido: 'recordatorio_cualificacion',
+    variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_CUALIFICACION',
+    cuerpo:
+      `Hola {{nombre}}, te escribí hace un par de días desde Three Inmobiliaria y no quiero ser pesado 🙂\n\n` +
+      `Si todavía te interesa conocer el proyecto, dime si trabajas en el sector inmobiliario o buscas ingresos extra y te paso la información.\n\n` +
+      `Si no es para ti, pulsa "No me interesa" y no te volveremos a escribir.`,
+  },
+  // Botones de respuesta rápida de TODAS las plantillas (máx. 25 caracteres).
+  // El flujo reconoce "agente" / "ingreso(s)" y trata "No me interesa" como
+  // BAJA inmediata (sin más mensajes). El tercer botón es el que evita que,
+  // quien no quiere, nos bloquee.
+  botones: ['Soy agente inmobiliario', 'Busco ingresos extra', 'No me interesa'],
 };
 
 function _textoSegmento(segmento, nombre) {
@@ -101,6 +114,16 @@ function mensajeReactivacion({ nombre, segmento }) {
   if (porSegmento) return porSegmento;
   const variante = VARIANTES_REACTIVACION[Math.floor(Math.random() * VARIANTES_REACTIVACION.length)];
   return variante({ nombre });
+}
+
+// Recordatorio único (texto libre: Telegram/Baileys). En WhatsApp oficial va
+// la plantilla PLANTILLAS_META.recordatorio con botones.
+function recordatorioCualificacion({ nombre }) {
+  return (
+    `Hola ${nombre}, te escribí hace un par de días desde Three Inmobiliaria y no quiero ser pesado 🙂\n\n` +
+    `Si todavía te interesa, dime 1 si trabajas en el sector inmobiliario o 2 si buscas ingresos extra y te paso la información.\n\n` +
+    `Si no es para ti, responde "No me interesa" y no te volveremos a escribir.`
+  );
 }
 
 // Re-pregunta si la respuesta no se entiende
@@ -452,6 +475,7 @@ module.exports = {
   OPCIONES_TEXTO,
   mensajeReactivacion,
   mensajeReintentarCualificacion,
+  recordatorioCualificacion,
   mensajeInvitacionPresentacion,
   mensajeReservaPresentacionConfirmada,
   mensajeRamaProfesional,

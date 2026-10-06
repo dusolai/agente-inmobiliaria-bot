@@ -46,6 +46,9 @@ module.exports = {
     // presentación). Sin ella el recordatorio va como texto, que solo llega
     // dentro de la ventana de 24h.
     templateRecordatorioGrupal: process.env.WHATSAPP_TEMPLATE_RECORDATORIO_GRUPAL || '',
+    // Recordatorio ÚNICO a quien no contestó la pregunta inicial: texto
+    // distinto al primero y botón "No me interesa" (ver PLANTILLAS_META).
+    templateRecordatorioCualificacion: process.env.WHATSAPP_TEMPLATE_RECORDATORIO_CUALIFICACION || '',
   },
 
   // Canal Telegram (modo piloto previo a producción)
@@ -131,6 +134,24 @@ module.exports = {
     // activa como "directo" y se le hace la pregunta de filtrado.
     autoAltaWhatsapp: process.env.AUTOALTA_WHATSAPP !== '0',
     autoAltaMaxPorHora: parseInt(process.env.AUTOALTA_MAX_HORA, 10) || 20,
+  },
+
+  // ─── Anti-bloqueo (revisión de la campaña de prueba, 06-10) ──────
+  // En la prueba se mandó a cada lead que no contestaba la MISMA plantilla
+  // hasta 5 veces en 2 días; de 292 leads, todos menos los 3 que cerraron
+  // acabaron bloqueando o ignorando, y Meta bloqueó la cuenta (131031). Ahora:
+  //  - la pregunta inicial se manda UNA vez; como mucho UN recordatorio, con
+  //    un texto distinto y botón "No me interesa" (plantilla propia). Sin esa
+  //    plantilla no hay recordatorio: se descarta en silencio a los días.
+  //  - resto de fases: como mucho 2 recordatorios, a 24 h y 48 h.
+  //  - nunca dos mensajes automáticos en menos de 20 h a quien no contesta.
+  antiBloqueo: {
+    fase1MaxRecordatorios: Math.max(0, parseInt(process.env.FASE1_MAX_RECORDATORIOS, 10) || 1),
+    fase1EsperaHoras: parseInt(process.env.FASE1_ESPERA_HORAS, 10) || 48,
+    descarteSilencioHoras: parseInt(process.env.DESCARTE_SILENCIO_HORAS, 10) || 72,
+    maxRecordatorios: Math.max(0, parseInt(process.env.RECORDATORIOS_MAX, 10) || 2),
+    intervalosMin: (process.env.RECORDATORIOS_INTERVALOS_MIN || '1440,2880').split(',').map((s) => parseInt(s.trim(), 10) || 1440),
+    minHorasEntreMensajes: parseInt(process.env.MIN_HORAS_ENTRE_MENSAJES, 10) || 20,
   },
 
   agent: {

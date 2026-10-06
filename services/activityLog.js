@@ -22,7 +22,9 @@ const path = require('path');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const ACTIVITY_FILE = path.join(DATA_DIR, 'activity.json');
-const MAX_ENTRIES_IN_MEMORY = 10000; // protección por si el archivo se hace enorme
+// Antes 10.000: la campaña de prueba sola generó ~9.700 eventos, así que con
+// 270 leads nuevos el historial antiguo se iba a ir borrando solo.
+const MAX_ENTRIES_IN_MEMORY = parseInt(process.env.ACTIVITY_MAX_EVENTOS, 10) || 60000;
 
 function ensureFile() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -55,7 +57,8 @@ function writeAll(arr) {
   const data = arr.length > MAX_ENTRIES_IN_MEMORY
     ? arr.slice(arr.length - MAX_ENTRIES_IN_MEMORY)
     : arr;
-  fs.writeFileSync(ACTIVITY_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  // JSON compacto: con decenas de miles de eventos el sangrado duplicaba el tamaño
+  fs.writeFileSync(ACTIVITY_FILE, JSON.stringify(data), 'utf-8');
   // Programar copia a Postgres a los pocos segundos (si está configurado).
   try { require('./backupDb').guardarPronto(); } catch (e) {}
 }

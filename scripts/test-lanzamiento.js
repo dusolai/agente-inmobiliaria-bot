@@ -254,6 +254,7 @@ function activationReset() {
 
   const noa = leadManager.createLead({ nombre: 'Noa', telefono: '34611666777', segmento: 'septiembre' });
   leadManager.updateLead(noa.id, { estado: 'video_visto', perfil: 'profesional', presentacionAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString() });
+  activityLog.appendActivity(noa.id, 'message_received', { texto: 'Soy agente' }); // ventana de 24 h abierta
   await scheduler.ejecutarCiclo();
   const noa2 = leadManager.getLeadById(noa.id);
   assert.strictEqual(noa2.recordatorios.fase2c.enviados, 1, 'no asistió → recordatorio con el enlace de la presentación');
@@ -268,6 +269,61 @@ function activationReset() {
   assert.strictEqual(anaLegado.recordatorios.fase1.enviados, 1, 'el lead de la campaña archivada no recibe recordatorios');
   assert.strictEqual(paraTel('34600000001').length, nAna, 'ni un mensaje más a la campaña archivada');
   ok('los leads de la campaña archivada no reciben automatismos');
+
+  // ── 6b. Anti-bloqueo (revisión de la campaña de prueba) ────────
+  {
+    const vivas = campanas.paraSegmento('viejos');
+    const hace = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString();
+    // a) "Sí, envíamelo" con respuestas del formulario → landing profesional sin repreguntar
+    const sara = leadManager.createLead({ nombre: 'Sara', telefono: '34622000001', campana: vivas.id, segmento: 'viejos', respuestas: { 'experiencia': 'no, pero quiero empezar' } });
+    leadManager.transitionState(sara.id, 'esperando_cualificacion');
+    await conversationFlow.handleIncoming('34622000001', 'Sí, envíamelo');
+    assert.strictEqual(leadManager.getLeadById(sara.id).perfil, 'profesional');
+    assert.strictEqual(leadManager.getLeadById(sara.id).estado, 'video_enviado');
+    // b) respuesta automática de empresa → no se contesta
+    const n0 = enviados.length;
+    const bot = leadManager.createLead({ nombre: 'Empresa SL', telefono: '34622000002', campana: vivas.id, segmento: 'viejos' });
+    leadManager.transitionState(bot.id, 'esperando_cualificacion');
+    await conversationFlow.handleIncoming('34622000002', 'Gracias por comunicarte con nosotros. En este momento no podemos atenderte');
+    assert.strictEqual(enviados.length, n0, 'no se contesta a un contestador automático');
+    // c) "No me interesa" (botón) → baja
+    await conversationFlow.handleIncoming('34622000002', 'No me interesa');
+    assert.strictEqual(leadManager.getLeadById(bot.id).estado, 'descartado');
+    ok('"Sí, envíamelo" usa el formulario, no se contesta a contestadores, "No me interesa" da de baja');
+
+    // d) Fase 1: nunca se repite la pregunta; sin plantilla de recordatorio → descarte silencioso
+    const t1 = leadManager.createLead({ nombre: 'Tomas', telefono: '34622000003', campana: vivas.id, segmento: 'viejos' });
+    leadManager.transitionState(t1.id, 'esperando_cualificacion');
+    leadManager.updateLead(t1.id, { recordatorios: { ...t1.recordatorios, fase1: { enviados: 0, ultimoEnvio: hace(60) } } });
+    const t2 = leadManager.createLead({ nombre: 'Teresa', telefono: '34622000004', campana: vivas.id, segmento: 'viejos' });
+    leadManager.transitionState(t2.id, 'esperando_cualificacion');
+    leadManager.updateLead(t2.id, { recordatorios: { ...t2.recordatorios, fase1: { enviados: 0, ultimoEnvio: hace(80) } } });
+    config.whatsapp.templateRecordatorioCualificacion = '';
+    await scheduler.ejecutarCiclo();
+    assert.strictEqual(paraTel('34622000003').length, 0, 'sin plantilla de recordatorio, no se reenvía la pregunta');
+    assert.strictEqual(leadManager.getLeadById(t1.id).estado, 'esperando_cualificacion', 'a las 60 h aún espera');
+    assert.strictEqual(leadManager.getLeadById(t2.id).estado, 'descartado', 'a las 72 h se descarta');
+    assert.strictEqual(paraTel('34622000004').length, 0, 'descarte en silencio: sin despedida fuera de la ventana');
+    // con plantilla: UN recordatorio distinto, y nunca un segundo
+    config.whatsapp.templateRecordatorioCualificacion = 'recordatorio_cualificacion';
+    await scheduler.ejecutarCiclo();
+    assert.deepStrictEqual(paraTel('34622000003').map((e) => e.plantilla), ['recordatorio_cualificacion']);
+    leadManager.updateLead(t1.id, { recordatorios: { ...leadManager.getLeadById(t1.id).recordatorios, fase1: { enviados: 1, ultimoEnvio: hace(50) } } });
+    await scheduler.ejecutarCiclo();
+    assert.strictEqual(paraTel('34622000003').length, 1, 'un solo recordatorio, nunca dos');
+    ok('pregunta inicial una sola vez; como mucho un recordatorio distinto; descarte silencioso');
+
+    // e) Freno de emergencia: error de cuenta de Meta → nada sale hasta reanudar
+    scheduler.bloquearEnvios(131042, 'Business eligibility payment issue');
+    const n1 = enviados.length;
+    activationReset();
+    await scheduler.ejecutarCiclo();
+    assert.strictEqual(enviados.length, n1, 'con el freno puesto no sale nada');
+    assert.ok(scheduler.getBloqueo() && /pago/.test(scheduler.getBloqueo().motivo));
+    scheduler.desbloquearEnvios();
+    assert.strictEqual(scheduler.getBloqueo(), null);
+    ok('freno de emergencia: un error de pago/bloqueo de Meta para todos los envíos hasta reanudar');
+  }
 
   // ── 7. Textos ─────────────────────────────────────────────────
   const messages = require('../templates/messages');

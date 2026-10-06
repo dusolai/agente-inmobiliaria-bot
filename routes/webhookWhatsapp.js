@@ -98,7 +98,16 @@ router.post('/', async (req, res) => {
               // del número. Y nunca va a convertir. Se descarta al primer fallo.
               // OJO: 131047 (fuera de ventana 24h) y 131049 (calidad) NO entran
               // aquí: son temporales, el lead sigue siendo válido.
-              const PERMANENTES = [131026, 133010];
+              // Error de la CUENTA (pago, bloqueo, spam): todo lo que se mande
+              // fallará → freno de emergencia de todos los envíos automáticos.
+              const scheduler = require('../services/scheduler');
+              if (err && scheduler.CODIGOS_CUENTA[Number(err.code)]) {
+                scheduler.bloquearEnvios(err.code, err.title || err.message);
+              }
+
+              // 131050 = el usuario ha bloqueado los mensajes de marketing de
+              // esta empresa: insistir es pedir un bloqueo.
+              const PERMANENTES = [131026, 133010, 131050];
               const S = leadManager.LEAD_STATES;
               if (err && PERMANENTES.includes(Number(err.code)) && lead.estado !== S.DESCARTADO) {
                 const r = leadManager.transitionState(lead.id, S.DESCARTADO);

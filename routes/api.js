@@ -230,9 +230,10 @@ router.post('/leads/:id/send-1a1', async (req, res) => {
 
     activityLog.appendActivity(lead.id, 'cta_1a1_manual', { via: 'crm' }, req.ip);
     const enlace1a1 = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
-    await messaging.sendTextMessage(
-      lead.telefono,
-      messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 })
+    await messaging.sendTextoOPlantilla(
+      lead,
+      messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 }),
+      messaging.PLANTILLA_1A1
     );
 
     res.json({ success: true, lead: leadManager.getLeadById(lead.id) });
@@ -533,7 +534,8 @@ router.get('/activation', (req, res) => {
     const porDia = activityLog.getActivacionesPorDia(new Set(leads.map((l) => l.id)));
     const diasRestantes = leadsPorDia > 0 ? Math.ceil(enCola / leadsPorDia) : null;
 
-    res.json({ total, contactados: total - enCola, enCola, descartados, activadosHoy, leadsPorDia, diasRestantes, porDia, porCampana: filas });
+    const bloqueo = require('../services/scheduler').getBloqueo();
+    res.json({ total, contactados: total - enCola, enCola, descartados, activadosHoy, leadsPorDia, diasRestantes, porDia, porCampana: filas, bloqueo });
   } catch (err) {
     console.error('❌ [API] Error /activation:', err.message);
     res.status(500).json({ error: err.message });
@@ -655,6 +657,13 @@ router.delete('/campanas/:id', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── Freno de emergencia de envíos ───────────────────────────────
+/** POST /api/envios/reanudar → quita el freno puesto por un error de cuenta de Meta. */
+router.post('/envios/reanudar', (req, res) => {
+  const antes = require('../services/scheduler').desbloquearEnvios();
+  res.json({ success: true, estabaParadoPor: antes });
 });
 
 // ─── Salud del número de WhatsApp ────────────────────────────────

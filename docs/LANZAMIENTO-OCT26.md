@@ -136,3 +136,30 @@ Nuevos: `services/metaLeads.js` (lectura/limpieza del export de Meta, segmento p
 Modificados: `config/config.js` (plantillas por segmento, flujo, hoja, cortes), `services/leadManager.js` (campaña, segmento, fechaLead, respuestas; `getLeadByPhone` prefiere la campaña activa; migración), `services/scheduler.js` (activación por turnos y pausas, solo campaña activa, fases del modo presentación), `services/messaging.js` (plantilla por segmento), `templates/messages.js` (textos por segmento, mensajes de presentación), `services/conversationFlow.js` (alta automática, modo presentación, reserva/asistencia compartidas), `routes/api.js` (campañas, filtros, segmentos, hoja, plantillas), `routes/webhook.js`, `routes/tracking.js`, `routes/zoomWebhook.js`, `routes/webhookWhatsapp.js` (nombre del perfil), `services/activityLog.js`, `services/backupDb.js` (copia de `campanas.json` y `sheets_state.json`), `server.js`, `public/monitor.html` (selector de campaña, filas por segmento con pausa, filtro y badge de segmento, datos del formulario en el lead, importador con segmentos), `.env.example`.
 
 Compatibilidad: los leads existentes pasan a la campaña `prueba_sep26` al arrancar (después de restaurar la copia de Postgres). Nada se borra.
+
+---
+
+## 8. Revisión de la campaña de prueba y anti-bloqueo (06-10)
+
+Lo que se vio en el historial de la prueba (292 leads, jul-ago):
+
+| Problema | Qué pasó | Arreglo |
+|---|---|---|
+| Misma plantilla repetida | A quien no contestaba se le reenviaba la pregunta hasta 4 veces cada 12 h (5 mensajes iguales en 2 días). Solo cerraron 3; el resto ignoró o bloqueó. | La pregunta se manda **una vez**. Como mucho **un recordatorio**, con texto distinto y botón "No me interesa" (`WHATSAPP_TEMPLATE_RECORDATORIO_CUALIFICACION`). Sin esa plantilla no hay recordatorio. A las 72 h sin respuesta, descarte **en silencio**. Resto de fases: máx. 2 recordatorios (24 h y 48 h). Nunca dos mensajes automáticos en menos de 20 h a quien no contesta. |
+| Cuenta bloqueada y tarjeta | Del 1 al 6 de agosto Meta rechazó TODO (131042 pago, luego 131031 cuenta bloqueada) y el sistema siguió mandando ~120/día; 74 leads se descartaron sin haber recibido nunca nada. | **Freno de emergencia**: al primer error de cuenta (131042, 131031, 131048, 368) se para todo lo automático y el CRM muestra un banner rojo con "Reanudar envíos". |
+| Despedida que no llegaba | 200 mensajes fallaron con 131047: el texto de despedida y algunos 1-a-1 se mandaban fuera de la ventana de 24 h. | Fuera de la ventana no se manda texto: el 1-a-1 va por la plantilla `recordatorio_reunion` y la despedida se omite. |
+| Bucle del 19-20 julio | 2.632 recordatorios rechazados (plantilla con variable con nombre). | Ya arreglado en julio (20c7591). Se pueden limpiar del historial con "🧹 Limpiar rechazados". |
+| "Sí, envíamelo" | 31 personas pulsaron ese botón y el agente les volvió a preguntar 1/2. | Si responde que sí y tiene respuestas del formulario de Meta, va directo a la landing profesional. |
+| Contestadores automáticos | El agente IA respondía a "Gracias por comunicarte con nosotros…". | Se detectan y no se contestan. |
+| Historial que se borraba solo | El registro guardaba solo 10.000 eventos (la prueba ya usaba 9.700). | Ahora 60.000, en JSON compacto. |
+
+**Todas las plantillas de primer contacto** llevan ahora 3 botones: `Soy agente inmobiliario` · `Busco ingresos extra` · **`No me interesa`** (da de baja al momento). Recomendado añadir también ese botón a `recordatorio_presentacion` y `recordatorio_reunion` en Meta.
+
+**`recordatorio_cualificacion`** → `WHATSAPP_TEMPLATE_RECORDATORIO_CUALIFICACION` (mismos 3 botones)
+```
+Hola {{nombre}}, te escribí hace un par de días desde Three Inmobiliaria y no quiero ser pesado 🙂
+
+Si todavía te interesa conocer el proyecto, dime si trabajas en el sector inmobiliario o buscas ingresos extra y te paso la información.
+
+Si no es para ti, pulsa "No me interesa" y no te volveremos a escribir.
+```

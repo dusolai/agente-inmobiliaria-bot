@@ -190,4 +190,47 @@ async function sendTemplate(telefono, params = [], opts = {}) {
   return resultado;
 }
 
-module.exports = { sendTextMessage, sendPrimerContacto, sendTemplate, plantillaParaSegmento, esTelegram, TG_PREFIX };
+/**
+ * ¿Está abierta la ventana de 24 h de WhatsApp con este lead? (el lead nos
+ * escribió hace menos de 24 h). Fuera de ella Meta NO entrega texto libre
+ * (error 131047 "Re-engagement message"): en la campaña de prueba 200
+ * mensajes se perdieron así, casi todos el mensaje de despedida.
+ * Telegram y Baileys no tienen ventana.
+ */
+function dentroDeVentana(telefono) {
+  if (esTelegram(telefono) || whatsapp.provider !== 'cloud') return true;
+  try {
+    const leadManager = require('./leadManager');
+    const activityLog = require('./activityLog');
+    const lead = leadManager.getLeadByPhone(telefono);
+    if (!lead) return false;
+    const ult = activityLog.getActivityByLead(lead.id)
+      .filter((e) => e.type === 'message_received')
+      .reduce((m, e) => Math.max(m, new Date(e.ts).getTime()), 0);
+    return ult > 0 && Date.now() - ult < 23.5 * 3600 * 1000; // margen de 30 min
+  } catch (e) { return true; }
+}
+
+/**
+ * Texto libre si la ventana está abierta; si no, la plantilla aprobada
+ * `plantilla` ({ name, lang, varNames }) con el nombre del lead; si no hay
+ * plantilla, NO se envía nada (mode 'fuera_ventana'): mandar texto que Meta
+ * va a rechazar solo empeora la calidad del número.
+ */
+async function sendTextoOPlantilla(lead, texto, plantilla = null, opts = {}) {
+  if (dentroDeVentana(lead.telefono)) return sendTextMessage(lead.telefono, texto, opts);
+  if (plantilla && plantilla.name) {
+    console.log(`🪟 [Messaging] ${lead.nombre}: ventana de 24h cerrada → plantilla ${plantilla.name} en vez de texto`);
+    return sendTemplate(lead.telefono, [lead.nombre], plantilla);
+  }
+  console.log(`🪟 [Messaging] ${lead.nombre}: ventana de 24h cerrada y sin plantilla → no se envía (Meta lo rechazaría)`);
+  return { success: false, mode: 'fuera_ventana', error: 'ventana de 24h cerrada' };
+}
+
+// Plantilla aprobada que recuerda reservar el 1-a-1 (variable numerada {{1}})
+const PLANTILLA_1A1 = { name: 'recordatorio_reunion', lang: 'en', varNames: ['1'] };
+
+module.exports = {
+  sendTextMessage, sendPrimerContacto, sendTemplate, sendTextoOPlantilla, dentroDeVentana,
+  plantillaParaSegmento, esTelegram, TG_PREFIX, PLANTILLA_1A1,
+};

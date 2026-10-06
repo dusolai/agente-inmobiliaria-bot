@@ -100,6 +100,8 @@ function _crm(dias = 3) {
 }
 
 function _veredicto(meta, crm, cupoTotal) {
+  const bloqueo = require('./scheduler').getBloqueo();
+  if (bloqueo) return { nivel: 'rojo', texto: `ENVÍOS PARADOS desde ${new Date(bloqueo.desde).toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })}: ${bloqueo.motivo} (Meta ${bloqueo.code}). Arréglalo en Meta y pulsa «Reanudar envíos» en el panel de la lista.` };
   const cal = meta.calidadMeta;
   if (!meta.configurado) return { nivel: 'gris', texto: 'Sin credenciales de Meta: no se puede consultar la calidad.' };
   if (meta.error) return { nivel: 'gris', texto: `No se pudo consultar Meta: ${meta.error}` };

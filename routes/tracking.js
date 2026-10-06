@@ -47,9 +47,10 @@ router.post('/video-click', async (req, res) => {
       console.log(`🎥→📞 [Tracking] CTA pulsado, 1-a-1 enviado: ${lead.nombre}`);
 
       const enlace1a1 = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
-      await messaging.sendTextMessage(
-        lead.telefono,
-        messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 })
+      await messaging.sendTextoOPlantilla(
+        lead,
+        messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 }),
+        messaging.PLANTILLA_1A1
       );
     } else {
       return res.json({ success: true, message: `Lead ya está en estado: ${lead.estado}`, lead });

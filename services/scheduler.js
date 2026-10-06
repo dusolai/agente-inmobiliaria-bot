@@ -27,7 +27,25 @@ const messages = require('../templates/messages');
  * nuevo (los ya contactados siguen); archivada = congelada del todo.
  */
 
-const MAX_REMINDERS = config.agent.maxReminders;
+// Anti-bloqueo: como mucho 2 recordatorios por fase (antes 4, cada 12 h).
+const MAX_REMINDERS = config.antiBloqueo.maxRecordatorios;
+const AB = config.antiBloqueo;
+
+/**
+ * ¿Le escribimos hace menos de MIN_HORAS_ENTRE_MENSAJES y no ha contestado?
+ * Entonces no se le manda nada automático todavía: dos mensajes seguidos a
+ * alguien que no responde es lo que hace que bloqueen el número.
+ */
+function _recienContactado(lead) {
+  const ev = activityLog.getActivityByLead(lead.id);
+  let ultEnv = 0, ultRec = 0;
+  for (const e of ev) {
+    const t = new Date(e.ts).getTime();
+    if (e.type === 'message_sent' && !(e.meta && e.meta.ok === false)) ultEnv = Math.max(ultEnv, t);
+    else if (e.type === 'message_received') ultRec = Math.max(ultRec, t);
+  }
+  return ultEnv > ultRec && Date.now() - ultEnv < AB.minHorasEntreMensajes * 3600 * 1000;
+}
 const campanas = require('./campanas');
 
 // Leads de campañas VIVAS (activas o pausadas): reciben recordatorios y
@@ -81,6 +99,48 @@ function activadosHoy(id) {
   return c && c.fecha === _hoy() ? c.activadosHoy || 0 : 0;
 }
 
+// ─── Freno de emergencia (campaña de prueba, 1-6 de agosto) ─────────
+// Cuando Meta rechaza por un problema de la CUENTA (tarjeta caducada 131042,
+// cuenta bloqueada 131031, límite de spam 131048, bloqueo temporal 368) todo
+// lo que se envíe va a fallar. En la prueba el sistema siguió mandando ~120
+// mensajes al día durante 6 días, todos fallidos, y fue descartando leads que
+// nunca recibieron nada (74). Ahora, al primer fallo de ese tipo, se paran
+// TODOS los envíos automáticos hasta que alguien lo desbloquee en el CRM.
+const CODIGOS_CUENTA = {
+  131042: 'problema de pago en Meta (tarjeta caducada o rechazada)',
+  131031: 'cuenta de WhatsApp Business bloqueada por Meta',
+  131048: 'Meta ha limitado los envíos por spam',
+  368: 'bloqueo temporal de Meta por incumplir políticas',
+};
+
+function getBloqueo() {
+  const st = _leerEstadoActivacion();
+  return st.bloqueoEnvios || null;
+}
+
+function bloquearEnvios(code, detalle) {
+  const st = _leerEstadoActivacion();
+  if (st.bloqueoEnvios) return st.bloqueoEnvios; // ya estaba parado
+  st.bloqueoEnvios = {
+    code: Number(code),
+    motivo: CODIGOS_CUENTA[code] || detalle || 'error de cuenta en Meta',
+    detalle: detalle || null,
+    desde: new Date().toISOString(),
+  };
+  _guardarEstadoActivacion(st);
+  console.error(`🛑🛑 [Scheduler] ENVÍOS PARADOS: ${st.bloqueoEnvios.motivo} (Meta ${code}). Se reanudan desde el CRM.`);
+  return st.bloqueoEnvios;
+}
+
+function desbloquearEnvios() {
+  const st = _leerEstadoActivacion();
+  const antes = st.bloqueoEnvios || null;
+  delete st.bloqueoEnvios;
+  _guardarEstadoActivacion(st);
+  if (antes) console.log(`▶️  [Scheduler] Envíos reanudados desde el CRM (estaban parados por: ${antes.motivo})`);
+  return antes;
+}
+
 /** Suma de los cupos de las campañas activas (informativo). */
 function getLeadsPorDia() {
   return campanas.listar().filter((c) => c.estado === 'activa').reduce((s, c) => s + (c.leadsPorDia || 0), 0);
@@ -110,7 +170,9 @@ function _envioOk(res) {
 // sin WhatsApp…)? A diferencia del canal caído (mode 'development', temporal),
 // esto NO se arregla reintentando cada 5 min, así que hay que hacer backoff.
 function _rechazoDeMeta(res) {
-  return Boolean(res) && res.success === false && res.mode === 'production';
+  // 'fuera_ventana': no se mandó porque Meta lo rechazaría (ventana de 24h);
+  // también hay que esperar al siguiente intervalo, no reintentar cada 5 min.
+  return Boolean(res) && res.success === false && (res.mode === 'production' || res.mode === 'fuera_ventana');
 }
 
 /** El lead más antiguo (por fecha del formulario) de la cola de una campaña
@@ -224,8 +286,8 @@ async function procesarActivacionDiaria() {
 // número `n` (0-indexado). Si hay menos entradas que MAX_REMINDERS, repite la
 // última (típico 72 h). Reunión final 15-06: [5min, 24h, 48h, 72h].
 function _intervaloMs(n) {
-  const arr = config.agent.reminderIntervalsMinutes || [];
-  const minutos = arr[n] != null ? arr[n] : (arr[arr.length - 1] != null ? arr[arr.length - 1] : config.agent.reminderIntervalHours * 60);
+  const arr = AB.intervalosMin || [];
+  const minutos = arr[n] != null ? arr[n] : (arr[arr.length - 1] != null ? arr[arr.length - 1] : 1440);
   return minutos * 60 * 1000;
 }
 
@@ -255,11 +317,15 @@ function _marcarIntento(lead, fase, sumar) {
   });
 }
 
-// Descarta un lead que agotó los recordatorios (si el mensaje de despedida
-// sale; si el canal está caído, se intenta en el próximo ciclo).
+// Descarta un lead que agotó los recordatorios. El mensaje de despedida es
+// texto libre: solo se manda si la ventana de 24h está abierta. Si no, se
+// descarta en silencio (antes Meta lo rechazaba con 131047 y además restaba
+// calidad al número). Si el canal está caído, se intenta en el próximo ciclo.
 async function _descartarPorAgotamiento(lead, motivo) {
-  const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
-  if (!_envioOk(envio)) return false;
+  if (messaging.dentroDeVentana(lead.telefono)) {
+    const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
+    if (!_envioOk(envio) && !(envio && envio.mode === 'production')) return false;
+  }
   console.log(`🗑  [Scheduler] Descartando lead (${motivo}): ${lead.nombre}`);
   leadManager.transitionState(lead.id, leadManager.LEAD_STATES.DESCARTADO);
   return true;
@@ -272,30 +338,43 @@ async function _descartarPorAgotamiento(lead, motivo) {
  * y luego descarta.
  */
 async function procesarRecordatoriosFase1() {
+  // Anti-bloqueo: NUNCA se reenvía la misma pregunta. Como mucho UN
+  // recordatorio (FASE1_MAX_RECORDATORIOS), a las FASE1_ESPERA_HORAS, con la
+  // plantilla propia de recordatorio (texto distinto + botón "No me
+  // interesa"). Sin esa plantilla, no hay recordatorio. Pasadas
+  // DESCARTE_SILENCIO_HORAS desde el último mensaje sin respuesta, se
+  // descarta en silencio (sin mensaje de despedida).
   const leads = _leadsActivos({ estado: leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION });
   const ahora = Date.now();
+  const plantilla = config.whatsapp.templateRecordatorioCualificacion;
 
   for (const lead of leads) {
     const fase1 = (lead.recordatorios && lead.recordatorios.fase1) || { enviados: 0, ultimoEnvio: null };
-
-    if (fase1.enviados >= MAX_REMINDERS) {
-      await _descartarPorAgotamiento(lead, 'no respondió la cualificación');
-      continue;
-    }
-
     const referencia = fase1.ultimoEnvio
       ? new Date(fase1.ultimoEnvio).getTime()
       : new Date(lead.createdAt).getTime();
+    const horas = (ahora - referencia) / 3600000;
 
-    if (ahora - referencia < _intervaloMs(fase1.enviados)) continue;
+    const puedeRecordar = fase1.enviados < AB.fase1MaxRecordatorios &&
+      (plantilla || messaging.esTelegram(lead.telefono) || require('./whatsapp').provider !== 'cloud');
 
-    console.log(`🔔 [Scheduler] Recordatorio Cualificación #${fase1.enviados + 1} → ${lead.nombre}`);
-    // Aún sin respuesta del lead → fuera de la ventana de 24h, así que en la
-    // API oficial también va como plantilla (el primer contacto reintentado).
-    const envio = await messaging.sendPrimerContacto(
-      lead,
-      messages.mensajeReactivacion({ nombre: lead.nombre, segmento: lead.segmento })
-    );
+    if (!puedeRecordar) {
+      if (horas >= AB.descarteSilencioHoras) {
+        await _descartarPorAgotamiento(lead, 'no respondió la cualificación');
+      }
+      continue;
+    }
+
+    if (horas < AB.fase1EsperaHoras) continue;
+    if (_recienContactado(lead)) continue;
+
+    console.log(`🔔 [Scheduler] Recordatorio único de cualificación → ${lead.nombre}`);
+    let envio;
+    if (plantilla && !messaging.esTelegram(lead.telefono) && require('./whatsapp').provider === 'cloud') {
+      envio = await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: plantilla, lang: config.whatsapp.templateLang });
+    } else {
+      envio = await messaging.sendTextMessage(lead.telefono, messages.recordatorioCualificacion({ nombre: lead.nombre }));
+    }
     if (!_envioOk(envio)) {
       if (_rechazoDeMeta(envio)) _marcarIntento(lead, 'fase1', false); // backoff
       continue; // no salió (desconectado): se reintenta
@@ -328,6 +407,7 @@ async function procesarRecordatoriosFase2() {
       : new Date(lead.updatedAt || lead.createdAt).getTime();
 
     if (ahora - referencia < _intervaloMs(fase2.enviados)) continue;
+    if (_recienContactado(lead)) continue;
 
     const idx = Math.min(fase2.enviados, grupalReminders.length - 1);
     const enlaceCalendly = conversationFlow.enlaceRedirectorCalendly(lead, 'grupal');
@@ -337,7 +417,7 @@ async function procesarRecordatoriosFase2() {
     if (config.whatsapp.templateRecordatorioGrupal && !messaging.esTelegram(lead.telefono)) {
       envio = await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: config.whatsapp.templateRecordatorioGrupal, lang: 'es' });
     } else {
-      envio = await messaging.sendTextMessage(lead.telefono, grupalReminders[idx]({ nombre: lead.nombre, enlaceCalendly }));
+      envio = await messaging.sendTextoOPlantilla(lead, grupalReminders[idx]({ nombre: lead.nombre, enlaceCalendly }));
     }
     if (!_envioOk(envio)) {
       if (_rechazoDeMeta(envio)) _marcarIntento(lead, 'fase2', false);
@@ -404,9 +484,10 @@ async function procesarRecordatoriosFase2B() {
         activityLog.appendActivity(lead.id, 'cta_1a1_auto', { motivo: 'webinar_completado' });
         const enlace1a1 = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
         console.log(`🎬→📞 [Scheduler] ${lead.nombre} terminó el webinar sin pulsar agendar → enviando 1-a-1`);
-        await messaging.sendTextMessage(
-          lead.telefono,
-          messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 })
+        await messaging.sendTextoOPlantilla(
+          lead,
+          messages.mensajeAcceso1a1({ nombre: lead.nombre, enlace1a1 }),
+          messaging.PLANTILLA_1A1
         );
       }
       // Tanto si el envío salió como si no, el lead ya está en Fase 3: la recoge
@@ -426,6 +507,7 @@ async function procesarRecordatoriosFase2B() {
       : new Date(lead.videoVistoAt || lead.updatedAt).getTime();
 
     if (ahora - referencia < _intervaloMs(fase2b.enviados)) continue;
+    if (_recienContactado(lead)) continue;
 
     // ¿Dónde lo dejó EXACTAMENTE? De más avanzado a menos, para que el copy
     // encaje con su punto real y nunca le digamos "vuelve al vídeo" de algo que
@@ -499,6 +581,7 @@ async function procesarRecordatoriosFase2C() {
       }
     }
 
+    if (_recienContactado(lead)) continue;
     const idx = Math.min(fase2c.enviados, noAsistioReminders.length - 1);
     const enlaceReunion = conversationFlow.enlaceRedirectorCalendly(lead, 'grupal');
     console.log(`🔔 [Scheduler] Recordatorio No-asistió #${fase2c.enviados + 1} → ${lead.nombre}`);
@@ -507,7 +590,7 @@ async function procesarRecordatoriosFase2C() {
     if (config.whatsapp.templateRecordatorioGrupal && !messaging.esTelegram(lead.telefono)) {
       envio = await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: config.whatsapp.templateRecordatorioGrupal, lang: 'es' });
     } else {
-      envio = await messaging.sendTextMessage(lead.telefono, noAsistioReminders[idx]({ nombre: lead.nombre, enlaceReunion }));
+      envio = await messaging.sendTextoOPlantilla(lead, noAsistioReminders[idx]({ nombre: lead.nombre, enlaceReunion }));
     }
     if (!_envioOk(envio)) {
       if (_rechazoDeMeta(envio)) _marcarIntento(lead, 'fase2c', false);
@@ -539,6 +622,7 @@ async function procesarRecordatoriosFase3() {
       : new Date(lead.reunionRegistradoAt || lead.updatedAt).getTime();
 
     if (ahora - referencia < _intervaloMs(fase3.enviados)) continue;
+    if (_recienContactado(lead)) continue;
 
     // Recordatorio 1-a-1: usa plantilla aprobada (funciona fuera de ventana 24h).
     // recordatorio_reunion dice "reserva tu 1-a-1 con Arkaitz" — es suficiente.
@@ -564,6 +648,11 @@ async function procesarRecordatoriosFase3() {
  */
 async function ejecutarCiclo() {
   console.log(`\n⏰ [Scheduler] Ciclo de recordatorios — ${new Date().toLocaleString()}`);
+  const bloqueo = getBloqueo();
+  if (bloqueo) {
+    console.warn(`🛑 [Scheduler] Envíos PARADOS desde ${bloqueo.desde}: ${bloqueo.motivo}. Nada sale hasta reanudar en el CRM.`);
+    return;
+  }
   await procesarActivacionDiaria();
 
   // Los RECORDATORIOS también respetan el horario de día (mismo que la
@@ -623,4 +712,8 @@ module.exports = {
   getLeadsPorDia,
   setLeadsPorDia,
   activadosHoy,
+  getBloqueo,
+  bloquearEnvios,
+  desbloquearEnvios,
+  CODIGOS_CUENTA,
 };
