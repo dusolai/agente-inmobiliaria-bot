@@ -159,6 +159,15 @@
   .seg-row .camp-cupo input{width:58px;padding:.25rem .3rem;border:1px solid var(--line);border-radius:6px;font-weight:800;text-align:center}
   .seg-row .camp-acc{display:flex;gap:.3rem;flex-wrap:wrap;justify-content:flex-end}
   .seg-row .camp-acc .btn{font-size:.7rem;padding:.3rem .5rem;border:1px solid #ccc}
+  /* Salud del número de WhatsApp */
+  .salud{display:grid;grid-template-columns:auto 1fr auto;gap:1rem;align-items:center}
+  .salud-luz{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:900;color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+  .salud-luz.verde{background:var(--green)} .salud-luz.amarillo{background:var(--yellow)} .salud-luz.rojo{background:var(--red)} .salud-luz.gris{background:var(--grey)}
+  .salud-txt b{font-size:1rem;color:var(--ink)} .salud-txt p{margin:.2rem 0 0;font-size:.82rem;color:var(--muted)}
+  .salud-datos{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.7rem}
+  .salud-datos span{background:#faf8fc;border:1px solid var(--line);border-radius:8px;padding:.3rem .55rem;font-size:.74rem;color:var(--muted)}
+  .salud-datos span b{color:var(--ink)}
+  @media (max-width:700px){.salud{grid-template-columns:auto 1fr}.salud>button{grid-column:1/-1}}
   .estado-pill{display:inline-block;font-size:.6rem;font-weight:800;padding:.12rem .45rem;border-radius:50px;text-transform:uppercase;margin-left:.3rem}
   .estado-activa{background:#d7f0e2;color:#1f6b3e} .estado-pausada{background:#fff3d6;color:#a67400} .estado-archivada{background:#e5e5ea;color:#666}
   .seg-row b{color:var(--purple)} .seg-row .seg-ko{color:var(--red);font-weight:700;font-size:.72rem}
@@ -333,6 +342,16 @@
       <div class="kpi o"><b id="kpi-cola">—</b><span>Cola import · hoy</span></div>
       <div class="kpi y"><b id="kpi-conversion">—</b><span>% conversión</span></div>
       <div class="kpi"><b id="kpi-eventos">—</b><span>Eventos registrados</span></div>
+    </div>
+
+    <div class="panel" id="saludPanel">
+      <h2>📶 Salud del número de WhatsApp <small id="salud-cuando">según Meta · se consulta cada 10 min</small></h2>
+      <div class="salud">
+        <div class="salud-luz gris" id="salud-luz">·</div>
+        <div class="salud-txt"><b id="salud-titulo">Consultando a Meta…</b><p id="salud-veredicto"></p></div>
+        <button class="btn" id="salud-refrescar" style="border:1px solid #ccc">↻ Comprobar ahora</button>
+      </div>
+      <div class="salud-datos" id="salud-datos"></div>
     </div>
 
     <div class="panel" id="csvFlowPanel">
@@ -945,6 +964,37 @@
       } catch (e) { toast('Error: ' + e.message); }
     }));
   }
+
+  // ── Salud del número de WhatsApp (calidad Meta + entregas) ──
+  async function loadSalud(forzar) {
+    try {
+      const s = await fetchJSON('/api/whatsapp/salud' + (forzar ? '?forzar=1' : ''));
+      const v = s.veredicto || { nivel: 'gris', texto: '' };
+      const luz = $('salud-luz');
+      luz.className = 'salud-luz ' + v.nivel;
+      luz.textContent = { verde: '✓', amarillo: '!', rojo: '✕' }[v.nivel] || '?';
+      $('salud-titulo').textContent = s.calidad
+        ? `Calidad ${s.calidad.nivel.toUpperCase()}${s.numero ? ' · ' + s.numero : ''}${s.nombre ? ' · ' + s.nombre : ''}`
+        : (s.error ? 'No se pudo consultar Meta' : 'Sin datos de Meta');
+      $('salud-veredicto').textContent = v.texto || '';
+      const c = s.crm || {};
+      const ent = (s.entregaMeta || []).map(d => `<span>${escH(d.dia)}: <b>${d.entregados}</b>/${d.enviados} entregados</span>`).join('');
+      $('salud-datos').innerHTML = [
+        s.limiteTier ? `<span>Límite Meta: <b>${s.limiteDia ? s.limiteDia + '/día' : 'sin límite'}</b> (${escH(s.limiteTier)})</span>` : '',
+        `<span>Cupo de las campañas activas: <b>${s.cupoTotal}/día</b></span>`,
+        s.estadoNumero ? `<span>Número: <b>${escH(s.estadoNumero)}</b></span>` : '',
+        `<span>Últimos ${c.dias || 3} días (CRM): <b>${c.enviados || 0}</b> enviados · <b>${(c.entregados || 0) + (c.leidos || 0)}</b> entregados · <b>${c.leidos || 0}</b> leídos · <b style="color:${c.fallidos ? 'var(--red)' : 'inherit'}">${c.fallidos || 0}</b> no llegaron · <b>${c.rechazados || 0}</b> rechazados</span>`,
+        `<span>Bajas: <b>${c.bajas || 0}</b> · sin WhatsApp: <b>${c.sinWhatsapp || 0}</b></span>`,
+        ent,
+        s.entregaMetaError ? `<span>Entregas Meta: ${escH(s.entregaMetaError)}</span>` : '',
+      ].join('');
+      $('salud-cuando').textContent = `según Meta · consultado ${s.cacheHaceMin ? `hace ${s.cacheHaceMin} min` : 'ahora'}`;
+    } catch (e) {
+      $('salud-titulo').textContent = 'No se pudo cargar la salud del número';
+      $('salud-veredicto').textContent = e.message;
+    }
+  }
+  $('salud-refrescar').addEventListener('click', async (e) => { e.target.disabled = true; await loadSalud(true); e.target.disabled = false; });
 
   // ── Campañas: desplegable de la cabecera + destino del importador ──
   async function loadCampanas() {
@@ -1621,6 +1671,8 @@
   setInterval(refresh, 3000);
   setInterval(refreshStatus, 10000);
   setInterval(loadCampanas, 30000);
+  loadSalud(false);
+  setInterval(() => loadSalud(false), 5 * 60 * 1000);
 </script>
 </body>
 </html>

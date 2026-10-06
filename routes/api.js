@@ -657,6 +657,21 @@ router.delete('/campanas/:id', (req, res) => {
   }
 });
 
+// ─── Salud del número de WhatsApp ────────────────────────────────
+/**
+ * GET /api/whatsapp/salud[?forzar=1] → calidad del número según Meta, límite
+ * diario, entregas de los últimos días y veredicto (lo de check-whatsapp.js,
+ * visible en el CRM). Cacheado 10 min; ?forzar=1 vuelve a preguntar a Meta.
+ */
+router.get('/whatsapp/salud', async (req, res) => {
+  try {
+    res.json(await require('../services/whatsappSalud').estado({ forzar: req.query.forzar === '1' }));
+  } catch (err) {
+    console.error('❌ [API] Error /whatsapp/salud:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Hoja de Google (leads nuevos en directo) ─────────────────────
 /** GET /api/sheets/status → estado del lector automático de la hoja. */
 router.get('/sheets/status', (req, res) => {
