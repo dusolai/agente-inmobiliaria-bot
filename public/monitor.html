@@ -352,6 +352,23 @@
         <button class="btn" id="salud-refrescar" style="border:1px solid #ccc">↻ Comprobar ahora</button>
       </div>
       <div class="salud-datos" id="salud-datos"></div>
+      <div id="salud-accion" style="display:none;margin-top:.9rem;background:#fff7ed;border:1px solid #fdba74;border-radius:12px;padding:.8rem 1rem">
+        <b style="color:#9a3412">🛠 El número no está operativo en Meta. Qué hacer:</b>
+        <ol style="margin:.4rem 0 .6rem 1.2rem;font-size:.82rem;line-height:1.6;color:#7c2d12">
+          <li><b>Registrar el número</b> en la Cloud API: hace falta el <b>PIN de 6 cifras</b> de la verificación en dos pasos del número (WhatsApp Manager → Números de teléfono → Verificación en dos pasos). Si nunca se puso, el que escribas aquí queda como PIN.</li>
+          <li><b>Nombre visible</b>: si Meta lo ha rechazado, cámbialo en WhatsApp Manager → Números de teléfono → nombre visible, por uno que coincida con el negocio (p. ej. «Three Inmobiliaria») y espera la aprobación.</li>
+          <li><b>Pago</b>: en Meta Business → Facturación, comprueba que la tarjeta es válida (en agosto se bloqueó la cuenta por esto).</li>
+          <li>Si los mensajes de los leads no entran al CRM, <b>re-suscribe el webhook</b>.</li>
+        </ol>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+          <input type="text" id="salud-pin" placeholder="PIN 6 cifras" maxlength="6" inputmode="numeric" style="width:120px;padding:.4rem .5rem;border:1px solid var(--line);border-radius:8px;font-weight:800;text-align:center;letter-spacing:2px">
+          <button class="btn green" id="salud-registrar">📲 Registrar número</button>
+          <button class="btn" id="salud-suscribir" style="border:1px solid #ccc">🔗 Re-suscribir webhook</button>
+          <button class="btn" id="salud-diag" style="border:1px solid #ccc">🔍 Diagnóstico completo</button>
+          <span id="salud-accion-txt" class="csv-hint"></span>
+        </div>
+        <pre id="salud-diag-out" style="display:none;margin-top:.7rem;background:#fff;border:1px solid var(--line);border-radius:8px;padding:.6rem;font-size:.72rem;max-height:320px;overflow:auto;white-space:pre-wrap"></pre>
+      </div>
     </div>
 
     <div class="panel" id="csvFlowPanel">
@@ -1030,7 +1047,10 @@
       if (!res.ok) throw new Error(r.error || res.status);
       $('pr-estado').textContent = !r.enviado
         ? '✅ Lead creado. Escribe «hola» al número del agente desde ese móvil.'
-        : (r.envioOk ? '✅ Enviado: te tiene que llegar el mensaje en unos segundos.' : `⚠️ Lead creado pero el mensaje NO salió: ${r.error}. Prueba la opción «Solo crear» y escribe «hola».`);
+        : (r.envioOk ? '✅ Enviado: te tiene que llegar el mensaje en unos segundos.'
+          : (/133010|not registered/i.test(r.error || '')
+            ? '🛑 Meta rechaza el envío: el número NO está registrado en la Cloud API (133010). Mientras esté así tampoco entran los mensajes que escribas al agente. Arréglalo en Inicio → «Salud del número» (Registrar número con el PIN).'
+            : `⚠️ Lead creado pero el mensaje NO salió: ${r.error}. Prueba la opción «Solo crear» y escribe «hola».`));
       loadPruebas();
     } catch (err) { $('pr-estado').textContent = '❌ ' + err.message; }
     e.target.disabled = false;
@@ -1061,6 +1081,8 @@
         s.entregaMetaError ? `<span>Entregas Meta: ${escH(s.entregaMetaError)}</span>` : '',
       ].join('');
       $('salud-cuando').textContent = `según Meta · consultado ${s.cacheHaceMin ? `hace ${s.cacheHaceMin} min` : 'ahora'}`;
+      const roto = s.configurado && !s.error && ((s.estadoNumero && s.estadoNumero !== 'CONNECTED') || s.estadoNombre === 'DECLINED');
+      $('salud-accion').style.display = roto ? 'block' : 'none';
     } catch (e) {
       $('salud-titulo').textContent = 'No se pudo cargar la salud del número';
       $('salud-veredicto').textContent = e.message;
@@ -1071,6 +1093,39 @@
     e.target.disabled = true;
     try { await fetchJSON('/api/envios/reanudar', { method: 'POST' }); toast('▶️ Envíos reanudados'); loadSalud(true); refresh(); }
     catch (err) { toast('Error: ' + err.message); }
+    e.target.disabled = false;
+  });
+  $('salud-registrar').addEventListener('click', async (e) => {
+    const pin = $('salud-pin').value.trim();
+    if (!/^\d{6}$/.test(pin)) { $('salud-accion-txt').textContent = '⚠️ El PIN tiene 6 cifras'; return; }
+    if (!confirm('Se va a registrar el número en la Cloud API de Meta con ese PIN.\n\nSi la verificación en dos pasos ya estaba activada, el PIN tiene que coincidir. ¿Seguimos?')) return;
+    e.target.disabled = true; $('salud-accion-txt').textContent = 'Registrando…';
+    try {
+      const res = await fetch('/api/whatsapp/registrar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin }) });
+      const r = await res.json();
+      $('salud-accion-txt').textContent = r.ok ? '✅ Registrado. Comprobando estado…' : '❌ ' + (r.error || 'no se pudo registrar');
+      if (r.ok) setTimeout(() => loadSalud(true), 3000);
+    } catch (err) { $('salud-accion-txt').textContent = '❌ ' + err.message; }
+    e.target.disabled = false;
+  });
+  $('salud-suscribir').addEventListener('click', async (e) => {
+    e.target.disabled = true; $('salud-accion-txt').textContent = 'Suscribiendo…';
+    try {
+      const res = await fetch('/api/whatsapp/suscribir', { method: 'POST' });
+      const r = await res.json();
+      $('salud-accion-txt').textContent = r.ok ? '✅ Webhook suscrito' : '❌ ' + (r.error || 'no se pudo');
+    } catch (err) { $('salud-accion-txt').textContent = '❌ ' + err.message; }
+    e.target.disabled = false;
+  });
+  $('salud-diag').addEventListener('click', async (e) => {
+    e.target.disabled = true; $('salud-accion-txt').textContent = 'Consultando a Meta…';
+    try {
+      const d = await fetchJSON('/api/whatsapp/diagnostico');
+      const out = $('salud-diag-out');
+      out.style.display = 'block';
+      out.textContent = `RESUMEN: ${d.resumen}\n\nNÚMERO: ${JSON.stringify(d.numero || d.numeroError, null, 1)}\n\nSALUD (Meta): ${JSON.stringify(d.health || d.healthError, null, 1)}\n\nCUENTA: ${JSON.stringify(d.cuenta || d.cuentaError, null, 1)}\n\nAPPS SUSCRITAS AL WEBHOOK: ${JSON.stringify(d.appsSuscritas || d.appsError)}\nWEBHOOK ESPERADO: ${d.webhookEsperado}\nWEBHOOK DEL NÚMERO: ${JSON.stringify(d.webhookNumero)}\n\nNÚMEROS DE LA CUENTA: ${JSON.stringify(d.numerosDeLaCuenta || d.numerosError, null, 1)}`;
+      $('salud-accion-txt').textContent = '';
+    } catch (err) { $('salud-accion-txt').textContent = '❌ ' + err.message; }
     e.target.disabled = false;
   });
   $('salud-refrescar').addEventListener('click', async (e) => { e.target.disabled = true; await loadSalud(true); e.target.disabled = false; });

@@ -769,6 +769,29 @@ router.get('/whatsapp/salud', async (req, res) => {
   }
 });
 
+/** GET /api/whatsapp/diagnostico → todo lo que Meta dice del número, la cuenta y el webhook. */
+router.get('/whatsapp/diagnostico', async (req, res) => {
+  try { res.json(await require('../services/whatsappSalud').diagnostico()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/** POST /api/whatsapp/registrar  Body: { pin } → registra el número en la Cloud API (133010 / PENDING). */
+router.post('/whatsapp/registrar', async (req, res) => {
+  try {
+    const r = await require('../services/whatsappSalud').registrar(req.body && req.body.pin);
+    activityLog.appendActivity('sistema', 'whatsapp_registro', { ok: r.ok, error: r.error || null }, req.ip);
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
+/** POST /api/whatsapp/suscribir → vuelve a suscribir la app al webhook de la cuenta. */
+router.post('/whatsapp/suscribir', async (req, res) => {
+  try {
+    const r = await require('../services/whatsappSalud').suscribirWebhook();
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
 // ─── Hoja de Google (leads nuevos en directo) ─────────────────────
 /** GET /api/sheets/status → estado del lector automático de la hoja. */
 router.get('/sheets/status', (req, res) => {

@@ -174,6 +174,6 @@ module.exports = {
     // Reunión 22-05/Agente: el botón de agenda aparece tras 1 min de vídeo
     delayedButtonSeconds: parseInt(process.env.DELAYED_BUTTON_SECONDS) || 60,
     // Delay del bot para simular escritura humana (segundos)
-    typingDelaySeconds: parseInt(process.env.TYPING_DELAY_SECONDS) || 10,
+    typingDelaySeconds: Number.isFinite(parseInt(process.env.TYPING_DELAY_SECONDS, 10)) ? parseInt(process.env.TYPING_DELAY_SECONDS, 10) : 10,
   },
 };

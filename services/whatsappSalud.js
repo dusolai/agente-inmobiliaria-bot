@@ -146,4 +146,100 @@ async function estado({ forzar = false } = {}) {
   return { ...data, crm, cacheHaceMin: 0 };
 }
 
-module.exports = { estado };
+// ─── Diagnóstico completo del número (cuando algo no va) ─────────
+// health_status es lo más útil que da Meta: dice si el número PUEDE enviar
+// y, si no, por qué y cómo arreglarlo (texto de Meta). Las peticiones van
+// por separado para que un campo no permitido no tire las demás.
+function _get(path, params) {
+  const { apiUrl, accessToken } = config.whatsapp;
+  const API = apiUrl.replace(/\/$/, '');
+  return axios.get(`${API}/${path}`, { params: { ...(params || {}), access_token: accessToken }, timeout: 15000 })
+    .then((r) => ({ data: r.data }))
+    .catch((err) => {
+      const e = err.response && err.response.data && err.response.data.error;
+      return { error: e ? `Meta ${e.code}${e.error_subcode ? '/' + e.error_subcode : ''}: ${e.message}` : err.message };
+    });
+}
+function _post(path, body) {
+  const { apiUrl, accessToken } = config.whatsapp;
+  const API = apiUrl.replace(/\/$/, '');
+  return axios.post(`${API}/${path}`, body, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, timeout: 20000 })
+    .then((r) => ({ ok: true, data: r.data }))
+    .catch((err) => {
+      const e = err.response && err.response.data && err.response.data.error;
+      return { ok: false, error: e ? `Meta ${e.code}${e.error_subcode ? '/' + e.error_subcode : ''}: ${e.message}${e.error_user_msg ? ' — ' + e.error_user_msg : ''}` : err.message };
+    });
+}
+
+async function diagnostico() {
+  const { phoneNumberId, accessToken, wabaId, verifyToken } = config.whatsapp;
+  const out = { consultado: new Date().toISOString(), phoneNumberId: phoneNumberId || null, wabaId: wabaId || null, webhookEsperado: `${config.backendPublicUrl.replace(/\/$/, '')}/webhook/whatsapp`, verifyTokenConfigurado: Boolean(verifyToken) };
+  if (!phoneNumberId || !accessToken) { out.error = 'Faltan WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_ACCESS_TOKEN en Seenode'; return out; }
+  const [basico, extra, salud, webhookCfg] = await Promise.all([
+    _get(phoneNumberId, { fields: 'verified_name,display_phone_number,status,name_status,code_verification_status,quality_rating,messaging_limit_tier,platform_type' }),
+    _get(phoneNumberId, { fields: 'new_name_status,new_display_name,account_mode,is_pin_enabled,last_onboarded_time,is_official_business_account' }),
+    _get(phoneNumberId, { fields: 'health_status' }),
+    _get(phoneNumberId, { fields: 'webhook_configuration' }),
+  ]);
+  out.numero = Object.assign({}, basico.data || {}, extra.data || {});
+  if (basico.error) out.numeroError = basico.error;
+  out.health = salud.data ? salud.data.health_status : null;
+  if (salud.error) out.healthError = salud.error;
+  out.webhookNumero = webhookCfg.data ? webhookCfg.data.webhook_configuration : null;
+  if (wabaId) {
+    const [cuenta, apps, numeros] = await Promise.all([
+      _get(wabaId, { fields: 'name,account_review_status,business_verification_status,ownership_type,country' }),
+      _get(`${wabaId}/subscribed_apps`),
+      _get(`${wabaId}/phone_numbers`, { fields: 'display_phone_number,status,name_status,quality_rating,code_verification_status' }),
+    ]);
+    out.cuenta = cuenta.data || null; if (cuenta.error) out.cuentaError = cuenta.error;
+    out.appsSuscritas = apps.data ? (apps.data.data || []) : null; if (apps.error) out.appsError = apps.error;
+    out.numerosDeLaCuenta = numeros.data ? (numeros.data.data || []) : null; if (numeros.error) out.numerosError = numeros.error;
+  }
+  // Resumen en una frase
+  const n = out.numero || {};
+  const puede = out.health && out.health.can_send_message;
+  const problemas = [];
+  if (n.status && n.status !== 'CONNECTED') problemas.push(`número en estado ${n.status} (debe ser CONNECTED)`);
+  if (n.code_verification_status && n.code_verification_status !== 'VERIFIED') problemas.push(`verificación del número: ${n.code_verification_status}`);
+  if (n.name_status === 'DECLINED') problemas.push('nombre visible RECHAZADO por Meta');
+  if (out.appsSuscritas && out.appsSuscritas.length === 0) problemas.push('la app NO está suscrita al webhook de la cuenta (no entra ningún mensaje)');
+  if (out.cuenta && out.cuenta.account_review_status && out.cuenta.account_review_status !== 'APPROVED') problemas.push(`revisión de la cuenta: ${out.cuenta.account_review_status}`);
+  if (out.health && Array.isArray(out.health.entities)) {
+    for (const ent of out.health.entities) {
+      for (const er of ent.errors || []) problemas.push(`${ent.entity_type}: ${er.error_description}${er.possible_solution ? ' → ' + er.possible_solution : ''}`);
+    }
+  }
+  out.puedeEnviar = puede === 'AVAILABLE' ? true : (puede ? false : null);
+  out.problemas = problemas;
+  out.resumen = problemas.length ? problemas.join(' · ') : (out.puedeEnviar === false ? `Meta dice que el número no puede enviar (${puede})` : 'Sin problemas detectados');
+  _cache = null; // la próxima lectura de salud, fresca
+  return out;
+}
+
+/**
+ * Registra el número en la Cloud API (arregla el 133010 "Account not
+ * registered" y el estado PENDING). Necesita el PIN de 6 cifras de la
+ * verificación en dos pasos del número (si no estaba activada, este PIN la
+ * activa). Es la llamada oficial POST /{phone_number_id}/register.
+ */
+async function registrar(pin) {
+  const { phoneNumberId } = config.whatsapp;
+  const p = String(pin || '').trim();
+  if (!/^\d{6}$/.test(p)) return { ok: false, error: 'El PIN debe tener 6 cifras' };
+  const r = await _post(`${phoneNumberId}/register`, { messaging_product: 'whatsapp', pin: p });
+  _cache = null;
+  console.log(r.ok ? '✅ [WhatsApp] Número registrado en la Cloud API' : `❌ [WhatsApp] Registro rechazado: ${r.error}`);
+  return r;
+}
+
+/** Vuelve a suscribir la app al webhook de la cuenta (idempotente). */
+async function suscribirWebhook() {
+  const { wabaId } = config.whatsapp;
+  if (!wabaId) return { ok: false, error: 'Falta WHATSAPP_WABA_ID en Seenode' };
+  const r = await _post(`${wabaId}/subscribed_apps`, {});
+  console.log(r.ok ? '✅ [WhatsApp] App suscrita al webhook de la cuenta' : `❌ [WhatsApp] No se pudo suscribir: ${r.error}`);
+  return r;
+}
+
+module.exports = { estado, diagnostico, registrar, suscribirWebhook };
