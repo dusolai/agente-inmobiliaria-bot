@@ -319,7 +319,7 @@
   <nav class="tabs">
     <button class="active" data-tab="inicio"><span class="ic">📊</span> Inicio</button>
     <button data-tab="whatsapp"><span class="ic">📱</span> WhatsApp</button>
-    <button data-tab="simulador"><span class="ic">🧪</span> Simulador</button>
+    <button data-tab="simulador"><span class="ic">🧪</span> Probar recorrido</button>
     <button data-tab="importar"><span class="ic">📥</span> Importar</button>
     <button data-tab="enlaces"><span class="ic">🔗</span> Enlaces</button>
   </nav>
@@ -462,11 +462,40 @@
   <!-- ─────────── TAB: SIMULADOR ─────────── -->
   <div id="tab-simulador" class="tab">
     <div class="panel">
-      <h2>Simulador de registro <small>crea un lead de prueba sin tocar el Excel</small></h2>
-      <p class="info">Lanza un alta manual de un lead para probar el flujo sin enviar por la campaña real.</p>
+      <h2>🧪 Probar el recorrido completo <small>con tu propio móvil, como si fueras un lead</small></h2>
+      <p class="info">Crea un lead de prueba en la campaña «🧪 Pruebas» (en pausa, no cuenta en las campañas reales). Si repites con el mismo teléfono, la prueba anterior se borra y empiezas de cero.</p>
+      <div class="csv-controls" style="margin-top:.8rem">
+        <label>Nombre <input type="text" id="pr-nombre" placeholder="Diego" style="width:140px;font-weight:600;text-align:left"></label>
+        <label>Teléfono <input type="tel" id="pr-tel" placeholder="34600000000" style="width:150px;font-weight:600;text-align:left"></label>
+        <label>Mensaje
+          <select id="pr-seg" style="padding:.4rem .5rem;border:1px solid var(--line);border-radius:8px;font-weight:700">
+            <option value="viejos">Viejos (dic-jun)</option>
+            <option value="verano">Verano (jul-ago)</option>
+            <option value="septiembre">Septiembre</option>
+            <option value="directo" selected>Nuevos en directo</option>
+          </select>
+        </label>
+      </div>
+      <div class="csv-controls">
+        <label style="font-weight:600"><input type="radio" name="pr-modo" value="plantilla" checked style="width:auto"> Enviarme ya la plantilla (necesita la plantilla aprobada en Meta)</label>
+        <label style="font-weight:600"><input type="radio" name="pr-modo" value="hola" style="width:auto"> Solo crear: yo escribo «hola» al número del agente</label>
+      </div>
+      <button class="btn green" id="pr-empezar">▶ Empezar la prueba</button>
+      <span id="pr-estado" class="csv-hint" style="margin-left:.6rem"></span>
+      <div class="info" style="margin-top:1rem;line-height:1.7">
+        <b>Qué comprobar, paso a paso:</b><br>
+        1. Te llega el primer mensaje con los botones (o la bienvenida tras escribir «hola»).<br>
+        2. Pulsa «Soy agente inmobiliario» o «Busco ingresos extra» → te llega el enlace a SU landing (verde o morada).<br>
+        3. En la landing: el vídeo corto, al terminarlo se desbloquea la presentación nueva (webinar).<br>
+        4. Al terminar la presentación aparece el botón de reservar el 1-a-1 → te llega por WhatsApp el enlace de Calendly.<br>
+        5. Reserva un hueco en Calendly → te llega la confirmación.<br>
+        6. Repite otra prueba pulsando «No me interesa» → te tiene que dar de baja sin escribirte más.<br>
+        En la pestaña Inicio, eligiendo la campaña «🧪 Pruebas», ves cada paso en el historial del lead.
+      </div>
     </div>
-    <div class="embed">
-      <iframe id="iframe-sim" src="about:blank" loading="lazy"></iframe>
+    <div class="panel">
+      <h2>Pruebas en curso</h2>
+      <div id="pr-lista"><div class="empty">Aún no hay pruebas.</div></div>
     </div>
   </div>
 
@@ -758,6 +787,7 @@
     const m = ev.meta || {};
     switch (ev.type) {
       case 'lead_created':       return `creado · fuente ${m.fuente || '?'}${m.segmento ? ` · segmento ${m.segmento}` : ''}${m.campana ? ` · campaña ${m.campana}` : ''}`;
+      case 'prueba_iniciada':    return `🧪 prueba del recorrido (segmento ${m.segmento}${m.enviar ? ', plantilla enviada' : ', esperando «hola»'})`;
       case 'auto_respuesta':     return `🤖 respuesta automática de su WhatsApp (no se contesta): "${m.texto || ''}"`;
       case 'perfil_por_formulario': return `perfil deducido del formulario de Meta (${m.perfil}) al responder "${m.texto || ''}"`;
       case 'auto_alta':          return `🆕 escribió al WhatsApp sin ser lead → alta automática${m.nombrePerfil ? ` (perfil: ${m.nombrePerfil})` : ''}`;
@@ -959,6 +989,42 @@
       } catch (e) { toast('Error: ' + e.message); }
     }));
   }
+
+  // ── Probar el recorrido ──
+  async function loadPruebas() {
+    try {
+      const r = await fetchJSON('/api/prueba/leads');
+      const L = r.leads || [];
+      $('pr-lista').innerHTML = L.length === 0 ? '<div class="empty">Aún no hay pruebas.</div>'
+        : L.map(l => `<div class="at-row" style="cursor:default">
+            <div><span class="at-nombre">${escH(l.nombre)}</span> ${segBadge(l.segmento)} <span class="badge badge-${escH(l.estado)}">${escH(lblEstado(l.estado))}</span>
+              <div class="at-txt">${escH(l.telefono)}${l.perfil && l.perfil !== 'sin_definir' ? ' · ' + escH(l.perfil) : ''}</div></div>
+            <div style="display:flex;gap:.3rem"><button class="btn" data-pr-ver="${escH(l.id)}" style="border:1px solid #ccc;font-size:.72rem">Ver historial</button>
+              <button class="btn" data-pr-borrar="${escH(l.id)}" style="border:1px solid #ccc;font-size:.72rem">🗑</button></div>
+          </div>`).join('');
+      $('pr-lista').querySelectorAll('[data-pr-ver]').forEach(b => b.addEventListener('click', () => {
+        campanaSel = 'pruebas'; selectedLeadId = b.dataset.prVer; loadCampanas(); switchTab('inicio');
+      }));
+      $('pr-lista').querySelectorAll('[data-pr-borrar]').forEach(b => b.addEventListener('click', async () => {
+        await fetchJSON('/api/prueba/leads/' + encodeURIComponent(b.dataset.prBorrar), { method: 'DELETE' }); loadPruebas();
+      }));
+    } catch (e) { $('pr-lista').innerHTML = '<div class="empty">Error: ' + escH(e.message) + '</div>'; }
+  }
+  $('pr-empezar').addEventListener('click', async (e) => {
+    const modo = (document.querySelector('input[name="pr-modo"]:checked') || {}).value;
+    const body = { nombre: $('pr-nombre').value.trim(), telefono: $('pr-tel').value.trim(), segmento: $('pr-seg').value, enviar: modo === 'plantilla' };
+    e.target.disabled = true; $('pr-estado').textContent = 'Creando…';
+    try {
+      const res = await fetch('/api/prueba/recorrido', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.error || res.status);
+      $('pr-estado').textContent = !r.enviado
+        ? '✅ Lead creado. Escribe «hola» al número del agente desde ese móvil.'
+        : (r.envioOk ? '✅ Enviado: te tiene que llegar el mensaje en unos segundos.' : `⚠️ Lead creado pero el mensaje NO salió: ${r.error}. Prueba la opción «Solo crear» y escribe «hola».`);
+      loadPruebas();
+    } catch (err) { $('pr-estado').textContent = '❌ ' + err.message; }
+    e.target.disabled = false;
+  });
 
   // ── Salud del número de WhatsApp (calidad Meta + entregas) ──
   async function loadSalud(forzar) {
@@ -1598,10 +1664,7 @@
       const fr = $('iframe-wa');
       if (fr.src === 'about:blank' || !fr.src.includes(location.origin)) fr.src = '/qr';
     }
-    if (name === 'simulador') {
-      const fr = $('iframe-sim');
-      if (fr.src === 'about:blank' || !fr.src.includes(location.origin)) fr.src = '/test.html';
-    }
+    if (name === 'simulador') loadPruebas();
     if (name === 'inicio') refresh();
   }
   document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));

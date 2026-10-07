@@ -659,6 +659,94 @@ router.delete('/campanas/:id', (req, res) => {
   }
 });
 
+// ─── Probar el recorrido (Diego / Arkaitz con su propio móvil) ────
+// Crea (o reinicia) un lead de PRUEBA en la campaña "🧪 Pruebas", que está
+// en pausa y con cupo 0: el activador nunca la toca y no cuenta en las
+// campañas reales. Dos modos:
+//   enviar: true  → le llega YA la plantilla de primer contacto de su segmento
+//                   (necesita la plantilla aprobada en Meta)
+//   enviar: false → queda esperando; escribes "hola" al número del agente y
+//                   te llega la bienvenida como texto (sirve sin plantillas)
+const CAMPANA_PRUEBAS = 'pruebas';
+function _campanaPruebas() {
+  const campanas = require('../services/campanas');
+  let c = campanas.get(CAMPANA_PRUEBAS);
+  if (!c) {
+    c = campanas.crearCampana({ id: CAMPANA_PRUEBAS, nombre: '🧪 Pruebas', leadsPorDia: 0, notas: 'Leads de prueba del recorrido (no cuentan).' });
+    c = campanas.setEstado(c.id, 'pausada');
+  }
+  return c;
+}
+
+router.get('/prueba/leads', (req, res) => {
+  const c = _campanaPruebas();
+  const leads = leadManager.getAllLeads({ campana: c.id }).map((l) => ({
+    id: l.id, nombre: l.nombre, telefono: l.telefono, segmento: l.segmento, estado: l.estado, perfil: l.perfil, createdAt: l.createdAt,
+  }));
+  res.json({ campana: c.id, leads });
+});
+
+router.post('/prueba/recorrido', async (req, res) => {
+  try {
+    const messaging = require('../services/messaging');
+    const messages = require('../templates/messages');
+    const metaLeads = require('../services/metaLeads');
+    const b = req.body || {};
+    const nombre = String(b.nombre || '').trim();
+    const telefono = metaLeads.limpiarTelefono(b.telefono);
+    const segmento = metaLeads.SEGMENTOS.includes(b.segmento) ? b.segmento : 'directo';
+    if (!nombre || !metaLeads.esTelefonoPlausible(telefono)) {
+      return res.status(400).json({ error: 'Pon nombre y un teléfono válido (con o sin 34)' });
+    }
+    const c = _campanaPruebas();
+    // Reinicio: borra la prueba anterior de ese teléfono (y su historial)
+    for (const l of leadManager.getAllLeads({ campana: c.id })) {
+      if (leadManager.normalizarTelefono(l.telefono) === telefono) {
+        leadManager.deleteLead(l.id);
+        activityLog.deleteActivityByLead(l.id);
+      }
+    }
+    const lead = leadManager.createLead({
+      nombre, telefono, fuente: 'prueba', campana: c.id, segmento,
+      fechaLead: new Date().toISOString(),
+      respuestas: { 'prueba': 'lead de prueba del recorrido' },
+    });
+    leadManager.transitionState(lead.id, leadManager.LEAD_STATES.ESPERANDO_CUALIFICACION);
+    leadManager.updateLead(lead.id, {
+      recordatorios: { ...lead.recordatorios, fase1: { enviados: 0, ultimoEnvio: new Date().toISOString() } },
+    });
+    activityLog.appendActivity(lead.id, 'prueba_iniciada', { segmento, enviar: b.enviar !== false });
+
+    let envio = null;
+    if (b.enviar !== false) {
+      envio = await messaging.sendPrimerContacto(
+        leadManager.getLeadById(lead.id),
+        messages.mensajeReactivacion({ nombre, segmento }),
+        { delaySeconds: 0 }
+      );
+    }
+    const ok = !envio || (envio.success !== false && envio.mode !== 'development');
+    res.json({
+      success: true,
+      lead: leadManager.getLeadById(lead.id),
+      enviado: Boolean(envio),
+      envioOk: ok,
+      error: envio && !ok ? (envio.error || envio.mode) : undefined,
+    });
+  } catch (err) {
+    console.error('❌ [API] Error /prueba/recorrido:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/prueba/leads/:id', (req, res) => {
+  const l = leadManager.getLeadById(req.params.id);
+  if (!l || leadManager.campanaDe(l) !== CAMPANA_PRUEBAS) return res.status(404).json({ error: 'No es un lead de prueba' });
+  leadManager.deleteLead(l.id);
+  activityLog.deleteActivityByLead(l.id);
+  res.json({ success: true });
+});
+
 // ─── Freno de emergencia de envíos ───────────────────────────────
 /** POST /api/envios/reanudar → quita el freno puesto por un error de cuenta de Meta. */
 router.post('/envios/reanudar', (req, res) => {

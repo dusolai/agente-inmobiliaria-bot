@@ -99,7 +99,8 @@ function slug(nombre) {
 function listar() { return _estado().lista.map((c) => ({ ...c })); }
 function get(id) { const c = _estado().lista.find((x) => x.id === id); return c ? { ...c } : null; }
 
-/** Ids de las campañas NO archivadas (activas + pausadas). */
+/** Ids de las campañas NO archivadas (activas + pausadas). La de pruebas
+ *  también cuenta (recibe recordatorios y respuestas como una real). */
 function vivas() { return _estado().lista.filter((c) => c.estado !== 'archivada').map((c) => c.id); }
 /** Ids de las campañas activas (las que contactan a gente nueva). */
 function activas() { return _estado().lista.filter((c) => c.estado === 'activa').map((c) => c.id); }
