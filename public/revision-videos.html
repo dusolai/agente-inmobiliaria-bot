@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revisión de vídeos · Three Inmobiliaria</title>
+<style>
+  :root{--purple:#311B92;--green:#2e9e5b;--red:#e0464b;--muted:#5d6d7e;--line:rgba(49,27,146,.12);--bg:#faf8fc}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:#2c3e50;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 16px 60px}
+  h1{color:var(--purple);font-size:1.35rem;font-weight:900}
+  .sub{color:var(--muted);font-size:.85rem;margin:.2rem 0 1.4rem}
+  h2{font-size:.9rem;text-transform:uppercase;letter-spacing:1px;color:var(--purple);margin:1.6rem 0 .8rem;display:flex;align-items:center;gap:.5rem}
+  h2 a{font-size:.75rem;text-transform:none;letter-spacing:0;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 6px 20px rgba(49,27,146,.05)}
+  .card.nuevo{border:2px solid var(--green)}
+  video{width:100%;display:block;background:#000;aspect-ratio:16/9}
+  .meta{padding:.7rem .9rem}
+  .rol{font-weight:800;font-size:.92rem}
+  .file{font-size:.75rem;color:var(--muted);font-family:Menlo,Consolas,monospace;margin-top:.15rem;word-break:break-all}
+  .tag{display:inline-block;font-size:.62rem;font-weight:800;padding:.12rem .45rem;border-radius:50px;text-transform:uppercase;margin-left:.3rem;vertical-align:middle}
+  .tag.n{background:#d7f0e2;color:#1f6b3e} .tag.e{background:#fee2e2;color:#991b1b}
+  .err{display:none;color:var(--red);font-size:.78rem;font-weight:700;margin-top:.3rem}
+  .card.roto .err{display:block}
+  .card.roto video{opacity:.25}
+  .top{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start}
+  .top a{font-size:.82rem;color:var(--purple);font-weight:700;text-decoration:none;border:1px solid var(--line);background:#fff;padding:.45rem .8rem;border-radius:9px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>🎬 Revisión de vídeos de las landings</h1>
+      <p class="sub">Todos los vídeos SIN bloqueo, para revisarlos. Es solo para el equipo: el lead nunca ve esta página. La duración aparece al cargar cada vídeo.</p>
+    </div>
+    <a href="/monitor.html">← Volver al CRM</a>
+  </div>
+  <div id="contenido"></div>
+</div>
+<script>
+  // Vídeos que usa cada landing (mismos ficheros que ve el lead).
+  const LANDINGS = [
+    {
+      nombre: '🟢 Landing INMOBILIARIA (profesionales)',
+      base: 'https://threeinmobiliaria.pages.dev/',
+      videos: [
+        { f: '1.mp4', rol: '1º · Vídeo corto (VSL)' },
+        { f: 'webinar.mp4', rol: '2º · Presentación completa (webinar)', nuevo: 'Presentación Inmoverse 26 (oct-26)' },
+        { f: 'portugal.mp4', rol: 'Extra · Portugal' },
+        { f: '2.mp4', rol: 'Clip decorativo' },
+        { f: '3.5.mp4', rol: 'Clip decorativo' },
+        { f: '3.mp4', rol: 'Clip decorativo' },
+      ],
+    },
+    {
+      nombre: '🟣 Landing EMPRENDEDORES',
+      base: 'https://three-inmobiliaria-emprende.pages.dev/',
+      videos: [
+        { f: '1.mp4', rol: '1º · Vídeo corto (VSL)' },
+        { f: 'webinar.mp4', rol: '2º · Presentación completa (webinar)', nuevo: 'videoplayback (oct-26)' },
+        { f: '1-pt.mp4', rol: '1º · Vídeo corto en PORTUGUÉS' },
+        { f: 'portugal.mp4', rol: '2º · Webinar en PORTUGUÉS (sin actualizar)' },
+        { f: 'testimonio1.mp4', rol: 'Testimonio 1' },
+        { f: 'testimonio2.mp4', rol: 'Testimonio 2' },
+        { f: 'testimonio3.mp4', rol: 'Testimonio 3' },
+      ],
+    },
+  ];
+
+  const esc = (s) => String(s).replace(/[<&"]/g, (c) => ({ '<': '&lt;', '&': '&amp;', '"': '&quot;' }[c]));
+  const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+  document.getElementById('contenido').innerHTML = LANDINGS.map((l) => `
+    <h2>${esc(l.nombre)} <a href="${esc(l.base)}" target="_blank">abrir landing ↗</a></h2>
+    <div class="grid">
+      ${l.videos.map((v) => `
+        <div class="card${v.nuevo ? ' nuevo' : ''}">
+          <video controls preload="metadata" playsinline src="${esc(l.base + v.f)}"></video>
+          <div class="meta">
+            <div class="rol">${esc(v.rol)}${v.nuevo ? `<span class="tag n">nuevo</span>` : ''}</div>
+            <div class="file">${esc(v.f)} · <span class="dur">cargando…</span>${v.nuevo ? ` · ${esc(v.nuevo)}` : ''}</div>
+            <div class="err">⚠️ Este vídeo NO existe en la landing (el lead ve un hueco vacío).</div>
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
+
+  document.querySelectorAll('.card').forEach((card) => {
+    const v = card.querySelector('video');
+    const dur = card.querySelector('.dur');
+    v.addEventListener('loadedmetadata', () => { dur.textContent = mmss(v.duration); });
+    v.addEventListener('error', () => { card.classList.add('roto'); dur.textContent = 'no carga'; });
+  });
+</script>
+</body>
+</html>

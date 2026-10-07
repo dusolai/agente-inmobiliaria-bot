@@ -59,7 +59,7 @@ function requireAdmin(req, res, next) {
 
 app.use((req, res, next) => {
   const p = req.path;
-  const esPanel = p === '/monitor.html' || p === '/test.html' || p === '/qr' || p === '/crm' || p.startsWith('/admin');
+  const esPanel = p === '/monitor.html' || p === '/test.html' || p === '/revision-videos.html' || p === '/qr' || p === '/crm' || p.startsWith('/admin');
   const esApiPrivada = p.startsWith('/api/') && p !== '/api/config';
   if (esPanel || esApiPrivada) return requireAdmin(req, res, next);
   next();
