@@ -1043,7 +1043,8 @@
       $('salud-datos').innerHTML = [
         s.limiteTier ? `<span>Límite Meta: <b>${s.limiteDia ? s.limiteDia + '/día' : 'sin límite'}</b> (${escH(s.limiteTier)})</span>` : '',
         `<span>Cupo de las campañas activas: <b>${s.cupoTotal}/día</b></span>`,
-        s.estadoNumero ? `<span>Número: <b>${escH(s.estadoNumero)}</b></span>` : '',
+        s.estadoNumero ? `<span>Número: <b style="color:${s.estadoNumero === 'CONNECTED' ? 'var(--green)' : 'var(--red)'}">${escH(s.estadoNumero)}</b></span>` : '',
+        s.estadoNombre ? `<span>Nombre visible: <b style="color:${s.estadoNombre === 'APPROVED' || s.estadoNombre === 'AVAILABLE_WITHOUT_REVIEW' ? 'var(--green)' : 'var(--red)'}">${escH(s.estadoNombre)}</b></span>` : '',
         `<span>Últimos ${c.dias || 3} días (CRM): <b>${c.enviados || 0}</b> enviados · <b>${(c.entregados || 0) + (c.leidos || 0)}</b> entregados · <b>${c.leidos || 0}</b> leídos · <b style="color:${c.fallidos ? 'var(--red)' : 'inherit'}">${c.fallidos || 0}</b> no llegaron · <b>${c.rechazados || 0}</b> rechazados</span>`,
         `<span>Bajas: <b>${c.bajas || 0}</b> · sin WhatsApp: <b>${c.sinWhatsapp || 0}</b></span>`,
         ent,

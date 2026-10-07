@@ -105,6 +105,17 @@ function _veredicto(meta, crm, cupoTotal) {
   const cal = meta.calidadMeta;
   if (!meta.configurado) return { nivel: 'gris', texto: 'Sin credenciales de Meta: no se puede consultar la calidad.' };
   if (meta.error) return { nivel: 'gris', texto: `No se pudo consultar Meta: ${meta.error}` };
+  // Estado del número y del nombre visible: antes que la calidad. Con el
+  // número sin conectar o el nombre rechazado, Meta no entrega (o limita).
+  if (meta.estadoNumero && meta.estadoNumero !== 'CONNECTED') {
+    const extra = meta.estadoNombre === 'DECLINED'
+      ? ' Meta ha RECHAZADO el nombre visible: cámbialo en WhatsApp Manager por uno que coincida con el negocio (p. ej. "Three Inmobiliaria") y espera la aprobación.'
+      : '';
+    return { nivel: 'rojo', texto: `El número NO está activo en Meta (estado ${meta.estadoNumero}). No reanudes campañas hasta que salga CONNECTED.${extra}` };
+  }
+  if (meta.estadoNombre === 'DECLINED') {
+    return { nivel: 'amarillo', texto: 'Meta ha RECHAZADO el nombre visible del número. Cámbialo en WhatsApp Manager por uno que coincida con el negocio y espera la aprobación antes de lanzar.' };
+  }
   if (cal === 'RED') return { nivel: 'rojo', texto: 'Número PENALIZADO. Pausa todas las campañas, deja descansar el número 24-48 h y vuelve muy despacio (5/día).' };
   if (cal === 'YELLOW') return { nivel: 'amarillo', texto: `Meta vigila el número. Baja el ritmo (10/día en total) y mira las bajas. Ahora mismo el cupo total es ${cupoTotal}/día.` };
   const avisos = [];
