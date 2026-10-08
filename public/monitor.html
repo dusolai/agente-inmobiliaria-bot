@@ -1166,7 +1166,8 @@
       const d = await fetchJSON('/api/whatsapp/diagnostico');
       const out = $('salud-diag-out');
       out.style.display = 'block';
-      out.textContent = `RESUMEN: ${d.resumen}\n\nNÚMERO: ${JSON.stringify(d.numero || d.numeroError, null, 1)}\n\nSALUD (Meta): ${JSON.stringify(d.health || d.healthError, null, 1)}\n\nCUENTA: ${JSON.stringify(d.cuenta || d.cuentaError, null, 1)}\n\nAPPS SUSCRITAS AL WEBHOOK: ${JSON.stringify(d.appsSuscritas || d.appsError)}\nWEBHOOK ESPERADO: ${d.webhookEsperado}\nWEBHOOK DEL NÚMERO: ${JSON.stringify(d.webhookNumero)}\n\nNÚMEROS DE LA CUENTA: ${JSON.stringify(d.numerosDeLaCuenta || d.numerosError, null, 1)}`;
+      const pr = d.propiedad || {};
+      out.textContent = `RESUMEN: ${d.resumen}\n\n— DE QUIÉN ES —\nCuenta de WhatsApp: ${pr.cuentaWhatsApp || '?'}\nEmpresa propietaria (Meta Business): ${pr.empresaPropietaria || '?'}\nGestionada en nombre de: ${pr.gestionadaEnNombreDe || '—'}\nTipo: ${pr.tipo || '?'}\nMétodo de pago: ${pr.metodoDePago || '?'}  ·  Moneda: ${pr.moneda || '?'}\nNúmeros en esta cuenta: ${(pr.otrosNumerosEnLaCuenta || []).join(', ') || '?'}\n\nNÚMERO: ${JSON.stringify(d.numero || d.numeroError, null, 1)}\n\nSALUD (Meta): ${JSON.stringify(d.health || d.healthError, null, 1)}\n\nCUENTA: ${JSON.stringify(d.cuenta || d.cuentaError, null, 1)}\n\nAPPS SUSCRITAS AL WEBHOOK: ${JSON.stringify(d.appsSuscritas || d.appsError)}\nWEBHOOK ESPERADO: ${d.webhookEsperado}\nWEBHOOK DEL NÚMERO: ${JSON.stringify(d.webhookNumero)}\n\nNÚMEROS DE LA CUENTA: ${JSON.stringify(d.numerosDeLaCuenta || d.numerosError, null, 1)}`;
       $('salud-accion-txt').textContent = '';
     } catch (err) { $('salud-accion-txt').textContent = '❌ ' + err.message; }
     e.target.disabled = false;

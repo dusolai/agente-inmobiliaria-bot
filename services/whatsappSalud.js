@@ -188,7 +188,7 @@ async function diagnostico() {
   out.webhookNumero = webhookCfg.data ? webhookCfg.data.webhook_configuration : null;
   if (wabaId) {
     const [cuenta, apps, numeros] = await Promise.all([
-      _get(wabaId, { fields: 'name,account_review_status,business_verification_status,ownership_type,country' }),
+      _get(wabaId, { fields: 'name,account_review_status,business_verification_status,ownership_type,country,currency,timezone_id,owner_business_info,on_behalf_of_business_info,primary_funding_id' }),
       _get(`${wabaId}/subscribed_apps`),
       _get(`${wabaId}/phone_numbers`, { fields: 'display_phone_number,status,name_status,quality_rating,code_verification_status' }),
     ]);
@@ -196,6 +196,18 @@ async function diagnostico() {
     out.appsSuscritas = apps.data ? (apps.data.data || []) : null; if (apps.error) out.appsError = apps.error;
     out.numerosDeLaCuenta = numeros.data ? (numeros.data.data || []) : null; if (numeros.error) out.numerosError = numeros.error;
   }
+  // ¿De quién es y quién paga? (para no mezclar clientes)
+  const cu = out.cuenta || {};
+  out.propiedad = {
+    cuentaWhatsApp: cu.name ? `${cu.name} (id ${wabaId})` : (wabaId || null),
+    empresaPropietaria: cu.owner_business_info ? `${cu.owner_business_info.name} (id ${cu.owner_business_info.id})` : null,
+    gestionadaEnNombreDe: cu.on_behalf_of_business_info ? `${cu.on_behalf_of_business_info.name} (id ${cu.on_behalf_of_business_info.id})` : null,
+    tipo: cu.ownership_type || null,
+    metodoDePago: cu.primary_funding_id ? `configurado (id ${cu.primary_funding_id})` : 'NINGUNO: la cuenta no tiene método de pago',
+    moneda: cu.currency || null,
+    otrosNumerosEnLaCuenta: (out.numerosDeLaCuenta || []).map((x) => `${x.display_phone_number} (${x.status})`),
+  };
+
   // Resumen en una frase
   const n = out.numero || {};
   const puede = out.health && out.health.can_send_message;
@@ -205,6 +217,7 @@ async function diagnostico() {
   if (n.name_status === 'DECLINED') problemas.push('nombre visible RECHAZADO por Meta');
   if (out.appsSuscritas && out.appsSuscritas.length === 0) problemas.push('la app NO está suscrita al webhook de la cuenta (no entra ningún mensaje)');
   if (out.cuenta && out.cuenta.account_review_status && out.cuenta.account_review_status !== 'APPROVED') problemas.push(`revisión de la cuenta: ${out.cuenta.account_review_status}`);
+  if (out.cuenta && !out.cuenta.primary_funding_id) problemas.push('la cuenta de WhatsApp NO tiene método de pago (Meta no envía plantillas de marketing sin él)');
   if (out.health && Array.isArray(out.health.entities)) {
     for (const ent of out.health.entities) {
       for (const er of ent.errors || []) problemas.push(`${ent.entity_type}: ${er.error_description}${er.possible_solution ? ' → ' + er.possible_solution : ''}`);
