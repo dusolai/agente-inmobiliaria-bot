@@ -371,6 +371,12 @@
       </div>
     </div>
 
+    <div class="panel" id="plantillasPanel">
+      <h2>📝 Plantillas de Meta <small>se crean aquí mismo en la cuenta que envía · Meta las revisa (minutos a 24 h)</small></h2>
+      <div id="pl-lista"><div class="empty">Cargando plantillas de Meta…</div></div>
+      <details style="margin-top:.8rem"><summary class="csv-hint" style="cursor:pointer">Ver todas las plantillas que tiene la cuenta</summary><div id="pl-todas" class="csv-hint" style="margin-top:.5rem"></div></details>
+    </div>
+
     <div class="panel" id="csvFlowPanel">
       <div id="bloqueoBanner" style="display:none;background:#fee2e2;border:2px solid var(--red);border-radius:12px;padding:.8rem 1rem;margin-bottom:1rem;color:#7f1d1d">
         <b>🛑 ENVÍOS PARADOS</b> — <span id="bloqueoTxt"></span>
@@ -1015,6 +1021,43 @@
         toast('Campaña borrada'); await loadCampanas(); refresh();
       } catch (e) { toast('Error: ' + e.message); }
     }));
+  }
+
+  // ── Plantillas de Meta ──
+  async function loadPlantillas() {
+    try {
+      const r = await fetchJSON('/api/whatsapp/plantillas');
+      if (!r.ok) { $('pl-lista').innerHTML = `<div class="empty">⚠️ ${escH(r.error || 'No se pudo leer Meta')}</div>`; return; }
+      const COL = { APPROVED: 'var(--green)', PENDING: '#b9700c', REJECTED: 'var(--red)', PAUSED: 'var(--red)', DISABLED: 'var(--red)' };
+      const TXT = { APPROVED: '✅ Aprobada', PENDING: '⏳ En revisión', REJECTED: '❌ Rechazada', PAUSED: '⏸ Pausada por Meta', DISABLED: '⛔ Desactivada' };
+      $('pl-lista').innerHTML = r.requeridas.map((p) => `<div class="seg-row" style="grid-template-columns:minmax(190px,1.2fr) 1.3fr 1.6fr auto">
+          <span><span class="camp-nombre">${escH(p.para)}</span><br><span class="csv-hint" style="font-family:Menlo,Consolas,monospace">${escH(p.nombre)}</span></span>
+          <span>${p.enMeta
+            ? `<b style="color:${COL[p.enMeta.status] || 'inherit'}">${TXT[p.enMeta.status] || escH(p.enMeta.status)}</b>${p.enMeta.rejected_reason ? `<br><span class="seg-ko">${escH(p.enMeta.rejected_reason)}</span>` : ''}`
+            : '<span class="seg-ko">No existe en Meta</span>'}</span>
+          <span class="csv-hint">Seenode <b>${escH(p.variable)}</b> = ${p.enSeenode ? `<b style="color:${p.seenodeOk ? 'var(--green)' : 'var(--red)'}">${escH(p.enSeenode)}</b>` : '<span class="seg-ko">vacía</span>'}${!p.seenodeOk ? ` → pon <b>${escH(p.nombre)}</b>` : ''}</span>
+          <span class="camp-acc">
+            <button class="btn" data-pl-ver="${escH(p.clave)}">👁 Texto</button>
+            ${!p.enMeta || p.enMeta.status === 'REJECTED' ? `<button class="btn green" data-pl-crear="${escH(p.clave)}">➕ Crear en Meta</button>` : ''}
+          </span>
+        </div>
+        <div id="pl-txt-${escH(p.clave)}" style="display:none;white-space:pre-wrap;background:#faf8fc;border:1px solid var(--line);border-radius:10px;padding:.6rem .8rem;font-size:.8rem;margin:-.2rem 0 .4rem">${escH(p.cuerpo)}\n\n[ ${p.botones.map(escH).join(' ]  [ ')} ]</div>`).join('');
+      $('pl-todas').innerHTML = (r.todas || []).length
+        ? r.todas.map((t) => `<div>• <b>${escH(t.name)}</b> (${escH(t.language)}, ${escH(t.category)}) — <span style="color:${COL[t.status] || 'inherit'}">${escH(TXT[t.status] || t.status)}</span>${t.rejected_reason ? ' · ' + escH(t.rejected_reason) : ''}</div>`).join('')
+        : 'La cuenta no tiene plantillas.';
+      $('pl-lista').querySelectorAll('[data-pl-ver]').forEach((b) => b.addEventListener('click', () => {
+        const el = $('pl-txt-' + b.dataset.plVer); el.style.display = el.style.display === 'none' ? 'block' : 'none';
+      }));
+      $('pl-lista').querySelectorAll('[data-pl-crear]').forEach((b) => b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = 'Creando…';
+        try {
+          const res = await fetch('/api/whatsapp/plantillas/crear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clave: b.dataset.plCrear }) });
+          const x = await res.json();
+          toast(x.ok ? `✅ Enviada a Meta: ${x.nombre} (${x.status})` : '❌ ' + (x.error || 'no se pudo crear'));
+        } catch (err) { toast('❌ ' + err.message); }
+        loadPlantillas();
+      }));
+    } catch (e) { $('pl-lista').innerHTML = `<div class="empty">Error: ${escH(e.message)}</div>`; }
   }
 
   // ── Probar el recorrido ──
@@ -1804,6 +1847,8 @@
   setInterval(loadCampanas, 30000);
   loadSalud(false);
   setInterval(() => loadSalud(false), 5 * 60 * 1000);
+  loadPlantillas();
+  setInterval(loadPlantillas, 5 * 60 * 1000);
 </script>
 </body>
 </html>

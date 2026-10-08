@@ -769,6 +769,21 @@ router.get('/whatsapp/salud', async (req, res) => {
   }
 });
 
+// ─── Plantillas de Meta (crear y ver estado sin entrar en WhatsApp Manager) ──
+/** GET /api/whatsapp/plantillas → las que necesita el lanzamiento + todas las de la cuenta. */
+router.get('/whatsapp/plantillas', async (req, res) => {
+  try { res.json(await require('../services/plantillasMeta').requeridas()); }
+  catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
+/** POST /api/whatsapp/plantillas/crear  Body: { clave: 'verano'|'septiembre'|'directo'|'recordatorio' } */
+router.post('/whatsapp/plantillas/crear', async (req, res) => {
+  try {
+    const r = await require('../services/plantillasMeta').crear(req.body && req.body.clave);
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
 /** GET /api/whatsapp/diagnostico → todo lo que Meta dice del número, la cuenta y el webhook. */
 router.get('/whatsapp/diagnostico', async (req, res) => {
   try { res.json(await require('../services/whatsappSalud').diagnostico()); }
