@@ -339,6 +339,36 @@ function activationReset() {
   assert.strictEqual(conversationFlow.interpretarRespuesta('Busco ingresos extra'), 'emprendedor');
   ok('textos por segmento y botones de plantilla (≤25 caracteres) reconocidos por el flujo');
 
+  // ── 8. Router de decisión (sin IA: reglas) ────────────────────
+  {
+    const tel = '34633000001';
+    const de = () => paraTel(tel).length;
+    await conversationFlow.handleIncoming(tel, 'ei', { nombre: 'Router', canal: 'whatsapp' });
+    assert.strictEqual(de(), 1, '"ei" de un desconocido → bienvenida');
+    await conversationFlow.handleIncoming(tel, 'hola');
+    assert.strictEqual(de(), 1, '"hola" que se cruza con la bienvenida → nada (antes: "Perdona, igual no me he explicado bien")');
+    const realNow = Date.now;
+    Date.now = () => realNow() + 10 * 60 * 1000; // 10 min después
+    await conversationFlow.handleIncoming(tel, 'hola');
+    assert.strictEqual(de(), 1, 'un saludo con la pregunta 1/2 en pantalla no se contesta');
+    await conversationFlow.handleIncoming(tel, 'y esto de qué va');
+    assert.strictEqual(de(), 2, 'una duda → se re-pregunta 1/2');
+    assert.ok(/1 → si trabajas/.test(paraTel(tel)[1].body));
+    Date.now = realNow;
+    await conversationFlow.handleIncoming(tel, '1');
+    assert.strictEqual(de(), 3, '"1" → landing');
+    await conversationFlow.handleIncoming(tel, 'dale bro');
+    assert.strictEqual(de(), 4, '"dale bro" tras la landing → respuesta (antes: "escribiendo…" y nada)');
+    assert.ok(/lead=/.test(paraTel(tel)[3].body) && /reunión/.test(paraTel(tel)[3].body), 'le anima a ver la presentación con su enlace');
+    await conversationFlow.handleIncoming(tel, 'ok');
+    assert.strictEqual(de(), 4, 'no se repite la respuesta automática una y otra vez');
+    await conversationFlow.handleIncoming(tel, 'prefiero hablar con alguien, llámame');
+    assert.strictEqual(de(), 5, 'pide una persona → aviso');
+    assert.ok(/Arkaitz/.test(paraTel(tel)[4].body));
+    assert.ok(leadManager.getLeadByPhone(tel).pideHumanoAt, 'queda marcado para que le escriba una persona');
+    ok('router: no contesta saludos cruzados, responde "dale" tras la landing, no repite, pasa a persona');
+  }
+
   console.log(`\n🎉 Todo correcto (${paso} comprobaciones, ${enviados.length} mensajes simulados, 0 reales).\n`);
   process.exit(0);
 })().catch((err) => {

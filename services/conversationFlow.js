@@ -160,6 +160,57 @@ async function _autoAlta(telefono, texto, extra) {
   return leadManager.getLeadById(lead.id);
 }
 
+async function _darDeBaja(lead, texto, via = 'palabra') {
+  const result = leadManager.transitionState(lead.id, LEAD_STATES.DESCARTADO);
+  if (result.error) {
+    // Estado terminal sin transición válida: forzamos el descarte igualmente
+    leadManager.updateLead(lead.id, { estado: LEAD_STATES.DESCARTADO, descartadoAt: new Date().toISOString() });
+  }
+  activityLog.appendActivity(lead.id, 'opt_out', { texto, via });
+  console.log(`🛑 [Flujo] ${lead.nombre} pidió la baja (${via}) → descartado`);
+  await messaging.sendTextMessage(
+    lead.telefono,
+    `Entendido ${lead.nombre}, no te escribimos más. Si algún día quieres retomarlo, aquí estaremos. Un abrazo.`,
+    { delaySeconds: 0 }
+  );
+}
+
+function _textoLanding(perfil, lead) {
+  const enlaceLanding = enlaceLandingPorPerfil(perfil, lead.id);
+  return perfil === LEAD_PROFILES.PROFESIONAL
+    ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding })
+    : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
+}
+
+/**
+ * Mensaje fuera de guion → el router decide qué hacer (responder, perfil,
+ * baja, humano o silencio). Devuelve el perfil si el router lo ha deducido,
+ * para que la fase de cualificación siga como si hubiera dicho 1/2.
+ */
+async function _rutear(lead, texto, { textoPorDefecto = null } = {}) {
+  const responder = require('./responder');
+  const d = await responder.decidir(lead, texto);
+  switch (d.accion) {
+    case 'perfil':
+      return d.perfil;
+    case 'baja':
+      await _darDeBaja(lead, texto, 'router');
+      return null;
+    case 'humano':
+      leadManager.updateLead(lead.id, { pideHumanoAt: new Date().toISOString() });
+      activityLog.appendActivity(lead.id, 'pide_humano', { texto: String(texto).slice(0, 200) });
+      if (d.texto) await messaging.sendTextMessage(lead.telefono, d.texto);
+      return null;
+    case 'silencio':
+      return null;
+    default: {
+      const t = d.texto || textoPorDefecto;
+      if (t) await messaging.sendTextMessage(lead.telefono, t);
+      return null;
+    }
+  }
+}
+
 async function handleIncoming(telefono, texto, extra = {}) {
   let lead = leadManager.getLeadByPhone(telefono);
   if (!lead) {
@@ -187,18 +238,7 @@ async function handleIncoming(telefono, texto, extra = {}) {
 
   // ─── Opt-out: prioridad absoluta sobre cualquier fase ───────────
   if (esOptOut(texto) && lead.estado !== LEAD_STATES.DESCARTADO) {
-    const result = leadManager.transitionState(lead.id, LEAD_STATES.DESCARTADO);
-    if (result.error) {
-      // Estado terminal sin transición válida: forzamos el descarte igualmente
-      leadManager.updateLead(lead.id, { estado: LEAD_STATES.DESCARTADO, descartadoAt: new Date().toISOString() });
-    }
-    activityLog.appendActivity(lead.id, 'opt_out', { texto });
-    console.log(`🛑 [Flujo] ${lead.nombre} pidió la baja → descartado`);
-    await messaging.sendTextMessage(
-      lead.telefono,
-      `Entendido ${lead.nombre}, no te escribimos más. Si algún día quieres retomarlo, aquí estaremos. Un abrazo.`,
-      { delaySeconds: 0 }
-    );
+    await _darDeBaja(lead, texto);
     return;
   }
 
@@ -233,26 +273,24 @@ async function handleIncoming(telefono, texto, extra = {}) {
         );
         return;
       }
-      // Mensajes que se cruzan con la bienvenida (escribió dos seguidos) o un
-      // simple saludo: la pregunta ya está en pantalla, no se contesta nada.
+      // Mensajes que se cruzan con la bienvenida (escribió dos seguidos, p. ej.
+      // "ei" + "hola"): la pregunta acaba de salir, no se contesta nada.
       const eventos = activityLog.getActivityByLead(lead.id);
       const ultimaBienvenida = eventos.filter((e) => e.type === 'welcome_sent' || e.type === 'message_sent').pop();
       const hace = ultimaBienvenida ? Date.now() - new Date(ultimaBienvenida.ts).getTime() : Infinity;
       const corto = !String(texto).includes('?') && String(texto).trim().split(/\s+/).length <= 3;
-      if (esSaludo(texto) || (hace < 2 * 60 * 1000 && corto)) {
-        console.log(`🤫 [Flujo] ${lead.nombre}: "${String(texto).slice(0, 30)}" tras la pregunta → sin respuesta (evita duplicados)`);
+      if (hace < 2 * 60 * 1000 && (corto || esSaludo(texto))) {
+        console.log(`🤫 [Flujo] ${lead.nombre}: "${String(texto).slice(0, 30)}" se cruzó con la pregunta → sin respuesta`);
         return;
       }
-      // Ya tiene la bienvenida y sigue sin decir 1/2 → es que pregunta algo.
-      // Ahí sí entra el LLM (responde en contexto y reconduce al 1/2). Sin LLM
-      // configurado o si falla, se repite la pregunta.
-      const responder = require('./responder');
-      const respuestaLlm = await responder.responder(lead, texto);
-      await messaging.sendTextMessage(
-        lead.telefono,
-        respuestaLlm || messages.mensajeReintentarCualificacion({ nombre: lead.nombre })
-      );
-      return;
+      // Ya tiene la bienvenida y sigue sin decir 1/2 → el router decide: quizá
+      // nos ha dicho su perfil con otras palabras, quiere la baja, pregunta
+      // algo… Si no hay nada mejor, se repite la pregunta 1/2.
+      perfil = await _rutear(lead, texto, {
+        textoPorDefecto: messages.mensajeReintentarCualificacion({ nombre: lead.nombre }),
+      });
+      if (!perfil) return;
+      activityLog.appendActivity(lead.id, 'perfil_por_router', { texto: String(texto).slice(0, 80), perfil });
     }
     leadManager.updateLead(lead.id, { perfil });
     activityLog.appendActivity(lead.id, 'profile_set', { perfil });
@@ -310,17 +348,15 @@ async function handleIncoming(telefono, texto, extra = {}) {
     return;
   }
 
-  // ─── Resto de estados: respuesta conversacional con LLM ─────────
-  // El lead ya está dentro del embudo (reserva, landing, 1-a-1...) y
-  // escribe algo. El LLM contesta su duda y le recuerda su siguiente paso
-  // con el enlace que le toca. Sin LLM configurado, silencio como antes
-  // (el mensaje aparece en "Sin responder" del CRM para atenderlo a mano).
-  const responder = require('./responder');
-  const respuestaLlm = await responder.responder(lead, texto);
-  if (respuestaLlm) {
-    await messaging.sendTextMessage(lead.telefono, respuestaLlm);
-  } else {
-    console.log(`💬 [Flujo] ${lead.nombre} (${lead.estado}) escribió y no hay respuesta automática — revisar "Sin responder" en el CRM`);
+  // ─── Resto de estados: router de decisión ───────────────────────
+  // El lead ya está dentro del embudo (landing, 1-a-1...) y escribe algo
+  // ("dale", una duda, "llámame"…). El router decide: contestar y recordarle
+  // su siguiente paso, pasarlo a una persona, darle de baja o no decir nada.
+  // Con IA decide el modelo; sin IA, reglas fijas — nunca se queda colgado.
+  const perfilRouter = await _rutear(lead, texto);
+  if (perfilRouter) {
+    console.log(`🔎 [Flujo] ${lead.nombre}: el router entiende que quiere la rama ${perfilRouter} → landing enviada`);
+    await messaging.sendTextMessage(lead.telefono, _textoLanding(perfilRouter, lead));
   }
 }
 

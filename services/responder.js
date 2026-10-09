@@ -9,7 +9,7 @@
  *
  * Proveedores (se usa el primero configurado):
  *   - GROQ_API_KEY       → Groq (llama-3.3-70b-versatile; capa gratuita)
- *   - ANTHROPIC_API_KEY  → Claude Haiku (claude-haiku-4-5, ~0,001 USD/resp.)
+ *   - ANTHROPIC_API_KEY  → Claude Haiku (claude-haiku-5-5)
  *
  * Sin claves — o ante error, timeout o respuesta rara — devuelve null y el
  * flujo se comporta como siempre (el mensaje queda en "Sin responder" del
@@ -22,7 +22,7 @@ const config = require('../config/config');
 const activityLog = require('./activityLog');
 
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
-const HAIKU_MODEL = process.env.PERSONALIZER_MODEL || 'claude-haiku-4-5';
+const HAIKU_MODEL = process.env.PERSONALIZER_MODEL || 'claude-haiku-5-5';
 const MAX_RESPUESTAS_HORA = Math.max(1, parseInt(process.env.LLM_MAX_RESPUESTAS_HORA, 10) || 20);
 
 function estaActivo() {
@@ -188,4 +188,129 @@ async function responder(lead, textoLead) {
   }
 }
 
-module.exports = { responder, estaActivo };
+// ═══ Router de decisión ══════════════════════════════════════════
+// Para cada mensaje fuera de guion decide QUÉ hacer (no solo qué decir),
+// mirando el estado del lead y la conversación:
+//   responder → contestar (texto) y reconducir al siguiente paso
+//   perfil    → en realidad nos ha dicho su perfil ("vendo pisos" → profesional)
+//   baja      → no quiere seguir (aunque no use la palabra "baja")
+//   humano    → pide una persona o algo que el bot no debe resolver
+//   silencio  → no hace falta contestar ("ok" a un mensaje que no pedía nada,
+//               mensajes que se cruzan…)
+// Con IA (GROQ_API_KEY o ANTHROPIC_API_KEY) decide el modelo; sin IA, o si
+// falla, deciden reglas fijas. Nunca se queda sin respuesta por falta de clave.
+
+const ACCIONES = ['responder', 'perfil', 'baja', 'humano', 'silencio'];
+
+function _norm(t) {
+  return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
+const ACK_REGEX = /^(ok+|okey|vale+|dale+|genial|perfecto|gracias|muchas gracias|guay|top|de acuerdo|entendido|listo|hecho|sii*|claro|bien|buenisimo|estupendo|👍|🙏|👌|😊|🙂)\b/u;
+const SALUDO_REGEX = /^(e+i+|e+y+|hey+|hola+|holi+s?|buenas+|buenos dias|buenas (tardes|noches)|hi|hello|que tal|saludos)\b/u;
+const HUMANO_REGEX = /(hablar con (alguien|una persona|arkaitz|un humano)|llamame|llamadme|me podeis llamar|me puedes llamar|eres (un )?(bot|robot|ia|maquina)|persona real)/;
+
+function _ultimo(eventos, tipo) {
+  const e = eventos.filter((x) => x.type === tipo).pop();
+  return e ? Date.now() - new Date(e.ts).getTime() : Infinity;
+}
+
+/** Reglas sin IA: siempre devuelven una decisión razonable para el estado. */
+function _decidirPorReglas(lead, texto) {
+  const t = _norm(texto);
+  const eventos = activityLog.getActivityByLead(lead.id);
+  const ctx = _contextoDeEstado(lead);
+  const nombre = lead.nombre && lead.nombre !== 'Sin nombre' ? ` ${lead.nombre}` : '';
+  const HORA = 3600 * 1000;
+
+  if (HUMANO_REGEX.test(t)) {
+    return { accion: 'humano', texto: `Claro${nombre}, se lo paso a Arkaitz y te escribe él en cuanto pueda 🙂` };
+  }
+  // No repetir la misma respuesta automática una y otra vez: si ya hubo una
+  // hace poco en esta misma fase, silencio (queda en "Sin responder").
+  if (_ultimo(eventos.filter((e) => !e.meta || e.meta.estado === lead.estado), 'router_reply') < 6 * HORA) return { accion: 'silencio', motivo: 'ya hubo respuesta automática reciente' };
+
+  const esAck = ACK_REGEX.test(t) || SALUDO_REGEX.test(t);
+  switch (lead.estado) {
+    case 'esperando_cualificacion':
+      if (esAck) return { accion: 'silencio', motivo: 'saludo/ok con la pregunta 1/2 ya en pantalla' };
+      return { accion: 'responder', texto: null }; // → re-pregunta 1/2 estándar
+    case 'video_enviado':
+    case 'video_visto':
+      return {
+        accion: 'responder',
+        texto: esAck
+          ? `¡Perfecto${nombre}! 🙌 Tómate tu tiempo con la presentación. Al terminar el webinar te aparece el botón para reservar tu reunión con Arkaitz.\n\nPor si la necesitas otra vez: ${ctx.enlace}`
+          : `Buena pregunta${nombre}. Eso se explica con detalle en la presentación y, lo que quede, lo ves directamente con Arkaitz en la reunión 1 a 1.\n\nAquí la tienes: ${ctx.enlace}`,
+      };
+    case 'reunion_registrado':
+      return {
+        accion: 'responder',
+        texto: esAck
+          ? `¡Genial${nombre}! Cuando puedas, reserva aquí tu reunión con Arkaitz: ${ctx.enlace}`
+          : `Eso lo ves directamente con Arkaitz en la reunión, que es para eso 🙂 Resérvala aquí: ${ctx.enlace}`,
+      };
+    default:
+      if (esAck) return { accion: 'silencio', motivo: 'ok sin nada pendiente' };
+      return { accion: 'humano', texto: `Gracias${nombre}, se lo paso al equipo y te escriben en cuanto puedan 🙂` };
+  }
+}
+
+function _promptRouter(lead) {
+  return (
+    _systemPrompt(lead).replace(/- Responde SOLO con el texto[^\n]*$/, '') +
+    '\n\nAhora NO escribes directamente: DECIDES qué hacer con su último mensaje. Responde SOLO con un JSON en una línea:\n' +
+    '{"accion":"responder|perfil|baja|humano|silencio","texto":"mensaje a enviar o vacío","perfil":"profesional|emprendedor|"}\n' +
+    '- "perfil": su mensaje deja claro si es agente/trabaja en inmobiliaria (profesional) o busca ingresos extra (emprendedor). Solo si está esperando la pregunta 1/2 o pide la otra presentación. texto vacío.\n' +
+    '- "baja": no quiere seguir o pide que no le escribamos. texto vacío.\n' +
+    '- "humano": pide hablar con una persona, se queja, o plantea algo que no debes resolver tú. texto = aviso breve de que Arkaitz o el equipo le escribe.\n' +
+    '- "silencio": no hace falta contestar (un "ok"/"hola" cuando ya le hemos dicho lo que tiene que hacer justo antes y no ha pasado tiempo, o mensajes que se cruzan). texto vacío.\n' +
+    '- "responder": cualquier otro caso. texto = respuesta corta que conteste y le lleve al siguiente paso. Si da un "ok/dale/gracias" a la presentación, anímale a verla y recuerda que al final se reserva la reunión.\n' +
+    'Ante la duda entre silencio y responder, responde: es peor dejar a alguien sin contestar.'
+  );
+}
+
+function _parsearDecision(bruto) {
+  try {
+    const m = String(bruto || '').match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const d = JSON.parse(m[0]);
+    if (!ACCIONES.includes(d.accion)) return null;
+    if (d.accion === 'perfil' && !['profesional', 'emprendedor'].includes(d.perfil)) return null;
+    if ((d.accion === 'responder' || d.accion === 'humano') && d.texto && !_esValida(d.texto)) return null;
+    return { accion: d.accion, texto: d.texto ? String(d.texto).trim() : null, perfil: d.perfil || null };
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Decide qué hacer con un mensaje fuera de guion.
+ * Devuelve { accion, texto?, perfil?, via: 'ia'|'reglas' }.
+ */
+async function decidir(lead, textoLead) {
+  let d = null;
+  let via = 'reglas';
+  if (estaActivo() && _dentroDeLimite(lead.id)) {
+    const historial = _historial(lead.id);
+    const user =
+      (historial ? `Conversación hasta ahora:\n${historial}\n\n` : '') +
+      `Estado del lead en el embudo: ${lead.estado}. El lead ${lead.nombre} acaba de escribir: "${textoLead}"`;
+    try {
+      const system = _promptRouter(lead);
+      const bruto = process.env.GROQ_API_KEY ? await _llamarGroq(system, user) : await _llamarHaiku(system, user);
+      d = _parsearDecision(bruto);
+      if (d) via = 'ia';
+      else console.warn('🧭 [Router] Respuesta de la IA no válida → reglas');
+    } catch (err) {
+      console.error('🧭 [Router] Error de la IA → reglas:', err.message);
+    }
+  }
+  if (!d) d = _decidirPorReglas(lead, textoLead);
+  d.via = via;
+  activityLog.appendActivity(lead.id, 'router_decision', { accion: d.accion, via, perfil: d.perfil || undefined, motivo: d.motivo });
+  if (d.accion === 'responder' || d.accion === 'humano') activityLog.appendActivity(lead.id, 'router_reply', { via, estado: lead.estado });
+  console.log(`🧭 [Router] ${lead.nombre} (${lead.estado}) "${String(textoLead).slice(0, 40)}" → ${d.accion} [${via}]`);
+  return d;
+}
+
+module.exports = { responder, decidir, estaActivo, _decidirPorReglas };
