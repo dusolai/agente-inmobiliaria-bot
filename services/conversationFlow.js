@@ -115,6 +115,15 @@ function esAutoRespuesta(texto) {
   return AUTORESPUESTA_REGEX.test(normalizar(texto));
 }
 
+// Saludos sueltos ("ei", "hola", "buenas"…). Si ya le hicimos la pregunta 1/2,
+// un saludo no se contesta: la pregunta está justo encima. Pasaba al escribir
+// "ei" + "hola" seguidos: el primero lanzaba la bienvenida y el segundo un
+// "Perdona, igual no me he explicado bien" (parecía un mensaje duplicado).
+const SALUDO_REGEX = /^(e+i+|e+y+|hey+|hola+|holi+s?|buenas+|buenos dias|buenas (tardes|noches)|hi|hello|que tal|saludos)( (que tal|buenas|hola))?[\s!.?¡¿👋😊🙂]*$/u;
+function esSaludo(texto) {
+  return SALUDO_REGEX.test(normalizar(texto));
+}
+
 // ─── Alta automática de números desconocidos ─────────────────────
 // Reunión 24-09: el número del agente va en el formulario de Karen y hay
 // gente que, en vez de esperar, escribe directamente. Antes se ignoraba; ahora
@@ -222,6 +231,16 @@ async function handleIncoming(telefono, texto, extra = {}) {
           lead.telefono,
           messages.mensajeReactivacion({ nombre: lead.nombre, segmento: lead.segmento })
         );
+        return;
+      }
+      // Mensajes que se cruzan con la bienvenida (escribió dos seguidos) o un
+      // simple saludo: la pregunta ya está en pantalla, no se contesta nada.
+      const eventos = activityLog.getActivityByLead(lead.id);
+      const ultimaBienvenida = eventos.filter((e) => e.type === 'welcome_sent' || e.type === 'message_sent').pop();
+      const hace = ultimaBienvenida ? Date.now() - new Date(ultimaBienvenida.ts).getTime() : Infinity;
+      const corto = !String(texto).includes('?') && String(texto).trim().split(/\s+/).length <= 3;
+      if (esSaludo(texto) || (hace < 2 * 60 * 1000 && corto)) {
+        console.log(`🤫 [Flujo] ${lead.nombre}: "${String(texto).slice(0, 30)}" tras la pregunta → sin respuesta (evita duplicados)`);
         return;
       }
       // Ya tiene la bienvenida y sigue sin decir 1/2 → es que pregunta algo.
