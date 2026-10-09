@@ -689,7 +689,9 @@ router.get('/prueba/leads', async (req, res) => {
     const s = await require('../services/whatsappSalud').estado();
     if (s && s.numero) agente = { numero: s.numero, digitos: String(s.numero).replace(/[^\d]/g, ''), estado: s.estadoNumero || null };
   } catch (e) { /* sin datos de Meta */ }
-  res.json({ campana: c.id, leads, agente });
+  let telegram = null;
+  try { const u = await require('../services/telegram').getBotUsername(); if (u) telegram = { usuario: u, enlace: `https://t.me/${u}?start=prueba` }; } catch (e) { /* sin Telegram */ }
+  res.json({ campana: c.id, leads, agente, telegram });
 });
 
 router.post('/prueba/recorrido', async (req, res) => {

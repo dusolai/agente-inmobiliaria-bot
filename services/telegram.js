@@ -84,7 +84,10 @@ async function procesarUpdate(update) {
   if (esArranque) {
     let lead = leadManager.getLeadByPhone(telefono);
     if (!lead) {
-      lead = leadManager.createLead({ nombre, telefono, fuente: 'telegram-pilot' });
+      // Las pruebas por Telegram van a la campaña "🧪 Pruebas" (no cuentan en las reales)
+      const campanas = require('./campanas');
+      const campana = campanas.get('pruebas') ? 'pruebas' : undefined;
+      lead = leadManager.createLead({ nombre, telefono, fuente: 'telegram-pilot', campana, segmento: 'directo' });
     }
     // Reset limpio del lead para repetir la prueba: estado a "esperando
     // cualificación", perfil sin definir y contadores de recordatorios a cero.
@@ -168,4 +171,16 @@ async function sendTypingAction(chatIdOrTg) {
   }
 }
 
-module.exports = { initialize, sendMessage, sendTypingAction, isReady, TG_PREFIX };
+// Nombre de usuario del bot (para el enlace t.me del CRM). Se cachea.
+let _botUser = null;
+async function getBotUsername() {
+  if (!isConfigured) return null;
+  if (_botUser) return _botUser;
+  try {
+    const r = await axios.get(apiUrl('getMe'), { timeout: 8000 });
+    _botUser = r.data && r.data.result ? r.data.result.username : null;
+  } catch (e) { _botUser = null; }
+  return _botUser;
+}
+
+module.exports = { initialize, sendMessage, sendTypingAction, isReady, getBotUsername, TG_PREFIX };

@@ -1075,6 +1075,13 @@
              (sale el «hola» ya escrito). Copia este enlace y mándaselo a Arkaitz: <code style="user-select:all">https://wa.me/${escH(ag.digitos)}?text=hola</code>
            </div>`
         : '<div class="csv-hint">No se pudo leer el número del agente de Meta.</div>';
+      if (r.telegram) {
+        $('pr-agente').innerHTML += `<div style="margin-top:.6rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:.7rem .9rem;font-size:.85rem">
+          ✈️ <b>Probar por TELEGRAM</b> (funciona aunque WhatsApp esté caído): el mismo embudo completo — pregunta, landing, vídeos, 1-a-1.<br>
+          Abre <a href="${escH(r.telegram.enlace)}" target="_blank" style="font-weight:800">@${escH(r.telegram.usuario)}</a> y pulsa <b>Iniciar</b> (o escribe /start). Para repetir desde cero, vuelve a mandar /start.<br>
+          Enlace para Arkaitz: <code style="user-select:all">${escH(r.telegram.enlace)}</code>
+        </div>`;
+      }
       $('pr-lista').innerHTML = L.length === 0 ? '<div class="empty">Aún no hay pruebas.</div>'
         : L.map(l => `<div class="at-row" style="cursor:default">
             <div><span class="at-nombre">${escH(l.nombre)}</span> ${segBadge(l.segmento)} <span class="badge badge-${escH(l.estado)}">${escH(lblEstado(l.estado))}</span>
