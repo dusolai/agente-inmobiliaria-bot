@@ -678,12 +678,18 @@ function _campanaPruebas() {
   return c;
 }
 
-router.get('/prueba/leads', (req, res) => {
+router.get('/prueba/leads', async (req, res) => {
   const c = _campanaPruebas();
   const leads = leadManager.getAllLeads({ campana: c.id }).map((l) => ({
     id: l.id, nombre: l.nombre, telefono: l.telefono, segmento: l.segmento, estado: l.estado, perfil: l.perfil, createdAt: l.createdAt,
   }));
-  res.json({ campana: c.id, leads });
+  // Número del agente (según Meta) para abrir el chat con un clic
+  let agente = null;
+  try {
+    const s = await require('../services/whatsappSalud').estado();
+    if (s && s.numero) agente = { numero: s.numero, digitos: String(s.numero).replace(/[^\d]/g, ''), estado: s.estadoNumero || null };
+  } catch (e) { /* sin datos de Meta */ }
+  res.json({ campana: c.id, leads, agente });
 });
 
 router.post('/prueba/recorrido', async (req, res) => {

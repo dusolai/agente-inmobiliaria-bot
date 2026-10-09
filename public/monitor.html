@@ -505,6 +505,7 @@
       </div>
       <button class="btn green" id="pr-empezar">▶ Empezar la prueba</button>
       <span id="pr-estado" class="csv-hint" style="margin-left:.6rem"></span>
+      <div id="pr-agente" style="margin-top:.8rem"></div>
       <div class="info" style="margin-top:1rem;line-height:1.7">
         <b>Qué comprobar, paso a paso:</b><br>
         1. Te llega el primer mensaje con los botones (o la bienvenida tras escribir «hola»).<br>
@@ -1065,6 +1066,15 @@
     try {
       const r = await fetchJSON('/api/prueba/leads');
       const L = r.leads || [];
+      const ag = r.agente;
+      $('pr-agente').innerHTML = ag && ag.digitos
+        ? `<div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:.7rem .9rem;font-size:.85rem">
+             📱 Número del agente: <b>${escH(ag.numero)}</b>${ag.estado && ag.estado !== 'CONNECTED' ? ` <span class="seg-ko">(${escH(ag.estado)}: aún no recibe mensajes)</span>` : ''}<br>
+             Modo «Solo crear»: crea la prueba y luego, desde el móvil de esa persona, pulsa
+             <a href="https://wa.me/${escH(ag.digitos)}?text=hola" target="_blank" style="font-weight:800;color:var(--green)">💬 Abrir WhatsApp con el agente</a>
+             (sale el «hola» ya escrito). Copia este enlace y mándaselo a Arkaitz: <code style="user-select:all">https://wa.me/${escH(ag.digitos)}?text=hola</code>
+           </div>`
+        : '<div class="csv-hint">No se pudo leer el número del agente de Meta.</div>';
       $('pr-lista').innerHTML = L.length === 0 ? '<div class="empty">Aún no hay pruebas.</div>'
         : L.map(l => `<div class="at-row" style="cursor:default">
             <div><span class="at-nombre">${escH(l.nombre)}</span> ${segBadge(l.segmento)} <span class="badge badge-${escH(l.estado)}">${escH(lblEstado(l.estado))}</span>
