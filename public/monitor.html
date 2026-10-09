@@ -313,7 +313,7 @@
       <span id="campanaEstado"></span>
       <button id="campanaNueva" class="btn green" title="Crea una campaña más; las demás siguen como están">➕ Nueva campaña</button>
       <div class="live"><span class="dot"></span> En vivo · 3 s</div>
-      <button id="devToggle" title="Zona de desarrollador" style="background:none;border:none;cursor:pointer;font-size:1rem;opacity:.35;padding:.2rem">🔧</button>
+      <button id="devToggle" class="btn" title="Zona de desarrollador: salud del número, plantillas de Meta e IA" style="border:1px solid #ccc">🔧 <span id="devToggleTxt">Desarrollador</span></button>
     </div>
   </header>
 
@@ -343,6 +343,15 @@
       <div class="kpi o"><b id="kpi-cola">—</b><span>Cola import · hoy</span></div>
       <div class="kpi y"><b id="kpi-conversion">—</b><span>% conversión</span></div>
       <div class="kpi"><b id="kpi-eventos">—</b><span>Eventos registrados</span></div>
+    </div>
+
+    <div class="panel dev-only" id="iaPanel" style="display:none">
+      <h2>🧠 Inteligencia artificial del agente <small>decide qué contestar a lo que no es 1/2 · se comprueba al abrir esta zona</small></h2>
+      <div class="salud">
+        <div class="salud-luz gris" id="ia-luz">·</div>
+        <div class="salud-txt"><b id="ia-titulo">Comprobando la IA…</b><p id="ia-detalle"></p></div>
+        <button class="btn" id="ia-refrescar" style="border:1px solid #ccc">↻ Comprobar ahora</button>
+      </div>
     </div>
 
     <div class="panel dev-only" id="saludPanel" style="display:none">
@@ -741,7 +750,7 @@
   };
   function mostrarDev(si) {
     document.querySelectorAll('.dev-only').forEach((el) => { el.style.display = si ? '' : 'none'; });
-    const b = document.getElementById('devToggle'); if (b) b.style.opacity = si ? '1' : '.35';
+    const t = document.getElementById('devToggleTxt'); if (t) t.textContent = si ? 'Cerrar desarrollador' : 'Desarrollador';
   }
 
   function toast(msg) {
@@ -1885,10 +1894,33 @@
       const r = await (await _fetchOrig('/api/dev/login', { method: 'POST', headers: { 'X-Dev-Pass': pass } })).json();
       if (!r.ok) return false;
       try { sessionStorage.setItem(DEV_KEY, pass); } catch (e) {}
-      mostrarDev(true); loadSalud(false); loadPlantillas();
+      mostrarDev(true); loadSalud(false); loadPlantillas(); loadIA();
       return true;
     } catch (e) { return false; }
   }
+  // ── IA del agente (Groq / Claude) ──
+  async function loadIA() {
+    $('ia-titulo').textContent = 'Comprobando la IA…'; $('ia-detalle').textContent = '';
+    try {
+      const r = await (await fetch('/api/whatsapp/ia')).json();
+      const luz = $('ia-luz');
+      luz.className = 'salud-luz ' + (r.ok ? 'verde' : 'rojo');
+      luz.textContent = r.ok ? '✓' : '!';
+      const prov = r.proveedor === 'groq' ? 'Groq' : r.proveedor === 'anthropic' ? 'Claude (Anthropic)' : 'ninguna';
+      $('ia-titulo').textContent = r.ok
+        ? `Funcionando · ${prov} · modelo ${r.modelo}`
+        : (r.proveedor ? `No funciona · ${prov} · modelo ${r.modelo || '—'}` : 'Sin IA configurada');
+      $('ia-detalle').innerHTML = [
+        r.clave ? `Clave: <b>${escH(r.clave)}</b>` : '',
+        r.ok ? 'Contesta los mensajes fuera de guion con contexto.' : `Error: <b>${escH(r.error || '')}</b>${r.status ? ' (HTTP ' + r.status + ')' : ''}. Mientras tanto contestan las reglas fijas: el agente no se queda callado.`,
+        r.aviso ? `⚠️ ${escH(r.aviso)}` : '',
+      ].filter(Boolean).join('<br>');
+    } catch (e) {
+      $('ia-titulo').textContent = 'No se pudo comprobar'; $('ia-detalle').textContent = e.message;
+    }
+  }
+  $('ia-refrescar').addEventListener('click', loadIA);
+
   $('devToggle').addEventListener('click', async () => {
     if (devPass()) { try { sessionStorage.removeItem(DEV_KEY); } catch (e) {} mostrarDev(false); toast('Zona de desarrollador cerrada'); return; }
     const p = prompt('Contraseña de desarrollador:');
