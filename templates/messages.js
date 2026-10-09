@@ -51,6 +51,21 @@ const OPCIONES_TEXTO =
   `Respóndeme con el 1 o el 2 y seguimos 🙂`;
 
 const PLANTILLAS_META = {
+  viejos: {
+    nombreSugerido: 'reactivacion_viejos',
+    variable: 'WHATSAPP_TEMPLATE_VIEJOS',
+    cuerpo:
+      `¡Hola, {{nombre}}! 👋 Soy del equipo de Three Inmobiliaria.
+
+` +
+      `Hace unos meses mostraste interés en nuestro proyecto y, como hemos renovado la presentación con muchas novedades, quería retomar el contacto contigo. 😊
+
+` +
+      `Antes de enviarte nada, una pregunta rápida para saber qué puede encajarte mejor:
+
+` +
+      `👉 ¿Actualmente trabajas en el sector inmobiliario 🏠 o estás buscando una oportunidad para generar ingresos extra? 💰`,
+  },
   verano: {
     nombreSugerido: 'reactivacion_verano',
     variable: 'WHATSAPP_TEMPLATE_VERANO',
@@ -106,8 +121,8 @@ function _textoSegmento(segmento, nombre) {
 
 /**
  * Primer mensaje (pregunta de filtrado). `segmento` decide el texto:
- *   viejos / sin segmento → variantes "reabrimos plazas" (como hasta ahora)
- *   verano / septiembre / directo → texto acordado para ese segmento
+ *   sin segmento → variantes "reabrimos plazas"
+ *   viejos / verano / septiembre / directo → texto acordado para ese segmento
  */
 function mensajeReactivacion({ nombre, segmento }) {
   const porSegmento = _textoSegmento(segmento, nombre);

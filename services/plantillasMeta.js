@@ -26,6 +26,7 @@ function _err(err) {
 
 // Qué plantillas necesita el lanzamiento: clave → variable de Seenode
 const REQUERIDAS = [
+  { clave: 'viejos', variable: 'WHATSAPP_TEMPLATE_VIEJOS', para: 'Campaña Viejos (dic-jun)' },
   { clave: 'verano', variable: 'WHATSAPP_TEMPLATE_VERANO', para: 'Campaña Verano (jul-ago)' },
   { clave: 'septiembre', variable: 'WHATSAPP_TEMPLATE_SEPTIEMBRE', para: 'Campaña Septiembre' },
   { clave: 'directo', variable: 'WHATSAPP_TEMPLATE_DIRECTO', para: 'Nuevos en directo' },
