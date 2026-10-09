@@ -313,6 +313,7 @@
       <span id="campanaEstado"></span>
       <button id="campanaNueva" class="btn green" title="Crea una campaña más; las demás siguen como están">➕ Nueva campaña</button>
       <div class="live"><span class="dot"></span> En vivo · 3 s</div>
+      <button id="devToggle" title="Zona de desarrollador" style="background:none;border:none;cursor:pointer;font-size:1rem;opacity:.35;padding:.2rem">🔧</button>
     </div>
   </header>
 
@@ -344,7 +345,7 @@
       <div class="kpi"><b id="kpi-eventos">—</b><span>Eventos registrados</span></div>
     </div>
 
-    <div class="panel" id="saludPanel">
+    <div class="panel dev-only" id="saludPanel" style="display:none">
       <h2>📶 Salud del número de WhatsApp <small id="salud-cuando">según Meta · se consulta cada 10 min</small></h2>
       <div class="salud">
         <div class="salud-luz gris" id="salud-luz">·</div>
@@ -371,7 +372,7 @@
       </div>
     </div>
 
-    <div class="panel" id="plantillasPanel">
+    <div class="panel dev-only" id="plantillasPanel" style="display:none">
       <h2>📝 Plantillas de Meta <small>se crean aquí mismo en la cuenta que envía · Meta las revisa (minutos a 24 h)</small></h2>
       <div id="pl-lista"><div class="empty">Cargando plantillas de Meta…</div></div>
       <details style="margin-top:.8rem"><summary class="csv-hint" style="cursor:pointer">Ver todas las plantillas que tiene la cuenta</summary><div id="pl-todas" class="csv-hint" style="margin-top:.5rem"></div></details>
@@ -726,6 +727,22 @@
   const LEADS_PER_PAGE = 30;
 
   const $ = (id) => document.getElementById(id);
+
+  // ─── Zona de desarrollador (salud del número, plantillas de Meta) ───
+  // Las llamadas a /api/whatsapp/* llevan la contraseña de desarrollador.
+  const DEV_KEY = 'three_dev_pass';
+  const devPass = () => { try { return sessionStorage.getItem(DEV_KEY) || ''; } catch (e) { return ''; } };
+  const _fetchOrig = window.fetch.bind(window);
+  window.fetch = (url, opts = {}) => {
+    if (typeof url === 'string' && url.startsWith('/api/whatsapp/') && devPass()) {
+      opts = Object.assign({}, opts, { headers: Object.assign({}, opts.headers || {}, { 'X-Dev-Pass': devPass() }) });
+    }
+    return _fetchOrig(url, opts);
+  };
+  function mostrarDev(si) {
+    document.querySelectorAll('.dev-only').forEach((el) => { el.style.display = si ? '' : 'none'; });
+    const b = document.getElementById('devToggle'); if (b) b.style.opacity = si ? '1' : '.35';
+  }
 
   function toast(msg) {
     const t = $('toast');
@@ -1863,10 +1880,23 @@
   setInterval(refresh, 3000);
   setInterval(refreshStatus, 10000);
   setInterval(loadCampanas, 30000);
-  loadSalud(false);
-  setInterval(() => loadSalud(false), 5 * 60 * 1000);
-  loadPlantillas();
-  setInterval(loadPlantillas, 5 * 60 * 1000);
+  async function entrarDev(pass) {
+    try {
+      const r = await (await _fetchOrig('/api/dev/login', { method: 'POST', headers: { 'X-Dev-Pass': pass } })).json();
+      if (!r.ok) return false;
+      try { sessionStorage.setItem(DEV_KEY, pass); } catch (e) {}
+      mostrarDev(true); loadSalud(false); loadPlantillas();
+      return true;
+    } catch (e) { return false; }
+  }
+  $('devToggle').addEventListener('click', async () => {
+    if (devPass()) { try { sessionStorage.removeItem(DEV_KEY); } catch (e) {} mostrarDev(false); toast('Zona de desarrollador cerrada'); return; }
+    const p = prompt('Contraseña de desarrollador:');
+    if (!p) return;
+    toast(await entrarDev(p.trim()) ? '🔧 Zona de desarrollador abierta' : '❌ Contraseña incorrecta');
+  });
+  if (devPass()) entrarDev(devPass());
+  setInterval(() => { if (devPass()) { loadSalud(false); loadPlantillas(); } }, 5 * 60 * 1000);
 </script>
 </body>
 </html>

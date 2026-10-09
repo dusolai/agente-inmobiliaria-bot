@@ -1,5 +1,28 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
+
+// ─── Zona de desarrollador ────────────────────────────────────────
+// Lo técnico de WhatsApp/Meta (salud del número, diagnóstico, registro,
+// webhook, plantillas) solo lo ve el desarrollador: además del usuario y la
+// contraseña del CRM, pide la contraseña de desarrollador (cabecera
+// X-Dev-Pass). Se guarda solo su hash SHA-256; se puede cambiar con la
+// variable DEV_PASS en Seenode.
+const DEV_PASS_HASH = process.env.DEV_PASS
+  ? crypto.createHash('sha256').update(process.env.DEV_PASS).digest('hex')
+  : '98c7f52f4566490a772f88d7dad4699f4e63ce01b2ebe5c8426e4677578ab387';
+function _esDev(req) {
+  const p = String(req.headers['x-dev-pass'] || '');
+  if (!p) return false;
+  const h = crypto.createHash('sha256').update(p).digest();
+  return crypto.timingSafeEqual(h, Buffer.from(DEV_PASS_HASH, 'hex'));
+}
+router.use('/whatsapp', (req, res, next) => {
+  if (_esDev(req)) return next();
+  return res.status(403).json({ error: 'Solo para el desarrollador' });
+});
+/** POST /api/dev/login  Header X-Dev-Pass → { ok } */
+router.post('/dev/login', (req, res) => res.json({ ok: _esDev(req) }));
 const fs = require('fs');
 const path = require('path');
 const leadManager = require('../services/leadManager');
