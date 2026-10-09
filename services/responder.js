@@ -118,11 +118,40 @@ function _esValida(texto) {
   return t.length >= 2 && t.length <= 700;
 }
 
-async function _llamarGroq(system, user) {
+// Groq retira modelos cada pocos meses. Si el configurado ya no existe, se
+// pide a Groq la lista de modelos disponibles y se elige uno (preferencia:
+// los grandes de chat), sin tener que tocar Seenode.
+let _groqModelo = GROQ_MODEL;
+const PREFERENCIA_GROQ = [/llama-4-maverick/, /gpt-oss-120b/, /llama-3\.3-70b/, /70b/, /llama-4-scout/, /gpt-oss-20b/, /llama/];
+
+function _modeloRetirado(err) {
+  const s = err.response && err.response.status;
+  const e = (err.response && err.response.data && err.response.data.error) || {};
+  const txt = `${e.code || ''} ${e.message || ''}`.toLowerCase();
+  return s === 404 || /decommission|deprecat|not found|does not exist|model_not_found|no longer supported/.test(txt);
+}
+
+async function _elegirModeloGroq() {
+  const { data } = await axios.get('https://api.groq.com/openai/v1/models', {
+    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    timeout: 10000,
+  });
+  const ids = (data.data || [])
+    .filter((m) => m.active !== false)
+    .map((m) => m.id)
+    .filter((id) => !/whisper|tts|guard|embed|vision|audio|prompt/i.test(id));
+  for (const re of PREFERENCIA_GROQ) {
+    const id = ids.find((x) => re.test(x));
+    if (id) return id;
+  }
+  return ids[0] || null;
+}
+
+async function _postGroq(model, system, user) {
   const res = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
     {
-      model: GROQ_MODEL,
+      model,
       max_tokens: 300,
       messages: [
         { role: 'system', content: system },
@@ -135,6 +164,19 @@ async function _llamarGroq(system, user) {
     }
   );
   return res.data?.choices?.[0]?.message?.content;
+}
+
+async function _llamarGroq(system, user) {
+  try {
+    return await _postGroq(_groqModelo, system, user);
+  } catch (err) {
+    if (!_modeloRetirado(err)) throw err;
+    const nuevo = await _elegirModeloGroq();
+    if (!nuevo || nuevo === _groqModelo) throw err;
+    console.warn(`🧠 [IA] El modelo de Groq "${_groqModelo}" ya no está disponible → uso "${nuevo}"`);
+    _groqModelo = nuevo;
+    return _postGroq(_groqModelo, system, user);
+  }
 }
 
 async function _llamarHaiku(system, user) {
@@ -319,7 +361,7 @@ async function probar() {
   const proveedor = process.env.GROQ_API_KEY ? 'groq' : process.env.ANTHROPIC_API_KEY ? 'anthropic' : null;
   const out = {
     proveedor,
-    modelo: proveedor === 'groq' ? GROQ_MODEL : proveedor === 'anthropic' ? HAIKU_MODEL : null,
+    modelo: proveedor === 'groq' ? _groqModelo : proveedor === 'anthropic' ? HAIKU_MODEL : null,
     clave: clave ? `${clave.slice(0, 4)}…${clave.slice(-4)} (${clave.length} caracteres)` : null,
     otrasVariables: Object.keys(process.env).filter((k) => /GROK|XAI|OPENAI|GROQ|ANTHROPIC/i.test(k)),
   };
@@ -329,7 +371,7 @@ async function probar() {
     const t = proveedor === 'groq'
       ? await _llamarGroq('Responde solo: OK', 'Di OK')
       : await _llamarHaiku('Responde solo: OK', 'Di OK');
-    return { ...out, ok: true, respuesta: String(t || '').slice(0, 50) };
+    return { ...out, ok: true, modelo: proveedor === 'groq' ? _groqModelo : out.modelo, respuesta: String(t || '').slice(0, 50) };
   } catch (err) {
     const d = err.response && err.response.data;
     return { ...out, ok: false, status: err.response && err.response.status, error: (d && d.error && (d.error.message || JSON.stringify(d.error))) || err.message };
