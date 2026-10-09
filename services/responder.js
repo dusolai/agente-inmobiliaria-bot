@@ -313,4 +313,27 @@ async function decidir(lead, textoLead) {
   return d;
 }
 
-module.exports = { responder, decidir, estaActivo, _decidirPorReglas };
+/** Comprueba la IA de verdad (zona de desarrollador): proveedor, modelo y error exacto. */
+async function probar() {
+  const clave = process.env.GROQ_API_KEY || process.env.ANTHROPIC_API_KEY || '';
+  const proveedor = process.env.GROQ_API_KEY ? 'groq' : process.env.ANTHROPIC_API_KEY ? 'anthropic' : null;
+  const out = {
+    proveedor,
+    modelo: proveedor === 'groq' ? GROQ_MODEL : proveedor === 'anthropic' ? HAIKU_MODEL : null,
+    clave: clave ? `${clave.slice(0, 4)}…${clave.slice(-4)} (${clave.length} caracteres)` : null,
+    otrasVariables: Object.keys(process.env).filter((k) => /GROK|XAI|OPENAI|GROQ|ANTHROPIC/i.test(k)),
+  };
+  if (!proveedor) return { ...out, ok: false, error: 'No hay GROQ_API_KEY ni ANTHROPIC_API_KEY en Seenode' };
+  if (proveedor === 'groq' && !/^gsk_/.test(clave)) out.aviso = 'Las claves de Groq empiezan por "gsk_": ¿es de Grok (xAI) en vez de Groq?';
+  try {
+    const t = proveedor === 'groq'
+      ? await _llamarGroq('Responde solo: OK', 'Di OK')
+      : await _llamarHaiku('Responde solo: OK', 'Di OK');
+    return { ...out, ok: true, respuesta: String(t || '').slice(0, 50) };
+  } catch (err) {
+    const d = err.response && err.response.data;
+    return { ...out, ok: false, status: err.response && err.response.status, error: (d && d.error && (d.error.message || JSON.stringify(d.error))) || err.message };
+  }
+}
+
+module.exports = { responder, decidir, probar, estaActivo, _decidirPorReglas };

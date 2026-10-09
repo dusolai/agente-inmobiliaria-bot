@@ -23,6 +23,11 @@ router.use('/whatsapp', (req, res, next) => {
 });
 /** POST /api/dev/login  Header X-Dev-Pass → { ok } */
 router.post('/dev/login', (req, res) => res.json({ ok: _esDev(req) }));
+/** GET /api/whatsapp/ia → prueba real de la IA del router (proveedor, clave enmascarada, error exacto). */
+router.get('/whatsapp/ia', async (req, res) => {
+  try { res.json(await require('../services/responder').probar()); }
+  catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
 const fs = require('fs');
 const path = require('path');
 const leadManager = require('../services/leadManager');
