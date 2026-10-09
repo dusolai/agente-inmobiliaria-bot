@@ -55,15 +55,9 @@ const PLANTILLAS_META = {
     nombreSugerido: 'reactivacion_viejos',
     variable: 'WHATSAPP_TEMPLATE_VIEJOS',
     cuerpo:
-      `¡Hola, {{nombre}}! 👋 Soy del equipo de Three Inmobiliaria.
-
-` +
-      `Hace unos meses mostraste interés en nuestro proyecto y, como hemos renovado la presentación con muchas novedades, quería retomar el contacto contigo. 😊
-
-` +
-      `Antes de enviarte nada, una pregunta rápida para saber qué puede encajarte mejor:
-
-` +
+      `¡Hola, {{nombre}}! 👋 Soy del equipo de Three Inmobiliaria.\n\n` +
+      `Hace unos meses mostraste interés en nuestro proyecto y, como hemos renovado la presentación con muchas novedades, quería retomar el contacto contigo. 😊\n\n` +
+      `Antes de enviarte nada, una pregunta rápida para saber qué puede encajarte mejor:\n\n` +
       `👉 ¿Actualmente trabajas en el sector inmobiliario 🏠 o estás buscando una oportunidad para generar ingresos extra? 💰`,
   },
   verano: {
