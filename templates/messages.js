@@ -103,6 +103,25 @@ const PLANTILLAS_META = {
   // BAJA inmediata (sin más mensajes). El tercer botón es el que evita que,
   // quien no quiere, nos bloquee.
   botones: ['Soy agente inmobiliario', 'Busco ingresos extra', 'No me interesa'],
+  // Recordatorios de mitad de embudo (cuenta nueva de Three). Botones propios.
+  recordatorio_presentacion: {
+    nombreSugerido: 'recordatorio_presentacion_three',
+    variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_PRESENTACION',
+    cuerpo:
+      `Hola {{nombre}} 👋 Te escribo de Three Inmobiliaria.\n\n` +
+      `Vi que no llegaste a terminar la presentación. Al final se te abre la opción de apuntarte a la sesión de dudas en directo con Arkaitz.\n\n` +
+      `Tienes el enlace en el mensaje anterior. Si ya no te interesa, pulsa "No me interesa" y no te escribimos más.`,
+    botones: ['Pásame el enlace', 'No me interesa'],
+  },
+  recordatorio_sesion: {
+    nombreSugerido: 'recordatorio_sesion_three',
+    variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_SESION',
+    cuerpo:
+      `Hola {{nombre}} 👋 Te escribo de Three Inmobiliaria.\n\n` +
+      `Ya viste la presentación: el siguiente paso es la sesión de dudas en grupo con Arkaitz por Zoom (30 min), donde puedes preguntar todo en directo.\n\n` +
+      `¿Te paso el enlace para elegir día? Si no es para ti, pulsa "No me interesa".`,
+    botones: ['Sí, pásame el enlace', 'No me interesa'],
+  },
 };
 
 function _textoSegmento(segmento, nombre) {
@@ -159,8 +178,8 @@ function mensajeRamaProfesional({ nombre, enlaceLanding }) {
     `¡Genial ${nombre}!\n\n` +
     `Aquí tienes la presentación completa del proyecto. Empieza por el vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Al terminar el webinar se te desbloquea el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol} 🎯\n\n` +
-    `Lo hacemos así a propósito: a esa reunión se viene con la presentación ya vista, para no hacerte perder el tiempo. Allí solo se habla de tu caso.`
+    `Al terminar el webinar se te desbloquea el botón para apuntarte a la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom 🎯\n\n` +
+    `Lo hacemos así a propósito: a esa sesión se viene con la presentación ya vista, para aprovecharla resolviendo dudas en directo.`
   );
 }
 
@@ -169,8 +188,8 @@ function mensajeRamaEmprendedor({ nombre, enlaceLanding }) {
     `Entendido ${nombre} 🚀\n\n` +
     `Aquí tienes la presentación, va al grano. Verás primero un vídeo corto y, según avanzas, se desbloquea el resto:\n` +
     `${enlaceLanding}\n\n` +
-    `Al terminar el webinar se te desbloquea el botón para reservar tu reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol} 🎯\n\n` +
-    `Lo hacemos así a propósito: a esa reunión se viene con la presentación ya vista, para no hacerte perder el tiempo. Allí solo se habla de tu caso.` +
+    `Al terminar el webinar se te desbloquea el botón para apuntarte a la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom 🎯\n\n` +
+    `Lo hacemos así a propósito: a esa sesión se viene con la presentación ya vista, para aprovecharla resolviendo dudas en directo.` +
     _notaPortugues('emprendedor')
   );
 }
@@ -191,7 +210,7 @@ function mensajeAccesoVideoTrasReserva({ nombre, enlaceLanding, perfil }) {
     `¡Listo ${nombre}! Tu hueco está reservado ✅\n\n` +
     `Aquí tienes el acceso a la presentación. Puedes verla ya mismo o a la hora que reservaste, como prefieras:\n` +
     `${enlaceLanding}\n\n` +
-    `Cuando termines el vídeo, en la propia página se activa el botón para reservar tu reunión 1 a 1 con Arkaitz 🎯` +
+    `Cuando termines el vídeo, en la propia página se activa el botón para apuntarte a la sesión de dudas con Arkaitz 🎯` +
     _notaPortugues(perfil)
   );
 }
@@ -200,10 +219,10 @@ function mensajeAccesoVideoTrasReserva({ nombre, enlaceLanding, perfil }) {
 function mensajeAcceso1a1({ nombre, enlace1a1 }) {
   return (
     `¡Bien ${nombre}! 🙌\n\n` +
-    `Último paso: una reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom para ver tu caso y diseñar tu entrada al proyecto.\n\n` +
-    `Reserva el hueco que mejor te encaje:\n` +
+    `Último paso: la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom (30 min). Ahí resuelves todas tus dudas en directo.\n\n` +
+    `Elige el día que mejor te encaje:\n` +
     `${enlace1a1}\n\n` +
-    `Los huecos vuelan, intenta cogerlo cuanto antes.`
+    `Las plazas de cada sesión son limitadas.`
   );
 }
 
@@ -326,16 +345,16 @@ function recordatorioFunnel3({ nombre, enlaceLanding, etapa, perfil }) {
 // 1-a-1) pero no ha reservado. Se le reenvía el enlace individual.
 function recordatorio1a1Primero({ nombre, enlace1a1 }) {
   return (
-    `Oye ${nombre}, vi que no llegaste a reservar tu reunión 1 a 1 con Arkaitz 👀\n\n` +
-    `Es el último paso. Coge tu hueco aquí:\n` +
+    `Oye ${nombre}, vi que aún no te has apuntado a la sesión de dudas con Arkaitz 👀\n\n` +
+    `Es el último paso. Elige día aquí:\n` +
     `${enlace1a1}`
   );
 }
 
 function recordatorio1a1Segundo({ nombre, enlace1a1 }) {
   return (
-    `${nombre}, los huecos de la agenda de Arkaitz van volando.\n\n` +
-    `Si quieres ver tu caso con él, reserva hoy:\n` +
+    `${nombre}, las plazas de las sesiones de Arkaitz van volando.\n\n` +
+    `Si quieres resolver tus dudas con él, apúntate hoy:\n` +
     `${enlace1a1}`
   );
 }
@@ -366,7 +385,7 @@ function mensajePresentacionVerAhora({ nombre, enlacePresentacion }) {
     `Genial ${nombre}, vamos al lío 🚀\n\n` +
     `Aquí lo tienes:\n` +
     `${enlacePresentacion}\n\n` +
-    `Tómatelo con calma, son 25 min. Cuando termines te activamos una reunión 1 a 1 con Arkaitz para resolver dudas y ver tu plan de entrada.`
+    `Tómatelo con calma, son 25 min. Cuando termines se te abre la sesión de dudas en grupo con Arkaitz.`
   );
 }
 
@@ -386,7 +405,7 @@ function mensajePresentacionReservar({ nombre, enlaceReunion }) {
     `Perfecto ${nombre}, así con tranquilidad mejor 📅\n\n` +
     `Reserva el hueco que mejor te encaje:\n` +
     `${enlaceReunion}\n\n` +
-    `Te mandaré un recordatorio justo antes para que no se te pase. Y al terminar, abrimos la reunión 1 a 1 con Arkaitz.`
+    `Te mandaré un recordatorio justo antes para que no se te pase. Y al terminar, se te abre la sesión de dudas con Arkaitz.`
   );
 }
 
@@ -440,7 +459,7 @@ function recordatorioReunion3({ nombre, enlaceReunion }) {
 function mensajeCierre({ nombre, enlaceCalendly }) {
   return (
     `¡${nombre}! Mil gracias por sumarte hoy 🙌\n\n` +
-    `Ya tienes una idea bastante completa del proyecto. Si te ves dentro y quieres dar el paso, te toca una reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}, para verlo con tu caso concreto.\n\n` +
+    `Ya tienes una idea bastante completa del proyecto. Si te ves dentro y quieres dar el paso, te toca la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}.\n\n` +
     `Agenda aquí tu hueco (van por orden, intenta cogerlo cuanto antes):\n` +
     `${enlaceCalendly}`
   );
@@ -467,7 +486,7 @@ function mensajeInvitacionPresentacion({ nombre, enlaceGrupal }) {
     `El siguiente paso es la presentación del proyecto EN DIRECTO por Zoom: unos 30 minutos y al final puedes preguntar lo que quieras. Hacemos una al día.\n\n` +
     `Reserva el hueco que mejor te encaje aquí:\n` +
     `${enlaceGrupal}\n\n` +
-    `Al terminar la presentación se te abre la opción de reservar una reunión 1 a 1 con ${config.agent.directorNombre}, ${config.agent.directorRol}, para ver tu caso.`
+    `Al terminar la presentación se te abre la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}.`
   );
 }
 

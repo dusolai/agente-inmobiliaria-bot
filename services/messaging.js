@@ -227,8 +227,12 @@ async function sendTextoOPlantilla(lead, texto, plantilla = null, opts = {}) {
   return { success: false, mode: 'fuera_ventana', error: 'ventana de 24h cerrada' };
 }
 
-// Plantilla aprobada que recuerda reservar el 1-a-1 (variable numerada {{1}})
-const PLANTILLA_1A1 = { name: 'recordatorio_reunion', lang: 'en', varNames: ['1'] };
+// Plantilla aprobada que recuerda reservar la sesión de dudas en grupo
+// ({{nombre}}). null si no está configurada: entonces, fuera de la ventana de
+// 24 h, no se manda nada en vez de una plantilla que no existe.
+const PLANTILLA_1A1 = config.whatsapp.templateRecordatorioSesion
+  ? { name: config.whatsapp.templateRecordatorioSesion, lang: config.whatsapp.templateLang, varNames: ['nombre'] }
+  : null;
 
 module.exports = {
   sendTextMessage, sendPrimerContacto, sendTemplate, sendTextoOPlantilla, dentroDeVentana,

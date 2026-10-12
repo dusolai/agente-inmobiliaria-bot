@@ -359,7 +359,7 @@ function activationReset() {
     assert.strictEqual(de(), 3, '"1" → landing');
     await conversationFlow.handleIncoming(tel, 'dale bro');
     assert.strictEqual(de(), 4, '"dale bro" tras la landing → respuesta (antes: "escribiendo…" y nada)');
-    assert.ok(/lead=/.test(paraTel(tel)[3].body) && /reunión/.test(paraTel(tel)[3].body), 'le anima a ver la presentación con su enlace');
+    assert.ok(/lead=/.test(paraTel(tel)[3].body) && /sesión/.test(paraTel(tel)[3].body), 'le anima a ver la presentación con su enlace');
     await conversationFlow.handleIncoming(tel, 'ok');
     assert.strictEqual(de(), 4, 'no se repite la respuesta automática una y otra vez');
     await conversationFlow.handleIncoming(tel, 'prefiero hablar con alguien, llámame');

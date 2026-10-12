@@ -31,6 +31,8 @@ const REQUERIDAS = [
   { clave: 'septiembre', variable: 'WHATSAPP_TEMPLATE_SEPTIEMBRE', para: 'Campaña Septiembre' },
   { clave: 'directo', variable: 'WHATSAPP_TEMPLATE_DIRECTO', para: 'Nuevos en directo' },
   { clave: 'recordatorio', variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_CUALIFICACION', para: 'Recordatorio único (todas)' },
+  { clave: 'recordatorio_presentacion', variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_PRESENTACION', para: 'Recordatorio: no terminó la presentación' },
+  { clave: 'recordatorio_sesion', variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_SESION', para: 'Recordatorio: no se apuntó a la sesión' },
 ];
 
 async function listar() {

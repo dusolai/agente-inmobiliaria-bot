@@ -49,6 +49,13 @@ module.exports = {
     // Recordatorio ÚNICO a quien no contestó la pregunta inicial: texto
     // distinto al primero y botón "No me interesa" (ver PLANTILLAS_META).
     templateRecordatorioCualificacion: process.env.WHATSAPP_TEMPLATE_RECORDATORIO_CUALIFICACION || '',
+    // Recordatorios de las fases 2B (no terminó la presentación) y 3 (no
+    // reservó la sesión). Los nombres antiguos (recordatorio_presentacion /
+    // recordatorio_reunion) eran de la cuenta de Dusolai y NO existen en la de
+    // Three: Meta los rechazaba con 132001. Sin plantilla configurada, no se
+    // manda nada (no se gasta ni se molesta).
+    templateRecordatorioPresentacion: process.env.WHATSAPP_TEMPLATE_RECORDATORIO_PRESENTACION || '',
+    templateRecordatorioSesion: process.env.WHATSAPP_TEMPLATE_RECORDATORIO_SESION || '',
   },
 
   // Canal Telegram (modo piloto previo a producción)
@@ -98,8 +105,12 @@ module.exports = {
     landingEmprendedorUrl: process.env.LANDING_EMPRENDEDOR_URL || 'https://three-inmobiliaria-emprende.pages.dev/',
 
     // Dos integraciones de Calendly: grupal (genérica) e individual (post-cierre)
-    calendlyGrupalUrl: process.env.CALENDLY_GRUPAL_URL || process.env.REUNION_GRUPAL_URL || 'https://calendly.com/arkaitzasr24/presentacion-de-negocio-three-inmobiliaria',
-    calendlyIndividualUrl: process.env.CALENDLY_INDIVIDUAL_URL || process.env.CALENDLY_URL || 'https://calendly.com/arkaitzasr24/reunion-1-a-1-three-inmobiliaria',
+    // 12-10: Arkaitz borró los eventos antiguos ("reunion-1-a-1…" y
+    // "presentacion-de-negocio…") y creó UNO solo, en grupo: "Sesión de dudas"
+    // (30 min, Zoom). CALENDLY_SESION_URL manda sobre las variables antiguas,
+    // que en Seenode siguen apuntando a los eventos borrados.
+    calendlyGrupalUrl: process.env.CALENDLY_SESION_URL || 'https://calendly.com/arkaitzasr24/nueva-reunion',
+    calendlyIndividualUrl: process.env.CALENDLY_SESION_URL || 'https://calendly.com/arkaitzasr24/nueva-reunion',
 
     // Compatibilidad con nombres antiguos
     calendlyUrl: process.env.CALENDLY_URL || '#',

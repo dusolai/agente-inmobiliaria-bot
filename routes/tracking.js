@@ -142,7 +142,7 @@ router.get('/calendly-booked', async (req, res) => {
         console.log(`📅 [Tracking] Reserva 1-A-1 confirmada: ${lead.nombre}`);
         await messaging.sendTextMessage(
           lead.telefono,
-          `¡Listo ${lead.nombre}! Tu reunión con Arkaitz está reservada ✅\n\nNos vemos en Zoom a la hora que has elegido. Te llegará un recordatorio antes.`
+          `¡Listo ${lead.nombre}! Tu plaza en la sesión de dudas con Arkaitz está reservada ✅\n\nEl enlace de Zoom te llega por email con la confirmación de Calendly. Nos vemos allí 🙌`
         );
       } else {
         console.log(`📅 [Tracking] Reserva recibida pero el estado es ${lead.estado} (lead ${lead.nombre})`);

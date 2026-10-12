@@ -117,7 +117,7 @@ router.post('/calendly', async (req, res) => {
       leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
       await messaging.sendTextMessage(
         lead.telefono,
-        `¡Listo ${lead.nombre}! Tu reunión con Arkaitz está reservada ✅\n\nNos vemos en Zoom a la hora que has elegido. Te llegará un recordatorio antes.`
+        `¡Listo ${lead.nombre}! Tu plaza en la sesión de dudas con Arkaitz está reservada ✅\n\nEl enlace de Zoom te llega por email con la confirmación de Calendly. Nos vemos allí 🙌`
       );
       console.log(`📅 [CalendlyWebhook] Reserva 1-A-1 de ${lead.nombre} confirmada`);
     } else {

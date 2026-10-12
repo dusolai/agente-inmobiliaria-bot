@@ -532,11 +532,18 @@ async function procesarRecordatoriosFase2B() {
     console.log(`🔔 [Scheduler] Recordatorio Funnel (${etapa}) #${fase2b.enviados + 1} → ${lead.nombre}`);
     // recordatorio_presentacion usa variable CON NOMBRE ({{nombre}}), así que
     // hay que declararla como tal o Meta la rechaza (132000).
-    const envio = await messaging.sendTemplate(
-      lead.telefono,
-      [lead.nombre],
-      { name: 'recordatorio_presentacion', lang: 'es', varNames: ['nombre'] }
-    );
+    // Sin plantilla configurada en la cuenta de Three: no se manda nada.
+    if (!config.whatsapp.templateRecordatorioPresentacion) {
+      if (messaging.dentroDeVentana(lead.telefono)) {
+        // dentro de 24 h sí se puede mandar texto libre
+      } else {
+        _marcarIntento(lead, 'fase2b', true);
+        continue;
+      }
+    }
+    const envio = config.whatsapp.templateRecordatorioPresentacion
+      ? await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: config.whatsapp.templateRecordatorioPresentacion, lang: config.whatsapp.templateLang, varNames: ['nombre'] })
+      : await messaging.sendTextMessage(lead.telefono, messages.recordatorioFunnel1({ nombre: lead.nombre, enlaceLanding: conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id), etapa, perfil: lead.perfil }));
     // Rechazo permanente de Meta (plantilla mal, política, etc.): NO reintentar
     // cada 5 min. Registramos el intento para que respete el intervalo. Solo el
     // canal caído (development) reintenta en el próximo ciclo sin gastar intento.
@@ -628,10 +635,11 @@ async function procesarRecordatoriosFase3() {
     // recordatorio_reunion dice "reserva tu 1-a-1 con Arkaitz" — es suficiente.
     console.log(`🔔 [Scheduler] Recordatorio 1-a-1 #${fase3.enviados + 1} → ${lead.nombre}`);
     // recordatorio_reunion usa variable numerada ({{1}}) → formato posicional.
-    const envio = await messaging.sendTemplate(
-      lead.telefono,
-      [lead.nombre],
-      { name: 'recordatorio_reunion', lang: 'en', varNames: ['1'] }  // en: aunque inglés, funciona igual
+    const enlaceSesion = conversationFlow.enlaceRedirectorCalendly(lead, 'individual');
+    const envio = await messaging.sendTextoOPlantilla(
+      lead,
+      messages.recordatorio1a1Primero({ nombre: lead.nombre, enlace1a1: enlaceSesion }),
+      messaging.PLANTILLA_1A1
     );
     // Igual que Fase 2B: si Meta lo rechaza (permanente) no reintentamos cada
     // 5 min; registramos el intento para respetar el intervalo.
