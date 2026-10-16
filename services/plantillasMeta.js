@@ -79,14 +79,15 @@ async function requeridas() {
     requeridas: REQUERIDAS.map((r) => {
       const def = messages.PLANTILLAS_META[r.clave];
       const enMeta = porNombre.get(def.nombreSugerido) || null;
-      const enSeenode = r.clave === 'recordatorio'
-        ? config.whatsapp.templateRecordatorioCualificacion
+      const enSeenode = r.clave === 'recordatorio' ? config.whatsapp.templateRecordatorioCualificacion
+        : r.clave === 'recordatorio_presentacion' ? config.whatsapp.templateRecordatorioPresentacion
+        : r.clave === 'recordatorio_sesion' ? config.whatsapp.templateRecordatorioSesion
         : configuradas[r.clave];
       return {
         ...r,
         nombre: def.nombreSugerido,
         cuerpo: def.cuerpo,
-        botones: messages.PLANTILLAS_META.botones,
+        botones: def.botones || messages.PLANTILLAS_META.botones,
         enMeta: enMeta ? { status: enMeta.status, rejected_reason: enMeta.rejected_reason, language: enMeta.language } : null,
         enSeenode: enSeenode || null,
         seenodeOk: enSeenode === def.nombreSugerido,
@@ -113,7 +114,7 @@ async function crear(clave) {
       },
       {
         type: 'BUTTONS',
-        buttons: messages.PLANTILLAS_META.botones.map((t) => ({ type: 'QUICK_REPLY', text: t })),
+        buttons: (def.botones || messages.PLANTILLAS_META.botones).map((t) => ({ type: 'QUICK_REPLY', text: t })),
       },
     ],
   };

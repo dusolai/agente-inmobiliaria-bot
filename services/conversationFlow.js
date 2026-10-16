@@ -125,6 +125,7 @@ function esAutoRespuesta(texto) {
 // un saludo no se contesta: la pregunta está justo encima. Pasaba al escribir
 // "ei" + "hola" seguidos: el primero lanzaba la bienvenida y el segundo un
 // "Perdona, igual no me he explicado bien" (parecía un mensaje duplicado).
+const PIDE_ENLACE_REGEX = /\b(pasame|mandame|enviame|dame|pasa|manda|envia)( me)? (el )?(enlace|link)\b/;
 const SALUDO_REGEX = /^(e+i+|e+y+|hey+|hola+|holi+s?|buenas+|buenos dias|buenas (tardes|noches)|hi|hello|que tal|saludos)( (que tal|buenas|hola))?[\s!.?¡¿👋😊🙂]*$/u;
 function esSaludo(texto) {
   return SALUDO_REGEX.test(normalizar(texto));
@@ -335,6 +336,17 @@ async function handleIncoming(telefono, texto, extra = {}) {
       : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
     console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing ENVIADA (pdte. de ver)`);
     await messaging.sendTextMessage(lead.telefono, texto2);
+    return;
+  }
+
+  // ─── Botón "Pásame el enlace" de los recordatorios ──────────────
+  // Quien lo pulsa quiere apuntarse: se le manda el enlace de la sesión de
+  // dudas (Calendly) directamente, sin volver a pasar por la landing.
+  if (PIDE_ENLACE_REGEX.test(normalizar(texto))) {
+    const enlaceSesion = enlaceRedirectorCalendly(lead, 'grupal');
+    activityLog.appendActivity(lead.id, 'pide_enlace_sesion', { texto: String(texto).slice(0, 80) });
+    console.log(`📅 [Flujo] ${lead.nombre} pidió el enlace → sesión de dudas enviada`);
+    await messaging.sendTextMessage(lead.telefono, messages.mensajeEnlaceSesion({ nombre: lead.nombre, enlaceSesion }));
     return;
   }
 

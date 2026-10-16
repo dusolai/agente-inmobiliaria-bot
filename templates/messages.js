@@ -109,8 +109,8 @@ const PLANTILLAS_META = {
     variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_PRESENTACION',
     cuerpo:
       `Hola {{nombre}} 👋 Te escribo de Three Inmobiliaria.\n\n` +
-      `Vi que no llegaste a terminar la presentación. Al final se te abre la opción de apuntarte a la sesión de dudas en directo con Arkaitz.\n\n` +
-      `Tienes el enlace en el mensaje anterior. Si ya no te interesa, pulsa "No me interesa" y no te escribimos más.`,
+      `Vi que empezaste la presentación pero no llegaste al final. Si te quedaron dudas, lo más rápido es la sesión de dudas en grupo con Arkaitz por Zoom: 30 min, gratis y sin compromiso.\n\n` +
+      `¿Te paso el enlace para elegir día? Si ya no te interesa, pulsa "No me interesa" y no te escribimos más.`,
     botones: ['Pásame el enlace', 'No me interesa'],
   },
   recordatorio_sesion: {
@@ -490,6 +490,22 @@ function mensajeInvitacionPresentacion({ nombre, enlaceGrupal }) {
   );
 }
 
+// Respuesta a los botones "Pásame el enlace" / "Sí, pásame el enlace" de los
+// recordatorios: el enlace de la sesión de dudas, directo, sin más pasos.
+function mensajeEnlaceSesion({ nombre, enlaceSesion }) {
+  return (
+    `¡Perfecto ${nombre}! 🙌
+
+` +
+    `Aquí eliges día para la sesión de dudas en grupo con ${config.agent.directorNombre} por Zoom (30 min, preguntas en directo):
+` +
+    `${enlaceSesion}
+
+` +
+    `Si te viene mejor otro momento, dímelo por aquí.`
+  );
+}
+
 function mensajeReservaPresentacionConfirmada({ nombre }) {
   return (
     `¡Listo ${nombre}! Tu plaza en la presentación está reservada ✅\n\n` +
@@ -506,6 +522,7 @@ module.exports = {
   recordatorioCualificacion,
   mensajeInvitacionPresentacion,
   mensajeReservaPresentacionConfirmada,
+  mensajeEnlaceSesion,
   mensajeRamaProfesional,
   mensajeRamaEmprendedor,
   mensajeAccesoVideoTrasReserva,

@@ -323,6 +323,13 @@ function activationReset() {
     assert.strictEqual(paraTel('34622000009').length, 0, 'y no se le manda nada fuera de la ventana');
     ok('sin plantilla de recordatorio, quien contestó espera (no se descarta sin haber recibido nada)');
 
+    // d3) Botón "Sí, pásame el enlace" del recordatorio → enlace de la sesión (Calendly)
+    await conversationFlow.handleIncoming('34622000009', 'Sí, pásame el enlace');
+    const r3 = paraTel('34622000009');
+    assert.strictEqual(r3.length, 1, 'una sola respuesta');
+    assert.ok(/\/r\/grupal\?l=/.test(r3[0].body) && /sesión de dudas/.test(r3[0].body), 'recibe el enlace de la sesión de dudas');
+    ok('"Pásame el enlace" (botón del recordatorio) manda directo el enlace de Calendly');
+
     // e) Freno de emergencia: error de cuenta de Meta → nada sale hasta reanudar
     scheduler.bloquearEnvios(131042, 'Business eligibility payment issue');
     const n1 = enviados.length;
@@ -369,14 +376,14 @@ function activationReset() {
     assert.strictEqual(de(), 3, '"1" → landing');
     await conversationFlow.handleIncoming(tel, 'dale bro');
     assert.strictEqual(de(), 4, '"dale bro" tras la landing → respuesta (antes: "escribiendo…" y nada)');
-    assert.ok(/lead=/.test(paraTel(tel)[3].body) && /sesión/.test(paraTel(tel)[3].body), 'le anima a ver la presentación con su enlace');
+    assert.ok(/\/r\/grupal\?l=/.test(paraTel(tel)[3].body) && /sesión de dudas/.test(paraTel(tel)[3].body), 'le invita a reservar la sesión con el enlace de Calendly');
     await conversationFlow.handleIncoming(tel, 'ok');
     assert.strictEqual(de(), 4, 'no se repite la respuesta automática una y otra vez');
     await conversationFlow.handleIncoming(tel, 'prefiero hablar con alguien, llámame');
     assert.strictEqual(de(), 5, 'pide una persona → aviso');
-    assert.ok(/Arkaitz/.test(paraTel(tel)[4].body));
+    assert.ok(/\/r\/grupal\?l=/.test(paraTel(tel)[4].body) && !/te escribe/.test(paraTel(tel)[4].body), 'no promete que le escribirán: le da la sesión');
     assert.ok(leadManager.getLeadByPhone(tel).pideHumanoAt, 'queda marcado para que le escriba una persona');
-    ok('router: no contesta saludos cruzados, responde "dale" tras la landing, no repite, pasa a persona');
+    ok('router: no contesta saludos cruzados, responde "dale" tras la landing, no repite, pide persona → enlace de la sesión');
   }
 
   console.log(`\n🎉 Todo correcto (${paso} comprobaciones, ${enviados.length} mensajes simulados, 0 reales).\n`);

@@ -46,6 +46,9 @@ function _contextoDeEstado(lead) {
   const landing = (lead.perfil === 'profesional'
     ? config.landing.landingProfesionalUrl
     : config.landing.landingEmprendedorUrl) + `?lead=${lead.id}`;
+  // Enlace directo a la sesión de dudas (Calendly grupal, vía redirector).
+  // Objetivo del embudo (16-10): que lleguen a Calendly; la landing es opcional.
+  const sesion = `${base}/r/grupal?l=${encodeURIComponent(lead.id)}`;
 
   switch (lead.estado) {
     case 'esperando_cualificacion':
@@ -55,23 +58,25 @@ function _contextoDeEstado(lead) {
       };
     case 'video_enviado':
       return {
-        objetivo: 'que entre en la página y vea la presentación en vídeo (primero el vídeo corto y, según avanza, se desbloquea el webinar). Al terminar el webinar, en la propia página se activa el botón para apuntarse a la sesión de dudas en grupo. Contesta su duda y recuérdale el enlace de la presentación.',
-        enlace: landing,
+        objetivo: 'que RESERVE la sesión de dudas en grupo (Zoom, 30 min, gratis y sin compromiso) en el enlace de la sesión. Contesta su duda concreta en 1-2 frases y termina invitándole a elegir día. La presentación en vídeo es opcional: solo si pide más información antes de apuntarse.',
+        enlace: sesion,
+        enlacePresentacion: landing,
       };
     case 'video_visto':
       return {
-        objetivo: 'que entre en la página de la presentación y vea los vídeos hasta el final (al terminar se le desbloquea el botón para agendar). Contesta su duda y recuérdale el acceso.',
-        enlace: landing,
+        objetivo: 'que RESERVE la sesión de dudas en grupo (Zoom, 30 min, gratis y sin compromiso): ya ha visto el vídeo, así que el siguiente paso es elegir día en el enlace de la sesión. Contesta su duda concreta y termina invitándole a reservar.',
+        enlace: sesion,
+        enlacePresentacion: landing,
       };
     case 'reunion_registrado':
       return {
         objetivo: 'que se apunte a la sesión de dudas en grupo con Arkaitz (Zoom, 30 min) en el enlace. Contesta su duda y recuérdale el enlace.',
-        enlace: `${base}/r/individual?l=${encodeURIComponent(lead.id)}`,
+        enlace: sesion,
       };
     default:
       return {
-        objetivo: 'atenderle con amabilidad; si necesita algo concreto, dile que Arkaitz o alguien del equipo le escribe en cuanto pueda.',
-        enlace: null,
+        objetivo: 'atenderle con amabilidad y, si muestra interés, invitarle a la sesión de dudas en grupo en el enlace.',
+        enlace: sesion,
       };
   }
 }
@@ -85,13 +90,17 @@ function _systemPrompt(lead) {
     'Contexto del negocio: Three Inmobiliaria incorpora agentes inmobiliarios y personas que buscan un ingreso extra ' +
     '(prescriptores) a su red. El proceso con cada interesado es: (1) pregunta de perfil — responder 1 si es agente, ' +
     '2 si busca ingreso extra; (2) ver la presentación en vídeo en la página que se le envía (primero un vídeo corto y luego el webinar); ' +
-    `(3) sesión de dudas EN GRUPO con ${config.agent.directorNombre} (${config.agent.directorRol}) por Zoom, 30 min, donde se resuelven las dudas en directo. Se apunta en el enlace que recibe al terminar la presentación.\n\n` +
+    `(3) sesión de dudas EN GRUPO con ${config.agent.directorNombre} (${config.agent.directorRol}) por Zoom, 30 min, gratis y sin compromiso, donde se resuelven las dudas en directo. Se apunta eligiendo día en un enlace de Calendly.\n\n` +
     'REGLAS ESTRICTAS:\n' +
-    '- NO inventes datos, cifras, precios, comisiones ni promesas. Si preguntan cuánto cuesta o cuánto se gana, di que ' +
-    'eso se explica con detalle en la presentación y en la sesión de dudas con Arkaitz, sin dar números.\n' +
-    '- Si pide hablar con una persona, dile que Arkaitz o alguien del equipo le escribirá en cuanto pueda.\n' +
+    '- NO inventes datos, cifras, precios, comisiones ni promesas. Si preguntan cuánto cuesta, cuánto se gana, si hay que ser autónomo, ' +
+    'o por otras empresas/cursos, reconoce que es una pregunta lógica, di que apuntarse a la sesión es gratis y sin compromiso y que ' +
+    `justo eso lo resuelve ${config.agent.directorNombre} en directo en la sesión de dudas, y dale el enlace para elegir día.\n` +
+    `- NUNCA digas que ${config.agent.directorNombre} o el equipo le escribirá o le llamará: no es así. Si pide hablar con una persona, ` +
+    `dile que donde habla con ${config.agent.directorNombre} es en la sesión de dudas por Zoom y dale el enlace.\n` +
+    '- NO repitas frases que ya le hayas enviado (mira la conversación). Responde a lo que pregunta en concreto, con otras palabras.\n' +
     `- Tu objetivo ahora mismo: ${ctx.objetivo}\n` +
-    (ctx.enlace ? `- Enlace que puedes incluir si encaja: ${ctx.enlace}\n` : '- No incluyas ningún enlace.\n') +
+    (ctx.enlace ? `- Enlace de la sesión de dudas (inclúyelo siempre que le invites a reservar): ${ctx.enlace}\n` : '- No incluyas ningún enlace.\n') +
+    (ctx.enlacePresentacion ? `- Enlace de la presentación en vídeo (solo si pide más información antes de apuntarse): ${ctx.enlacePresentacion}\n` : '') +
     '- Responde SOLO con el texto del mensaje de WhatsApp, sin comillas ni explicaciones.'
   );
 }
@@ -265,7 +274,7 @@ function _decidirPorReglas(lead, texto) {
   const HORA = 3600 * 1000;
 
   if (HUMANO_REGEX.test(t)) {
-    return { accion: 'humano', texto: `Claro${nombre}, se lo paso a Arkaitz y te escribe él en cuanto pueda 🙂` };
+    return { accion: 'humano', texto: `Claro${nombre} 🙂 Donde hablas con ${config.agent.directorNombre} en directo es en la sesión de dudas por Zoom (30 min, gratis y sin compromiso). Elige el día que te venga bien aquí: ${ctx.enlace}` };
   }
   // No repetir la misma respuesta automática una y otra vez: si ya hubo una
   // hace poco en esta misma fase, silencio (queda en "Sin responder").
@@ -281,8 +290,8 @@ function _decidirPorReglas(lead, texto) {
       return {
         accion: 'responder',
         texto: esAck
-          ? `¡Perfecto${nombre}! 🙌 Tómate tu tiempo con la presentación. Al terminar el webinar te aparece el botón para apuntarte a la sesión de dudas con Arkaitz.\n\nPor si la necesitas otra vez: ${ctx.enlace}`
-          : `Buena pregunta${nombre}. Eso se explica con detalle en la presentación y, lo que quede, lo resuelves directamente con Arkaitz en la sesión de dudas.\n\nAquí la tienes: ${ctx.enlace}`,
+          ? `¡Genial${nombre}! 🙌 El siguiente paso es la sesión de dudas en grupo con ${config.agent.directorNombre} por Zoom (30 min, gratis). Elige día aquí: ${ctx.enlace}`
+          : `Buena pregunta${nombre}, es justo lo que ${config.agent.directorNombre} resuelve en directo en la sesión de dudas por Zoom (30 min, gratis y sin compromiso). Elige el día que mejor te venga: ${ctx.enlace}`,
       };
     case 'reunion_registrado':
       return {
@@ -293,7 +302,7 @@ function _decidirPorReglas(lead, texto) {
       };
     default:
       if (esAck) return { accion: 'silencio', motivo: 'ok sin nada pendiente' };
-      return { accion: 'humano', texto: `Gracias${nombre}, se lo paso al equipo y te escriben en cuanto puedan 🙂` };
+      return { accion: 'responder', texto: `Gracias${nombre} 🙂 Cualquier duda la resuelve ${config.agent.directorNombre} en directo en la sesión por Zoom (30 min, gratis): ${ctx.enlace}` };
   }
 }
 
@@ -304,9 +313,9 @@ function _promptRouter(lead) {
     '{"accion":"responder|perfil|baja|humano|silencio","texto":"mensaje a enviar o vacío","perfil":"profesional|emprendedor|"}\n' +
     '- "perfil": su mensaje deja claro si es agente/trabaja en inmobiliaria (profesional) o busca ingresos extra (emprendedor). Solo si está esperando la pregunta 1/2 o pide la otra presentación. texto vacío.\n' +
     '- "baja": no quiere seguir o pide que no le escribamos. texto vacío.\n' +
-    '- "humano": pide hablar con una persona, se queja, o plantea algo que no debes resolver tú. texto = aviso breve de que Arkaitz o el equipo le escribe.\n' +
+    `- "humano": pide hablar con una persona o se queja. texto = donde habla con ${config.agent.directorNombre} es la sesión de dudas por Zoom + el enlace (NUNCA prometas que le escribirán).\n` +
     '- "silencio": no hace falta contestar (un "ok"/"hola" cuando ya le hemos dicho lo que tiene que hacer justo antes y no ha pasado tiempo, o mensajes que se cruzan). texto vacío.\n' +
-    '- "responder": cualquier otro caso. texto = respuesta corta que conteste y le lleve al siguiente paso. Si da un "ok/dale/gracias" a la presentación, anímale a verla y recuerda que al final se reserva la reunión.\n' +
+    '- "responder": cualquier otro caso. texto = respuesta corta que conteste su duda y le lleve a reservar la sesión de dudas con el enlace. Si da un "ok/dale/gracias", invítale a elegir día.\n' +
     'Ante la duda entre silencio y responder, responde: es peor dejar a alguien sin contestar.'
   );
 }
