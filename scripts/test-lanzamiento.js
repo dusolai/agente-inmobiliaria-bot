@@ -313,6 +313,16 @@ function activationReset() {
     assert.strictEqual(paraTel('34622000003').length, 1, 'un solo recordatorio, nunca dos');
     ok('pregunta inicial una sola vez; como mucho un recordatorio distinto; descarte silencioso');
 
+    // d2) Fase 2B sin plantilla de recordatorio: el lead que contestó NO se descarta
+    config.whatsapp.templateRecordatorioPresentacion = '';
+    const v = leadManager.createLead({ nombre: 'Vera', telefono: '34622000009', campana: vivas.id, segmento: 'viejos' });
+    leadManager.updateLead(v.id, { estado: 'video_enviado', perfil: 'emprendedor', updatedAt: hace(100), recordatorios: { ...v.recordatorios, fase2b: { enviados: 0, ultimoEnvio: hace(100) } } });
+    for (let i = 0; i < 4; i++) await scheduler.ejecutarCiclo();
+    assert.strictEqual(leadManager.getLeadById(v.id).estado, 'video_enviado', 'sin plantilla no se descarta a quien contestó');
+    assert.strictEqual(((leadManager.getLeadById(v.id).recordatorios || {}).fase2b || {}).enviados || 0, 0, 'ni se cuenta un recordatorio que no salió');
+    assert.strictEqual(paraTel('34622000009').length, 0, 'y no se le manda nada fuera de la ventana');
+    ok('sin plantilla de recordatorio, quien contestó espera (no se descarta sin haber recibido nada)');
+
     // e) Freno de emergencia: error de cuenta de Meta → nada sale hasta reanudar
     scheduler.bloquearEnvios(131042, 'Business eligibility payment issue');
     const n1 = enviados.length;

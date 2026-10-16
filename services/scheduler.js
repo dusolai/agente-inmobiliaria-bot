@@ -532,14 +532,13 @@ async function procesarRecordatoriosFase2B() {
     console.log(`🔔 [Scheduler] Recordatorio Funnel (${etapa}) #${fase2b.enviados + 1} → ${lead.nombre}`);
     // recordatorio_presentacion usa variable CON NOMBRE ({{nombre}}), así que
     // hay que declararla como tal o Meta la rechaza (132000).
-    // Sin plantilla configurada en la cuenta de Three: no se manda nada.
-    if (!config.whatsapp.templateRecordatorioPresentacion) {
-      if (messaging.dentroDeVentana(lead.telefono)) {
-        // dentro de 24 h sí se puede mandar texto libre
-      } else {
-        _marcarIntento(lead, 'fase2b', true);
-        continue;
-      }
+    // Sin plantilla configurada en la cuenta de Three y con la ventana de 24 h
+    // cerrada: NO se manda nada y NO se cuenta como recordatorio. (Antes se
+    // contaba: a las 72 h el lead se descartaba sin haber recibido nada, aunque
+    // hubiera contestado y visto vídeos — 6 leads perdidos el 15-10.) El lead
+    // espera, sin descartarse, a que exista la plantilla.
+    if (!config.whatsapp.templateRecordatorioPresentacion && !messaging.dentroDeVentana(lead.telefono)) {
+      continue;
     }
     const envio = config.whatsapp.templateRecordatorioPresentacion
       ? await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: config.whatsapp.templateRecordatorioPresentacion, lang: config.whatsapp.templateLang, varNames: ['nombre'] })
