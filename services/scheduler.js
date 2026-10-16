@@ -321,7 +321,19 @@ function _marcarIntento(lead, fase, sumar) {
 // texto libre: solo se manda si la ventana de 24h está abierta. Si no, se
 // descarta en silencio (antes Meta lo rechazaba con 131047 y además restaba
 // calidad al número). Si el canal está caído, se intenta en el próximo ciclo.
-async function _descartarPorAgotamiento(lead, motivo) {
+//
+// `fase` (contador de la fase): tras el ÚLTIMO recordatorio se le da tiempo a
+// contestar o pulsar el botón (DESCARTE_SILENCIO_HORAS desde ese recordatorio
+// o desde su último mensaje). Antes se descartaba en el ciclo siguiente, 5 min
+// después del recordatorio, y con la ventana abierta le llegaba la despedida
+// justo detrás.
+async function _descartarPorAgotamiento(lead, motivo, fase) {
+  if (fase && fase.ultimoEnvio) {
+    const ev = activityLog.getActivityByLead(lead.id);
+    const ultRec = ev.filter((e) => e.type === 'message_received').reduce((m, e) => Math.max(m, new Date(e.ts).getTime()), 0);
+    const desde = Math.max(new Date(fase.ultimoEnvio).getTime(), ultRec);
+    if (Date.now() - desde < AB.descarteSilencioHoras * 3600 * 1000) return false;
+  }
   if (messaging.dentroDeVentana(lead.telefono)) {
     const envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeDescarte({ nombre: lead.nombre }));
     if (!_envioOk(envio) && !(envio && envio.mode === 'production')) return false;
@@ -398,7 +410,7 @@ async function procesarRecordatoriosFase2() {
     const fase2 = (lead.recordatorios && lead.recordatorios.fase2) || { enviados: 0, ultimoEnvio: null };
 
     if (fase2.enviados >= MAX_REMINDERS) {
-      await _descartarPorAgotamiento(lead, 'no reservó la presentación');
+      await _descartarPorAgotamiento(lead, 'no reservó la presentación', fase2);
       continue;
     }
 
@@ -498,7 +510,7 @@ async function procesarRecordatoriosFase2B() {
     // A partir de aquí, leads que NO han terminado el webinar: recordatorio de
     // landing para que retomen la presentación donde la dejaron.
     if (fase2b.enviados >= MAX_REMINDERS) {
-      await _descartarPorAgotamiento(lead, 'máx recordatorios Fase 2B');
+      await _descartarPorAgotamiento(lead, 'máx recordatorios Fase 2B', fase2b);
       continue;
     }
 
@@ -537,11 +549,16 @@ async function procesarRecordatoriosFase2B() {
     // contaba: a las 72 h el lead se descartaba sin haber recibido nada, aunque
     // hubiera contestado y visto vídeos — 6 leads perdidos el 15-10.) El lead
     // espera, sin descartarse, a que exista la plantilla.
-    if (!config.whatsapp.templateRecordatorioPresentacion && !messaging.dentroDeVentana(lead.telefono)) {
+    // Quien ya vio el VSL (video_visto) o lo terminó no necesita "termina la
+    // presentación": recibe la plantilla de la sesión ("¿te paso el enlace?").
+    const plantilla2b = (lead.estado === S.VIDEO_VISTO || etapa === 'vsl_hecho' || etapa === 'webinar')
+      ? (config.whatsapp.templateRecordatorioSesion || config.whatsapp.templateRecordatorioPresentacion)
+      : config.whatsapp.templateRecordatorioPresentacion;
+    if (!plantilla2b && !messaging.dentroDeVentana(lead.telefono)) {
       continue;
     }
-    const envio = config.whatsapp.templateRecordatorioPresentacion
-      ? await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: config.whatsapp.templateRecordatorioPresentacion, lang: config.whatsapp.templateLang, varNames: ['nombre'] })
+    const envio = plantilla2b
+      ? await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: plantilla2b, lang: config.whatsapp.templateLang, varNames: ['nombre'] })
       : await messaging.sendTextMessage(lead.telefono, messages.recordatorioFunnel1({ nombre: lead.nombre, enlaceLanding: conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id), etapa, perfil: lead.perfil }));
     // Rechazo permanente de Meta (plantilla mal, política, etc.): NO reintentar
     // cada 5 min. Registramos el intento para que respete el intervalo. Solo el
@@ -569,7 +586,7 @@ async function procesarRecordatoriosFase2C() {
     const fase2c = (lead.recordatorios && lead.recordatorios.fase2c) || { enviados: 0, ultimoEnvio: null };
 
     if (fase2c.enviados >= MAX_REMINDERS) {
-      await _descartarPorAgotamiento(lead, 'no asistió a la presentación');
+      await _descartarPorAgotamiento(lead, 'no asistió a la presentación', fase2c);
       continue;
     }
 
@@ -619,7 +636,7 @@ async function procesarRecordatoriosFase3() {
     const fase3 = (lead.recordatorios && lead.recordatorios.fase3) || { enviados: 0, ultimoEnvio: null };
 
     if (fase3.enviados >= MAX_REMINDERS) {
-      await _descartarPorAgotamiento(lead, 'máx recordatorios Fase 3');
+      await _descartarPorAgotamiento(lead, 'máx recordatorios Fase 3', fase3);
       continue;
     }
 

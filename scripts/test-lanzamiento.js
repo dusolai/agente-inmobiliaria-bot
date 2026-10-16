@@ -330,6 +330,20 @@ function activationReset() {
     assert.ok(/\/r\/grupal\?l=/.test(r3[0].body) && /sesión de dudas/.test(r3[0].body), 'recibe el enlace de la sesión de dudas');
     ok('"Pásame el enlace" (botón del recordatorio) manda directo el enlace de Calendly');
 
+    // d4) Con plantillas: quien vio el vídeo recibe la de la sesión; tras el
+    //     último recordatorio NO se descarta en el ciclo siguiente.
+    config.whatsapp.templateRecordatorioPresentacion = 'recordatorio_presentacion_three';
+    config.whatsapp.templateRecordatorioSesion = 'recordatorio_sesion_three';
+    const w = leadManager.createLead({ nombre: 'Wanda', telefono: '34622000010', campana: vivas.id, segmento: 'viejos' });
+    leadManager.updateLead(w.id, { estado: 'video_visto', perfil: 'profesional', videoVistoAt: hace(100), updatedAt: hace(100), recordatorios: { ...w.recordatorios, fase2b: { enviados: 1, ultimoEnvio: hace(100) } } });
+    await scheduler.ejecutarCiclo();
+    assert.strictEqual(paraTel('34622000010').length, 1, 'sale el último recordatorio');
+    assert.strictEqual(paraTel('34622000010')[0].plantilla, 'recordatorio_sesion_three', 'vio el vídeo → plantilla de la sesión');
+    await scheduler.ejecutarCiclo();
+    assert.strictEqual(leadManager.getLeadById(w.id).estado, 'video_visto', 'no se descarta justo después del último recordatorio');
+    assert.strictEqual(paraTel('34622000010').length, 1, 'ni se le manda despedida');
+    ok('recordatorio con la plantilla según la etapa; tras el último, tiempo para contestar antes de descartar');
+
     // e) Freno de emergencia: error de cuenta de Meta → nada sale hasta reanudar
     scheduler.bloquearEnvios(131042, 'Business eligibility payment issue');
     const n1 = enviados.length;
