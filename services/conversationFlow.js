@@ -43,6 +43,12 @@ function interpretarRespuesta(texto) {
   if (tokens.includes('1')) return LEAD_PROFILES.PROFESIONAL;
   if (tokens.includes('2')) return LEAD_PROFILES.EMPRENDEDOR;
 
+  // Negación del sector: "no trabajo en inmobiliaria", "no soy agente",
+  // "nunca he trabajado en el sector"… → NO es profesional (16-10: Nuria
+  // escribió "No trabajo en inmobiliaria" y recibió la landing de agentes).
+  const NIEGA_SECTOR = /\b(no|nunca|ni)\b[^.?!]{0,25}\b(trabajo|trabaje|he trabajado|soy|estoy|me dedico)\b[^.?!]{0,25}\b(inmobiliari\w*|agente|agencia|sector)/;
+  if (NIEGA_SECTOR.test(t)) return LEAD_PROFILES.EMPRENDEDOR;
+
   const esProfesional = KEYWORDS_PROFESIONAL.some((k) => t.includes(k));
   const esEmprendedor = KEYWORDS_EMPRENDEDOR.some((k) => t.includes(k));
 
