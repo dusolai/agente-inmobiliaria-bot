@@ -109,7 +109,7 @@ const PLANTILLAS_META = {
     variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_PRESENTACION',
     cuerpo:
       `Hola {{nombre}} 👋 Te escribo de Three Inmobiliaria.\n\n` +
-      `Vi que empezaste la presentación pero no llegaste al final. Si te quedaron dudas, lo más rápido es la sesión de dudas en grupo con Arkaitz por Zoom: 30 min, gratis y sin compromiso.\n\n` +
+      `Vi que todavía no has terminado la presentación. Si tienes dudas, lo más rápido es la sesión de dudas en grupo con Arkaitz por Zoom: 30 min, gratis y sin compromiso.\n\n` +
       `¿Te paso el enlace para elegir día? Si ya no te interesa, pulsa "No me interesa" y no te escribimos más.`,
     botones: ['Pásame el enlace', 'No me interesa'],
   },
