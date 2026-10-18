@@ -35,6 +35,7 @@ const REQUERIDAS = [
   { clave: 'recordatorio_sesion', variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_SESION', para: 'Recordatorio: no se apuntó a la sesión' },
   { clave: 'sesion_preparacion', variable: 'WHATSAPP_TEMPLATE_SESION_PREPARACION', para: 'Sesión reservada: ¿has visto la presentación?' },
   { clave: 'sesion_hoy', variable: 'WHATSAPP_TEMPLATE_SESION_HOY', para: 'Sesión reservada: aviso del mismo día (confirmar)' },
+  { clave: 'sesion_huecos', variable: 'WHATSAPP_TEMPLATE_SESION_HUECOS', para: 'Repesca: huecos de la semana a quien ya dijo su perfil' },
 ];
 
 async function listar() {
@@ -86,6 +87,7 @@ async function requeridas() {
         : r.clave === 'recordatorio_sesion' ? config.whatsapp.templateRecordatorioSesion
         : r.clave === 'sesion_preparacion' ? config.whatsapp.templateSesionPreparacion
         : r.clave === 'sesion_hoy' ? config.whatsapp.templateSesionHoy
+        : r.clave === 'sesion_huecos' ? config.whatsapp.templateSesionHuecos
         : configuradas[r.clave];
       return {
         ...r,

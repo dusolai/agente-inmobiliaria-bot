@@ -61,6 +61,8 @@ module.exports = {
     // asistencia. Sin plantilla, solo se envían si la ventana de 24 h está abierta.
     templateSesionPreparacion: process.env.WHATSAPP_TEMPLATE_SESION_PREPARACION || '',
     templateSesionHoy: process.env.WHATSAPP_TEMPLATE_SESION_HOY || '',
+    // Repesca con los huecos de la semana (a quien ya dijo su perfil)
+    templateSesionHuecos: process.env.WHATSAPP_TEMPLATE_SESION_HUECOS || '',
   },
 
   // API de Calendly (token personal: Calendly → Integraciones → API y

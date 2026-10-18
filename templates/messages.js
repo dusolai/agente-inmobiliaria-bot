@@ -133,6 +133,18 @@ const PLANTILLAS_META = {
       `Cuéntame qué te ha parecido o qué te gustaría preguntarle.`,
     botones: ['Ya la he visto', 'Pásame la presentación', 'Cambiar de día'],
   },
+  // Repesca (18-10): a quien ya dijo su perfil, con los huecos REALES de
+  // Calendly de esta semana en {{huecos}}. "Sí, pásame el enlace" → Calendly.
+  sesion_huecos: {
+    nombreSugerido: 'sesion_huecos_three',
+    variable: 'WHATSAPP_TEMPLATE_SESION_HUECOS',
+    cuerpo:
+      `Hola {{nombre}} 👋 Te escribo de Three Inmobiliaria.\n\n` +
+      `Esta semana Arkaitz hace la sesión de dudas en grupo por Zoom (30 min, gratis y sin compromiso): {{huecos}}.\n\n` +
+      `Ahí te explica cómo funciona y resuelves todas tus dudas en directo. ¿Te paso el enlace para reservar tu plaza?`,
+    variables: [{ nombre: 'nombre', ejemplo: 'María' }, { nombre: 'huecos', ejemplo: 'el lunes 19 a las 17:00, el martes 20 a las 16:30 o el miércoles 21 a las 19:00' }],
+    botones: ['Sí, pásame el enlace', 'No me interesa'],
+  },
   sesion_hoy: {
     nombreSugerido: 'sesion_hoy_three',
     variable: 'WHATSAPP_TEMPLATE_SESION_HOY',

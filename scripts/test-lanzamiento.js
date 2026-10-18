@@ -418,6 +418,33 @@ function activationReset() {
     }
     ok('sesión reservada: preparación + feedback, aviso del día para confirmar, Zoom 1 h antes, cambiar de día');
 
+    // d7) Repesca: solo a quien dijo su perfil y contestó; una plantilla con los huecos
+    const cs = require('../services/calendlySync');
+    const huecosReal = cs.huecosTexto;
+    cs.huecosTexto = async () => 'el lunes 19 a las 17:00 o el martes 20 a las 16:30';
+    try {
+      config.whatsapp.templateSesionHuecos = 'sesion_huecos_three';
+      const r1 = leadManager.createLead({ nombre: 'Remo', telefono: '34622000013', campana: vivas.id, segmento: 'viejos' });
+      leadManager.updateLead(r1.id, { estado: 'descartado', perfil: 'profesional' });
+      activityLog.appendActivity(r1.id, 'message_received', { texto: 'Soy agente inmobiliario' });
+      const r2 = leadManager.createLead({ nombre: 'Baja', telefono: '34622000014', campana: vivas.id, segmento: 'viejos' });
+      leadManager.updateLead(r2.id, { estado: 'descartado', perfil: 'profesional' });
+      activityLog.appendActivity(r2.id, 'message_received', { texto: 'No me interesa' });
+      activityLog.appendActivity(r2.id, 'opt_out', {});
+      const cand = scheduler.candidatosRepesca().map((l) => l.nombre);
+      assert.ok(cand.includes('Remo') && !cand.includes('Baja'), 'quien se dio de baja no se repesca');
+      for (const l of scheduler.candidatosRepesca()) leadManager.updateLead(l.id, { repesca: { estado: l.id === r1.id ? 'pendiente' : 'omitida' } });
+      await scheduler.procesarRepesca();
+      const m = paraTel('34622000013');
+      assert.ok(m.length === 1 && m[0].plantilla === 'sesion_huecos_three' && /lunes 19/.test(m[0].params[1]), 'plantilla con los huecos reales');
+      assert.strictEqual(leadManager.getLeadById(r1.id).estado, 'video_enviado', 'vuelve al embudo');
+      await scheduler.procesarRepesca();
+      assert.strictEqual(paraTel('34622000013').length, 1, 'una sola vez');
+    } finally {
+      cs.huecosTexto = huecosReal;
+    }
+    ok('repesca: huecos reales de la semana, solo a quien contestó y no se dio de baja, una vez');
+
     // e) Freno de emergencia: error de cuenta de Meta → nada sale hasta reanudar
     scheduler.bloquearEnvios(131042, 'Business eligibility payment issue');
     const n1 = enviados.length;

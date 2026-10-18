@@ -860,6 +860,25 @@ router.post('/whatsapp/plantillas/crear', async (req, res) => {
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
+/**
+ * POST /api/whatsapp/repesca  (zona de desarrollador)
+ * Body: { confirmar?: true } → sin confirmar, solo lista los candidatos y los
+ * huecos que se ofrecerían; con confirmar, los deja en cola (salen de uno en
+ * uno, un lead por ciclo del scheduler, con la plantilla sesion_huecos).
+ */
+router.post('/whatsapp/repesca', async (req, res) => {
+  try {
+    const scheduler = require('../services/scheduler');
+    const huecos = await require('../services/calendlySync').huecosTexto();
+    const cand = scheduler.candidatosRepesca();
+    if (req.body && req.body.confirmar) {
+      if (!require('../config/config').whatsapp.templateSesionHuecos) return res.status(400).json({ error: 'Falta WHATSAPP_TEMPLATE_SESION_HUECOS en Seenode' });
+      for (const l of cand) leadManager.updateLead(l.id, { repesca: { estado: 'pendiente', ts: new Date().toISOString() } });
+    }
+    res.json({ huecos, total: cand.length, encolados: Boolean(req.body && req.body.confirmar), candidatos: cand.map((l) => ({ id: l.id, nombre: l.nombre, estado: l.estado, perfil: l.perfil })) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 /** GET /api/whatsapp/diagnostico → todo lo que Meta dice del número, la cuenta y el webhook. */
 router.get('/whatsapp/diagnostico', async (req, res) => {
   try { res.json(await require('../services/whatsappSalud').diagnostico()); }

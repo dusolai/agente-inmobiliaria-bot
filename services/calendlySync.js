@@ -232,8 +232,51 @@ async function sincronizar() {
   }
 }
 
+/**
+ * Huecos libres de la sesión en los próximos días, leídos de la página
+ * PÚBLICA de reservas (no necesita token): "el lunes 19 a las 17:00, el
+ * martes 20 a las 16:30 o el miércoles 21 a las 19:00". Caché 30 min.
+ */
+let _huecosCache = null;
+async function huecosTexto({ dias = 7, max = 3 } = {}) {
+  if (_huecosCache && Date.now() - _huecosCache.ts < 30 * 60 * 1000) return _huecosCache.texto;
+  try {
+    const m = String(config.landing.calendlyGrupalUrl || '').match(/calendly\.com\/([^/?#]+)\/([^/?#]+)/);
+    if (!m) return null;
+    const ua = { 'User-Agent': 'Mozilla/5.0' };
+    const { data: tipo } = await axios.get('https://calendly.com/api/booking/event_types/lookup', {
+      params: { profile_slug: m[1], event_type_slug: m[2] }, headers: ua, timeout: 15000,
+    });
+    const hoy = new Date(Date.now());
+    const fin = new Date(Date.now() + dias * 24 * 3600 * 1000);
+    const f = (d) => d.toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+    const { data } = await axios.get(`https://calendly.com/api/booking/event_types/${tipo.uuid}/calendar/range`, {
+      params: { timezone: 'Europe/Madrid', diagnostics: false, range_start: f(hoy), range_end: f(fin) }, headers: ua, timeout: 15000,
+    });
+    // Un hueco por día (el primero), y que falten al menos 3 h
+    const huecos = [];
+    for (const dia of data.days || []) {
+      const spot = (dia.spots || []).find((s) => new Date(s.start_time).getTime() - Date.now() > 3 * 3600 * 1000);
+      if (spot) huecos.push(spot.start_time);
+      if (huecos.length >= max) break;
+    }
+    if (!huecos.length) return null;
+    const partes = huecos.map((iso) => {
+      const d = new Date(iso);
+      const dia = d.toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid', weekday: 'long', day: 'numeric' });
+      return `el ${dia} a las ${horaDe(iso)}`;
+    });
+    const texto = partes.length > 1 ? `${partes.slice(0, -1).join(', ')} o ${partes[partes.length - 1]}` : partes[0];
+    _huecosCache = { ts: Date.now(), texto };
+    return texto;
+  } catch (err) {
+    console.error('❌ [Calendly] No se pudieron leer los huecos:', err.message);
+    return null;
+  }
+}
+
 function estado() {
   return { activo: activo(), ultimaSync: _ultimaSync, error: _ultimoError };
 }
 
-module.exports = { sincronizar, registrarReserva, registrarCancelacion, describirCuando, horaDe, estado, activo, _leadDeInvitado };
+module.exports = { huecosTexto, sincronizar, registrarReserva, registrarCancelacion, describirCuando, horaDe, estado, activo, _leadDeInvitado };

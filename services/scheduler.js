@@ -783,6 +783,50 @@ async function procesarSesiones() {
   }
 }
 
+/**
+ * REPESCA (18-10): a quien ya dijo su perfil y contestó alguna vez, pero no
+ * ha reservado, UNA plantilla con los huecos reales de Calendly de la semana
+ * ("¿te paso el enlace?"). Se marca desde el CRM (POST /api/repesca) y sale
+ * de una en una, un lead por ciclo (≈ 12/hora), en horario de envíos.
+ */
+function candidatosRepesca() {
+  const S = leadManager.LEAD_STATES;
+  return _leadsActivos().filter((l) => {
+    if (!l.perfil || l.repesca) return false;
+    if (![S.VIDEO_ENVIADO, S.VIDEO_VISTO, S.DESCARTADO].includes(l.estado)) return false;
+    if (l.sesion && l.sesion.estado === 'reservada') return false;
+    const ev = activityLog.getActivityByLead(l.id);
+    if (ev.some((e) => e.type === 'opt_out' || e.type === 'sin_whatsapp')) return false;
+    return ev.some((e) => e.type === 'message_received');
+  });
+}
+
+async function procesarRepesca() {
+  const plantilla = config.whatsapp.templateSesionHuecos;
+  if (!plantilla) return;
+  const pendientes = _leadsActivos().filter((l) => l.repesca && l.repesca.estado === 'pendiente');
+  for (const lead of pendientes) {
+    if (_recienContactado(lead)) continue;
+    const huecos = await require('./calendlySync').huecosTexto();
+    if (!huecos) return; // sin huecos en Calendly no se promete nada
+    const envio = await messaging.sendTemplate(lead.telefono, [lead.nombre, huecos], {
+      name: plantilla, lang: config.whatsapp.templateLang, varNames: ['nombre', 'huecos'],
+    });
+    const ahoraIso = new Date(Date.now()).toISOString();
+    if (_envioOk(envio)) {
+      const cambios = { repesca: { estado: 'enviada', ts: ahoraIso, huecos } };
+      // Vuelve al embudo: si contesta, el flujo le trata como a un cualificado.
+      if (lead.estado === leadManager.LEAD_STATES.DESCARTADO) cambios.estado = leadManager.LEAD_STATES.VIDEO_ENVIADO;
+      leadManager.updateLead(lead.id, cambios);
+      activityLog.appendActivity(lead.id, 'repesca_enviada', { huecos });
+      console.log(`🎣 [Scheduler] Repesca → ${lead.nombre}`);
+    } else if (_rechazoDeMeta(envio)) {
+      leadManager.updateLead(lead.id, { repesca: { estado: 'fallida', ts: ahoraIso } });
+    }
+    return; // uno por ciclo
+  }
+}
+
 async function ejecutarCiclo() {
   console.log(`\n⏰ [Scheduler] Ciclo de recordatorios — ${new Date().toLocaleString()}`);
   const bloqueo = getBloqueo();
@@ -817,6 +861,7 @@ async function ejecutarCiclo() {
   }
 
   await procesarRecordatoriosFase1();
+  await procesarRepesca();
   if (_modoPresentacion()) {
     // Modo presentación en directo: recordar la reserva y, tras la hora, la
     // inasistencia. La landing no entra en juego.
@@ -853,6 +898,8 @@ function iniciar() {
 
 module.exports = {
   procesarSesiones,
+  procesarRepesca,
+  candidatosRepesca,
   iniciar,
   ejecutarCiclo,
   procesarActivacionDiaria,
