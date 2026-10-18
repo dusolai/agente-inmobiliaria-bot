@@ -142,7 +142,8 @@ router.post('/', async (req, res) => {
             whatsappCloud.sendTyping(msg.id).catch(() => {});
           } catch (e) { /* opcional */ }
           try {
-            await conversationFlow.handleIncoming(telefono, texto, { nombre: nombrePerfil, canal: 'whatsapp' });
+            // Sin await: se agrupan los mensajes en ráfaga y se responde una vez.
+            conversationFlow.recibir(telefono, texto, { nombre: nombrePerfil, canal: 'whatsapp' });
           } catch (err) {
             console.error('❌ [WhatsAppCloud] Error procesando mensaje entrante:', err.message);
           }

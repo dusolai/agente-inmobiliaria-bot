@@ -194,7 +194,10 @@ function _textoLanding(perfil, lead) {
  * baja, humano o silencio). Devuelve el perfil si el router lo ha deducido,
  * para que la fase de cualificación siga como si hubiera dicho 1/2.
  */
-async function _rutear(lead, texto, { textoPorDefecto = null } = {}) {
+async function _rutear(lead, texto, { textoPorDefecto = null, silenciar = false } = {}) {
+  // Mensaje intermedio de una ráfaga: no se decide nada; el último del lote
+  // pasa por el router con todos en el historial y contesta una vez.
+  if (silenciar) return null;
   const responder = require('./responder');
   const d = await responder.decidir(lead, texto);
   switch (d.accion) {
@@ -206,16 +209,59 @@ async function _rutear(lead, texto, { textoPorDefecto = null } = {}) {
     case 'humano':
       leadManager.updateLead(lead.id, { pideHumanoAt: new Date().toISOString() });
       activityLog.appendActivity(lead.id, 'pide_humano', { texto: String(texto).slice(0, 200) });
-      if (d.texto) await messaging.sendTextMessage(lead.telefono, d.texto);
+      if (d.texto && !silenciar) await messaging.sendTextMessage(lead.telefono, d.texto);
       return null;
     case 'silencio':
       return null;
     default: {
       const t = d.texto || textoPorDefecto;
-      if (t) await messaging.sendTextMessage(lead.telefono, t);
+      if (t && !silenciar) await messaging.sendTextMessage(lead.telefono, t);
       return null;
     }
   }
+}
+
+// ─── Mensajes en ráfaga ─────────────────────────────────────────
+// La gente escribe en varios mensajes seguidos ("Ok" + "Gracias", o "Soy
+// agente" + "pero ando liado"). Cada uno llegaba en su propia petición del
+// webhook y se procesaba EN PARALELO: dos landings a la vez, o dos respuestas
+// casi iguales (17-10: Rosana, tina, Diego Emanuel). Ahora se agrupan por
+// teléfono: se espera AGRUPAR_MENSAJES_SEGUNDOS sin mensajes nuevos y se
+// procesan EN ORDEN; solo el último del lote recibe respuesta del router (que
+// ve todos en el historial). Los botones, el perfil y la baja se aplican igual.
+const _lotes = new Map();
+function _segundosAgrupar() {
+  const v = parseInt(process.env.AGRUPAR_MENSAJES_SEGUNDOS, 10);
+  return Number.isFinite(v) && v >= 0 ? v : 6;
+}
+
+function recibir(telefono, texto, extra = {}) {
+  const tel = String(telefono);
+  let lote = _lotes.get(tel);
+  if (!lote) {
+    lote = { mensajes: [], timer: null, cadena: Promise.resolve() };
+    _lotes.set(tel, lote);
+  }
+  lote.mensajes.push({ texto, extra });
+  if (lote.timer) clearTimeout(lote.timer);
+  return new Promise((resolve) => {
+    lote.timer = setTimeout(() => {
+      const pendientes = lote.mensajes.splice(0);
+      lote.timer = null;
+      lote.cadena = lote.cadena.then(async () => {
+        for (let i = 0; i < pendientes.length; i++) {
+          const { texto: t, extra: x } = pendientes[i];
+          try {
+            await handleIncoming(tel, t, { ...x, silenciar: i < pendientes.length - 1 });
+          } catch (err) {
+            console.error('❌ [Flujo] Error procesando mensaje entrante:', err.message);
+          }
+        }
+        if (!lote.timer && lote.mensajes.length === 0) _lotes.delete(tel);
+      });
+      lote.cadena.then(resolve);
+    }, _segundosAgrupar() * 1000);
+  });
 }
 
 async function handleIncoming(telefono, texto, extra = {}) {
@@ -295,6 +341,7 @@ async function handleIncoming(telefono, texto, extra = {}) {
       // algo… Si no hay nada mejor, se repite la pregunta 1/2.
       perfil = await _rutear(lead, texto, {
         textoPorDefecto: messages.mensajeReintentarCualificacion({ nombre: lead.nombre }),
+        silenciar: Boolean(extra.silenciar),
       });
       if (!perfil) return;
       activityLog.appendActivity(lead.id, 'perfil_por_router', { texto: String(texto).slice(0, 80), perfil });
@@ -371,7 +418,7 @@ async function handleIncoming(telefono, texto, extra = {}) {
   // ("dale", una duda, "llámame"…). El router decide: contestar y recordarle
   // su siguiente paso, pasarlo a una persona, darle de baja o no decir nada.
   // Con IA decide el modelo; sin IA, reglas fijas — nunca se queda colgado.
-  const perfilRouter = await _rutear(lead, texto);
+  const perfilRouter = await _rutear(lead, texto, { silenciar: Boolean(extra.silenciar) });
   if (perfilRouter) {
     console.log(`🔎 [Flujo] ${lead.nombre}: el router entiende que quiere la rama ${perfilRouter} → landing enviada`);
     await messaging.sendTextMessage(lead.telefono, _textoLanding(perfilRouter, lead));
@@ -486,6 +533,7 @@ module.exports = {
   esAutoRespuesta,
   perfilDesdeFormulario,
   handleIncoming,
+  recibir,
   procesarReservaGrupal,
   procesarAsistenciaReunion,
   interpretarRespuesta,

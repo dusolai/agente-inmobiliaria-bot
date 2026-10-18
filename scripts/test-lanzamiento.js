@@ -344,6 +344,20 @@ function activationReset() {
     assert.strictEqual(paraTel('34622000010').length, 1, 'ni se le manda despedida');
     ok('recordatorio con la plantilla según la etapa; tras el último, tiempo para contestar antes de descartar');
 
+    // d5) Ráfaga de mensajes (llegan a la vez por el webhook) → UNA respuesta
+    process.env.AGRUPAR_MENSAJES_SEGUNDOS = '0';
+    const nV = paraTel('34622000009').length;
+    conversationFlow.recibir('34622000009', 'Ok');
+    conversationFlow.recibir('34622000009', 'Gracias');
+    await conversationFlow.recibir('34622000009', 'Y esto cuánto cuesta?');
+    assert.strictEqual(paraTel('34622000009').length - nV, 1, 'tres mensajes seguidos → una sola respuesta');
+    const ros = leadManager.createLead({ nombre: 'Rosa B', telefono: '34622000011', campana: vivas.id, segmento: 'viejos' });
+    leadManager.updateLead(ros.id, { estado: 'esperando_cualificacion' });
+    conversationFlow.recibir('34622000011', 'Soy agente inmobiliario');
+    await conversationFlow.recibir('34622000011', 'pero ando de aquí para allá');
+    assert.strictEqual(paraTel('34622000011').filter((m) => /pages\.dev/.test(m.body)).length, 1, 'la landing sale una sola vez');
+    ok('mensajes en ráfaga: se agrupan y se responde una vez (antes: landing doble, respuestas repetidas)');
+
     // e) Freno de emergencia: error de cuenta de Meta → nada sale hasta reanudar
     scheduler.bloquearEnvios(131042, 'Business eligibility payment issue');
     const n1 = enviados.length;
