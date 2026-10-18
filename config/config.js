@@ -69,7 +69,12 @@ module.exports = {
   // webhooks). Con él el sistema sabe quién reservó, cuándo, el enlace de
   // Zoom y si canceló — sin configurar webhooks.
   calendly: {
-    token: process.env.CALENDLY_TOKEN || '',
+    // CALENDLY_TOKEN o, si el token se guardó en Seenode con otro nombre
+    // (CALENDLY_API_TOKEN, CALENDLY_PAT…), la primera variable CALENDLY_* que
+    // contenga un token personal (JWT "eyJ…").
+    token: process.env.CALENDLY_TOKEN || Object.keys(process.env)
+      .filter((k) => /^CALENDLY/i.test(k) && /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(String(process.env[k]).trim()))
+      .map((k) => String(process.env[k]).trim())[0] || '',
   },
 
   // Canal Telegram (modo piloto previo a producción)
