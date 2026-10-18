@@ -134,16 +134,15 @@ router.get('/calendly-booked', async (req, res) => {
     //  b) Lead en REUNION_REGISTRADO → reservó la 1-a-1 con Arkaitz (Zoom)
     //      → transicionamos a REUNION_ASISTIO y mandamos confirmación
     try {
-      if (lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
-        // Landing (modo landing) o plaza en la presentación (modo presentación)
+      if (config.flujo.trasCualificar === 'presentacion' && lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
+        // Modo presentación en directo: plaza en la presentación
         await conversationFlow.procesarReservaGrupal(lead, { via: 'redirect' });
-      } else if (lead.estado === leadManager.LEAD_STATES.REUNION_REGISTRADO) {
-        leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
-        console.log(`📅 [Tracking] Reserva 1-A-1 confirmada: ${lead.nombre}`);
-        await messaging.sendTextMessage(
-          lead.telefono,
-          `¡Listo ${lead.nombre}! Tu plaza en la sesión de dudas con Arkaitz está reservada ✅\n\nEl enlace de Zoom te llega por email con la confirmación de Calendly. Nos vemos allí 🙌`
-        );
+      } else if (!lead.sesion || lead.sesion.estado !== 'reservada') {
+        // Sesión de dudas: aquí no llegan fecha ni hora; la reserva completa
+        // (hora, Zoom) la registra la sincronización con Calendly en el
+        // siguiente ciclo. Antes se marcaba "asistió" al reservar.
+        activityLog.appendActivity(lead.id, 'calendly_booked', { via: 'redirect' });
+        console.log(`📅 [Tracking] ${lead.nombre} vuelve de reservar en Calendly (pendiente de sincronizar)`);
       } else {
         console.log(`📅 [Tracking] Reserva recibida pero el estado es ${lead.estado} (lead ${lead.nombre})`);
       }

@@ -21,6 +21,11 @@ router.use('/whatsapp', (req, res, next) => {
   if (_esDev(req)) return next();
   return res.status(403).json({ error: 'Solo para el desarrollador' });
 });
+// Incidencias del bot (errores para corregir): también solo desarrollador
+router.use('/incidencias', (req, res, next) => {
+  if (_esDev(req)) return next();
+  return res.status(403).json({ error: 'Solo para el desarrollador' });
+});
 /** POST /api/dev/login  Header X-Dev-Pass → { ok } */
 router.post('/dev/login', (req, res) => res.json({ ok: _esDev(req) }));
 /** GET /api/whatsapp/ia → prueba real de la IA del router (proveedor, clave enmascarada, error exacto). */
@@ -341,6 +346,39 @@ router.get('/stats/activity', (req, res) => {
 });
 
 /**
+ * GET /api/incidencias?desde=ISO&pendientes=1&campana=…   (solo desarrollador)
+ * Errores del bot calculados al vuelo del registro de actividad para los
+ * leads de las campañas vivas: duplicados, landing doble, descarte tras
+ * recordatorio, pide persona, envíos fallidos y mensajes sin respuesta.
+ * Por defecto, los últimos 14 días. Más recientes primero.
+ */
+router.get('/incidencias', (req, res) => {
+  try {
+    const incidencias = require('../services/incidencias');
+    const desdeQ = req.query.desde ? new Date(String(req.query.desde)).getTime() : NaN;
+    const desde = isNaN(desdeQ) ? Date.now() - 14 * 24 * 3600 * 1000 : desdeQ;
+    const leads = leadManager.getAllLeads({ campana: _campana(req) });
+    const resueltas = incidencias.leerResueltas();
+    let lista = incidencias.calcular(activityLog.getRecentActivity(Infinity), leads, { desde })
+      .map((i) => Object.assign(i, { resuelta: !!resueltas[i.clave] }));
+    if (req.query.pendientes === '1') lista = lista.filter((i) => !i.resuelta);
+    const porTipo = {};
+    for (const i of lista) porTipo[i.tipo] = (porTipo[i.tipo] || 0) + 1;
+    res.json({ desde: new Date(desde).toISOString(), total: lista.length, porTipo, incidencias: lista });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/incidencias/resolver  { clave, resuelta? } → marca (o desmarca) una incidencia como resuelta */
+router.post('/incidencias/resolver', (req, res) => {
+  const b = req.body || {};
+  const r = require('../services/incidencias').marcarResuelta(b.clave, b.resuelta !== false);
+  if (r.error) return res.status(400).json(r);
+  res.json(r);
+});
+
+/**
  * GET /api/system/status
  * Estado de los componentes del sistema, para el panel CRM.
  */
@@ -366,6 +404,8 @@ router.get('/system/status', (req, res) => {
       // true cuando ambas variables apuntan al mismo enlace. Pasa en piloto
       // con Calendly free (no permite eventos de grupo), pero conviene avisarlo.
       sharedUrl,
+      // Sincronización de reservas por la API (CALENDLY_TOKEN)
+      sync: require('../services/calendlySync').estado(),
     },
     backendPublicUrl: config.backendPublicUrl,
   });

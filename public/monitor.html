@@ -236,6 +236,19 @@
   .burbuja.fallo{background:#fee2e2;border:1px solid #f5b5b5}
   .burbuja .quien{display:block;font-size:.65rem;font-weight:800;color:var(--muted);margin-bottom:.1rem}
   .burbuja .hora{display:block;text-align:right;font-size:.62rem;color:var(--muted);margin-top:.15rem}
+  /* Mensaje repetido agrupado (vista del cliente) */
+  .repe{display:inline-block;font-size:.6rem;font-weight:800;color:var(--muted);background:rgba(0,0,0,.06);border-radius:50px;padding:0 .35rem;margin-left:.25rem;cursor:help}
+  /* Incidencias (zona de desarrollador) */
+  .inc-filtros{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:.4rem}
+  .inc-grupo{margin-top:.8rem}
+  .inc-grupo h4{font-size:.78rem;font-weight:800;color:var(--ink);margin-bottom:.3rem}
+  .inc-grupo h4 small{font-weight:600;color:var(--muted)}
+  .inc-row{display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:center;padding:.45rem .2rem;border-bottom:1px dashed var(--line);font-size:.82rem}
+  .inc-row:last-child{border-bottom:none}
+  .inc-row.resuelta{opacity:.5}
+  .inc-row .inc-det{color:#475569;font-size:.78rem;word-break:break-word}
+  .inc-row .inc-acc{display:flex;gap:.3rem;white-space:nowrap}
+  .inc-row .inc-acc .btn{font-size:.7rem;padding:.25rem .5rem}
   /* Botones de la plantilla, como los ve el lead en su WhatsApp */
   .burbuja-btns{display:flex;flex-direction:column;gap:1px;margin:.4rem -.6rem -.4rem;border-top:1px solid rgba(0,0,0,.08)}
   .wa-btn{text-align:center;padding:.4rem;font-size:.78rem;font-weight:600;color:#1c8adb;background:rgba(255,255,255,.55);border-top:1px solid rgba(0,0,0,.06)}
@@ -385,6 +398,22 @@
       <h2>📝 Plantillas de Meta <small>se crean aquí mismo en la cuenta que envía · Meta las revisa (minutos a 24 h)</small></h2>
       <div id="pl-lista"><div class="empty">Cargando plantillas de Meta…</div></div>
       <details style="margin-top:.8rem"><summary class="csv-hint" style="cursor:pointer">Ver todas las plantillas que tiene la cuenta</summary><div id="pl-todas" class="csv-hint" style="margin-top:.5rem"></div></details>
+    </div>
+
+    <div class="panel dev-only" id="incidenciasPanel" style="display:none">
+      <h2>🐞 Incidencias del bot <small id="inc-resumen">errores para corregir · del historial de las campañas vivas</small></h2>
+      <div class="inc-filtros">
+        <label class="csv-hint"><input type="checkbox" id="inc-pendientes" checked> Solo pendientes</label>
+        <select id="inc-dias" style="padding:.3rem .5rem;border-radius:8px;border:1px solid var(--line)">
+          <option value="1">Último día</option>
+          <option value="3">Últimos 3 días</option>
+          <option value="7">Última semana</option>
+          <option value="14" selected>Últimos 14 días</option>
+          <option value="30">Últimos 30 días</option>
+        </select>
+        <button class="btn" id="inc-refrescar" style="border:1px solid #ccc">↻ Actualizar</button>
+      </div>
+      <div id="inc-lista"><div class="empty">Cargando incidencias…</div></div>
     </div>
 
     <div class="panel" id="csvFlowPanel">
@@ -743,7 +772,7 @@
   const devPass = () => { try { return sessionStorage.getItem(DEV_KEY) || ''; } catch (e) { return ''; } };
   const _fetchOrig = window.fetch.bind(window);
   window.fetch = (url, opts = {}) => {
-    if (typeof url === 'string' && url.startsWith('/api/whatsapp/') && devPass()) {
+    if (typeof url === 'string' && (url.startsWith('/api/whatsapp/') || url.startsWith('/api/incidencias')) && devPass()) {
       opts = Object.assign({}, opts, { headers: Object.assign({}, opts.headers || {}, { 'X-Dev-Pass': devPass() }) });
     }
     return _fetchOrig(url, opts);
@@ -751,7 +780,78 @@
   function mostrarDev(si) {
     document.querySelectorAll('.dev-only').forEach((el) => { el.style.display = si ? '' : 'none'; });
     const t = document.getElementById('devToggleTxt'); if (t) t.textContent = si ? 'Cerrar desarrollador' : 'Desarrollador';
+    // La ficha del lead cambia entre vista limpia (cliente) y en bruto (dev)
+    if (selectedLeadId) refreshLeadDetail();
   }
+
+  // ─── Vista del cliente: conversación limpia ───────────────────────
+  // Fuera del modo desarrollador la ficha del lead se enseña como la vería un
+  // comercial: sin eventos técnicos del agente y con los mensajes repetidos por
+  // error juntos en UNA burbuja con un «×2» discreto. NO se borra ningún
+  // mensaje que le llegó al lead: el repetido va dentro del ×N (con sus horas
+  // en el tooltip). Lo que se esconde aquí lo lista la zona de desarrollador
+  // en «Incidencias».
+  const OCULTOS_CLIENTE = new Set([
+    'router_decision', 'router_reply', 'llm_reply', 'message_status', 'auto_respuesta',
+    'welcome_sent', 'perfil_por_router', 'perfil_por_formulario', 'whatsapp_registro',
+  ]);
+  // Minúsculas, sin enlaces, sin emojis/puntuación/espacios (igual que
+  // services/incidencias.js). Si no queda nada, el texto en bruto.
+  function normalizarMsg(texto) {
+    const bruto = String(texto || '').toLowerCase().trim();
+    const limpio = bruto.replace(/https?:\/\/\S+|www\.\S+/g, '').replace(/[^\p{L}\p{N}]+/gu, '');
+    return limpio || bruto.replace(/\s+/g, '');
+  }
+  // Parecido entre dos textos (coeficiente de Dice sobre bigramas, 0..1)
+  function _dice(a, b) {
+    if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+    const big = new Map();
+    for (let i = 0; i < a.length - 1; i++) { const k = a.slice(i, i + 2); big.set(k, (big.get(k) || 0) + 1); }
+    let comunes = 0;
+    for (let i = 0; i < b.length - 1; i++) { const k = b.slice(i, i + 2); const n = big.get(k) || 0; if (n > 0) { big.set(k, n - 1); comunes++; } }
+    return (2 * comunes) / (a.length - 1 + b.length - 1);
+  }
+  function casiIguales(t1, t2) {
+    const a = normalizarMsg(t1), b = normalizarMsg(t2);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const [corto, largo] = a.length <= b.length ? [a, b] : [b, a];
+    if (corto.length >= 12 && largo.includes(corto)) return true;
+    return corto.length >= 12 && _dice(a, b) >= 0.9;
+  }
+  // Devuelve los eventos (orden cronológico) filtrados y agrupados. Un mensaje
+  // del agente que repite al anterior (sin que el lead escribiera en medio) y
+  // sale < 10 min después se suma al primero: ev._n = veces, ev._horas = cuándo
+  // salió cada uno. Los envíos AUTOMÁTICOS que Meta rechazó no le llegaron al
+  // lead y se ocultan; los tuyos (manuales) se ven siempre, para que sepas que
+  // no salieron.
+  function vistaCliente(eventos) {
+    const out = [];
+    let ultimoMio = null; // último mensaje del agente sin respuesta del lead en medio
+    const asc = eventos.slice().sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    for (const ev of asc) {
+      if (OCULTOS_CLIENTE.has(ev.type)) continue;
+      const m = ev.meta || {};
+      if (ev.type === 'message_sent' && m.ok === false && !m.manual) continue;
+      if (ev.type === 'message_received') ultimoMio = null;
+      if (ev.type !== 'message_sent') { out.push(ev); continue; }
+      const t = new Date(ev.ts).getTime();
+      if (ultimoMio && m.ok !== false && !!(ultimoMio.meta || {}).manual === !!m.manual
+          && t - ultimoMio._ultimoTs <= 10 * 60 * 1000 && casiIguales(ultimoMio.meta.preview, m.preview)) {
+        ultimoMio._n++;
+        ultimoMio._ultimoTs = t;
+        ultimoMio._horas.push(ev.ts);
+        continue;
+      }
+      const copia = Object.assign({}, ev, { _n: 1, _ultimoTs: t, _horas: [ev.ts] });
+      out.push(copia);
+      ultimoMio = m.ok === false ? null : copia;
+    }
+    return out;
+  }
+  const badgeRepe = (ev) => ev._n > 1
+    ? ` <span class="repe" title="Enviado ${ev._n} veces: ${ev._horas.map(fmtTime).join(' · ')}">×${ev._n}</span>`
+    : '';
 
   function toast(msg) {
     const t = $('toast');
@@ -867,6 +967,7 @@
                                    : `✓✓ entregado en el móvil`;
       case 'llm_reply':          return `🧠 respuesta generada por IA (${m.proveedor || '?'})`;
       case 'opt_out':            return `🛑 pidió la BAJA: "${m.texto || ''}"`;
+      case 'pide_humano':        return `🙋 pide hablar con una persona: "${m.texto || ''}"`;
       case 'lead_activated':     return m.motivo ? `activado: ${m.motivo}` : `activado del import (${m.activadosHoy || '?'}/${m.cupo || '?'} hoy)${m.segmento ? ` · ${m.segmento}` : ''}`;
       case 'landing_view':       return `landing ${m.perfil || ''}`;
       case 'video_play':         return m.videoId ? `play (${m.videoId})` : 'play del vídeo';
@@ -1495,9 +1596,9 @@
   // ANTES de escribir en vez de dejar que se pierda en silencio.
   function renderChat(eventos) {
     const escC = (s) => String(s || '').replace(/</g, '&lt;');
-    const msgs = eventos
+    // Cliente: repetidos agrupados (×N) · desarrollador: todo en bruto
+    const msgs = (devPass() ? eventos.slice() : vistaCliente(eventos))
       .filter((e) => e.type === 'message_sent' || e.type === 'message_received')
-      .slice()
       .sort((a, b) => new Date(a.ts) - new Date(b.ts));
 
     const ultimoDelLead = msgs
@@ -1526,7 +1627,7 @@
           return `<div class="chat-linea ${mio ? 'mio' : 'suyo'}">
             <div class="burbuja ${mio ? 'mia' : 'suya'}${fallo ? ' fallo' : ''}">
               ${quien ? `<span class="quien">${quien}</span>` : ''}${escC(m.preview || m.texto || '')}
-              <span class="hora">${fmtTime(e.ts)}${fallo ? ' · ❌ rechazado' : ''}</span>
+              <span class="hora">${fmtTime(e.ts)}${badgeRepe(e)}${fallo ? ' · ❌ rechazado' : ''}</span>
               ${btns}
             </div>
           </div>`;
@@ -1590,14 +1691,16 @@
 
       const videoSummary = renderVideoSummary(eventos);
 
-      const timeline = eventos.length === 0
+      // Historial: limpio para el cliente, en bruto en modo desarrollador
+      const eventosTl = devPass() ? eventos : vistaCliente(eventos).reverse();
+      const timeline = eventosTl.length === 0
         ? `<div class="empty">Aún no hay eventos para este lead.</div>`
-        : `<div class="timeline">${eventos.map(ev => `
+        : `<div class="timeline">${eventosTl.map(ev => `
             <div class="tl-item">
               <div class="tl-time">${fmtTime(ev.ts)}</div>
               <div class="tl-event">
                 <span class="ev-tag ${eventTag(ev.type)}">${ev.type.replace(/_/g,' ')}</span>
-                <span class="tl-meta">${describe(ev)}</span>
+                <span class="tl-meta">${describe(ev)}${badgeRepe(ev)}</span>
               </div>
             </div>`).join('')}</div>`;
 
@@ -1894,7 +1997,7 @@
       const r = await (await _fetchOrig('/api/dev/login', { method: 'POST', headers: { 'X-Dev-Pass': pass } })).json();
       if (!r.ok) return false;
       try { sessionStorage.setItem(DEV_KEY, pass); } catch (e) {}
-      mostrarDev(true); loadSalud(false); loadPlantillas(); loadIA();
+      mostrarDev(true); loadSalud(false); loadPlantillas(); loadIA(); loadIncidencias();
       return true;
     } catch (e) { return false; }
   }
@@ -1921,6 +2024,66 @@
   }
   $('ia-refrescar').addEventListener('click', loadIA);
 
+  // ── Incidencias del bot (solo desarrollador) ──
+  // Errores del agente calculados por el servidor (GET /api/incidencias),
+  // agrupados por tipo. «Marcar resuelta» lo guarda en el servidor.
+  const INC_TIPOS = {
+    duplicado: '🔁 Mensaje duplicado',
+    landing_doble: '🔗 Landing enviada dos veces',
+    descarte_tras_recordatorio: '🗑️ Descartado justo tras un recordatorio',
+    pide_humano: '🙋 Pide hablar con una persona',
+    error_envio: '❌ Error de envío',
+    sin_respuesta: '💬 Sin respuesta en 30 min',
+  };
+  async function loadIncidencias() {
+    if (!devPass()) return;
+    const dias = parseInt($('inc-dias').value, 10) || 14;
+    const desde = new Date(Date.now() - dias * 86400000).toISOString();
+    const soloPend = $('inc-pendientes').checked;
+    try {
+      const r = await fetchJSON(`/api/incidencias?desde=${encodeURIComponent(desde)}${soloPend ? '&pendientes=1' : ''}&campana=${encodeURIComponent(campanaSel)}`);
+      const lista = r.incidencias || [];
+      $('inc-resumen').textContent = lista.length
+        ? `${lista.length} ${soloPend ? 'pendientes' : 'en total'} en ${dias} día${dias === 1 ? '' : 's'}`
+        : 'errores para corregir · del historial de las campañas vivas';
+      if (!lista.length) { $('inc-lista').innerHTML = '<div class="at-vacio">Sin incidencias en este periodo 👌</div>'; return; }
+      const grupos = {};
+      lista.forEach((i) => { (grupos[i.tipo] = grupos[i.tipo] || []).push(i); });
+      const orden = Object.keys(INC_TIPOS).concat(Object.keys(grupos).filter((t) => !INC_TIPOS[t]));
+      $('inc-lista').innerHTML = orden.filter((t) => grupos[t]).map((t) => `<div class="inc-grupo">
+          <h4>${INC_TIPOS[t] || escH(t)} <small>· ${grupos[t].length}</small></h4>
+          ${grupos[t].map((i) => `<div class="inc-row${i.resuelta ? ' resuelta' : ''}">
+            <div><span class="at-nombre">${escH(i.nombre || 'Sin nombre')}</span> <span class="csv-hint">${escH(i.telefono)} · ${fmtTime(i.ts)}</span>
+              <div class="inc-det">${escH(i.detalle)}</div></div>
+            <div class="inc-acc">
+              <button class="btn" data-inc-ver="${escH(i.leadId)}" style="border:1px solid #ccc">Ver lead</button>
+              <button class="btn${i.resuelta ? '' : ' green'}" data-inc-clave="${escH(i.clave).replace(/"/g, '&quot;')}" data-inc-res="${i.resuelta ? '0' : '1'}">${i.resuelta ? 'Reabrir' : '✓ Marcar resuelta'}</button>
+            </div>
+          </div>`).join('')}
+        </div>`).join('');
+      document.querySelectorAll('[data-inc-ver]').forEach((b) => b.addEventListener('click', () => {
+        selectedLeadId = b.dataset.incVer; renderLeads(); refreshLeadDetail();
+        const d = $('leadDetail'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }));
+      document.querySelectorAll('[data-inc-clave]').forEach((b) => b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          await fetchJSON('/api/incidencias/resolver', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clave: b.dataset.incClave, resuelta: b.dataset.incRes === '1' }),
+          });
+          toast(b.dataset.incRes === '1' ? '✓ Incidencia resuelta' : 'Incidencia reabierta');
+          loadIncidencias();
+        } catch (e) { b.disabled = false; toast('❌ ' + e.message); }
+      }));
+    } catch (e) {
+      $('inc-lista').innerHTML = `<div class="empty">Error: ${escH(e.message)}</div>`;
+    }
+  }
+  $('inc-refrescar').addEventListener('click', loadIncidencias);
+  $('inc-pendientes').addEventListener('change', loadIncidencias);
+  $('inc-dias').addEventListener('change', loadIncidencias);
+
   $('devToggle').addEventListener('click', async () => {
     if (devPass()) { try { sessionStorage.removeItem(DEV_KEY); } catch (e) {} mostrarDev(false); toast('Zona de desarrollador cerrada'); return; }
     const p = prompt('Contraseña de desarrollador:');
@@ -1929,6 +2092,7 @@
   });
   if (devPass()) entrarDev(devPass());
   setInterval(() => { if (devPass()) { loadSalud(false); loadPlantillas(); } }, 5 * 60 * 1000);
+  setInterval(() => { if (devPass()) loadIncidencias(); }, 60 * 1000);
 </script>
 </body>
 </html>

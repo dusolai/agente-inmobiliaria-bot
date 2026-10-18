@@ -69,6 +69,17 @@ function _contextoDeEstado(lead) {
         enlacePresentacion: landing,
       };
     case 'reunion_registrado':
+      if (lead.sesion && lead.sesion.estado === 'reservada') {
+        const cuando = require('./calendlySync').describirCuando(lead.sesion.inicio);
+        return {
+          objetivo: `YA TIENE RESERVADA su sesión de dudas con Arkaitz ${cuando} (hora de España, Zoom). Contesta su duda, confírmale la cita ` +
+            'y anímale a ver antes la presentación para aprovechar la sesión. NO le mandes el enlace de reservar (ya reservó). ' +
+            'Si quiere cambiar de día, dile que te lo diga y le pasas el enlace para cambiarlo.',
+          enlace: null,
+          enlacePresentacion: landing,
+          cuando,
+        };
+      }
       return {
         objetivo: 'que se apunte a la sesión de dudas en grupo con Arkaitz (Zoom, 30 min) en el enlace. Contesta su duda y recuérdale el enlace.',
         enlace: sesion,
@@ -294,6 +305,10 @@ function _decidirPorReglas(lead, texto) {
           : `Buena pregunta${nombre}, es justo lo que ${config.agent.directorNombre} resuelve en directo en la sesión de dudas por Zoom (30 min, gratis y sin compromiso). Elige el día que mejor te venga: ${ctx.enlace}`,
       };
     case 'reunion_registrado':
+      if (ctx.cuando) {
+        if (esAck) return { accion: 'silencio', motivo: 'ok con la sesión ya reservada' };
+        return { accion: 'responder', texto: `Eso lo resuelve ${config.agent.directorNombre} en tu sesión, ${ctx.cuando} 🙂 Si no la has visto aún, la presentación te ayudará a llegar con todo claro: ${ctx.enlacePresentacion}` };
+      }
       return {
         accion: 'responder',
         texto: esAck

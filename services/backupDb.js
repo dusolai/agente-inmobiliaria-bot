@@ -33,6 +33,7 @@ const FICHEROS = [
   { kind: 'activation', ruta: () => path.join(DATA_DIR, 'activation.json') },
   { kind: 'campanas', ruta: () => path.join(DATA_DIR, 'campanas.json') },
   { kind: 'sheets_state', ruta: () => path.join(DATA_DIR, 'sheets_state.json') },
+  { kind: 'incidencias_resueltas', ruta: () => path.join(DATA_DIR, 'incidencias_resueltas.json') },
 ];
 
 function _leerDirComoObjeto(dir) {

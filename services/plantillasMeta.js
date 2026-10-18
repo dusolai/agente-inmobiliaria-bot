@@ -33,6 +33,8 @@ const REQUERIDAS = [
   { clave: 'recordatorio', variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_CUALIFICACION', para: 'Recordatorio único (todas)' },
   { clave: 'recordatorio_presentacion', variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_PRESENTACION', para: 'Recordatorio: no terminó la presentación' },
   { clave: 'recordatorio_sesion', variable: 'WHATSAPP_TEMPLATE_RECORDATORIO_SESION', para: 'Recordatorio: no se apuntó a la sesión' },
+  { clave: 'sesion_preparacion', variable: 'WHATSAPP_TEMPLATE_SESION_PREPARACION', para: 'Sesión reservada: ¿has visto la presentación?' },
+  { clave: 'sesion_hoy', variable: 'WHATSAPP_TEMPLATE_SESION_HOY', para: 'Sesión reservada: aviso del mismo día (confirmar)' },
 ];
 
 async function listar() {
@@ -82,6 +84,8 @@ async function requeridas() {
       const enSeenode = r.clave === 'recordatorio' ? config.whatsapp.templateRecordatorioCualificacion
         : r.clave === 'recordatorio_presentacion' ? config.whatsapp.templateRecordatorioPresentacion
         : r.clave === 'recordatorio_sesion' ? config.whatsapp.templateRecordatorioSesion
+        : r.clave === 'sesion_preparacion' ? config.whatsapp.templateSesionPreparacion
+        : r.clave === 'sesion_hoy' ? config.whatsapp.templateSesionHoy
         : configuradas[r.clave];
       return {
         ...r,
@@ -110,7 +114,7 @@ async function crear(clave) {
       {
         type: 'BODY',
         text: def.cuerpo,
-        example: { body_text_named_params: [{ param_name: 'nombre', example: 'María' }] },
+        example: { body_text_named_params: (def.variables || [{ nombre: 'nombre', ejemplo: 'María' }]).map((v) => ({ param_name: v.nombre, example: v.ejemplo })) },
       },
       {
         type: 'BUTTONS',

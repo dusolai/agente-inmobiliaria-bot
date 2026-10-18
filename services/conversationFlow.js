@@ -126,6 +126,11 @@ function esAutoRespuesta(texto) {
 // "ei" + "hola" seguidos: el primero lanzaba la bienvenida y el segundo un
 // "Perdona, igual no me he explicado bien" (parecía un mensaje duplicado).
 const PIDE_ENLACE_REGEX = /\b(pasame|mandame|enviame|dame|pasa|manda|envia)( me)? (el )?(enlace|link)\b/;
+// Botones de los avisos de la sesión reservada (sesion_hoy / sesion_preparacion)
+const SESION_CONFIRMA_REGEX = /^(alli estare|ahi estare|alli estaremos|confirmo|confirmado|cuenta conmigo|cuenta(d)? conmigo|si,? (alli|ahi) estare|si,? confirmo|si,? voy|voy|ok,? (alli|ahi) estare)\b/;
+const SESION_CAMBIAR_REGEX = /(cambiar (de )?dia|cambiar (la )?(fecha|hora|cita)|otro dia|no (voy a )?poder|no puedo (ir|asistir|conectarme)?|me ha surgido|reprogramar)/;
+const SESION_YA_VISTA_REGEX = /^(ya la he visto|ya la vi|ya lo he visto|ya lo vi|la he visto)\b/;
+const SESION_PIDE_PRESENTACION_REGEX = /(pasame|mandame|enviame|dame) (la )?presentacion/;
 const SALUDO_REGEX = /^(e+i+|e+y+|hey+|hola+|holi+s?|buenas+|buenos dias|buenas (tardes|noches)|hi|hello|que tal|saludos)( (que tal|buenas|hola))?[\s!.?¡¿👋😊🙂]*$/u;
 function esSaludo(texto) {
   return SALUDO_REGEX.test(normalizar(texto));
@@ -182,11 +187,19 @@ async function _darDeBaja(lead, texto, via = 'palabra') {
   );
 }
 
+// Reservar primero: enlace de la sesión para el mensaje tras cualificar
+// (null si RESERVA_PRIMERO=false o si ya tiene una sesión reservada).
+function _enlaceSesionSiReservaPrimero(lead) {
+  if (!config.flujo.reservaPrimero) return null;
+  if (lead.sesion && lead.sesion.estado === 'reservada') return null;
+  return enlaceRedirectorCalendly(lead, 'grupal');
+}
+
 function _textoLanding(perfil, lead) {
   const enlaceLanding = enlaceLandingPorPerfil(perfil, lead.id);
   return perfil === LEAD_PROFILES.PROFESIONAL
-    ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding })
-    : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
+    ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding, enlaceSesion: _enlaceSesionSiReservaPrimero(lead) })
+    : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding, enlaceSesion: _enlaceSesionSiReservaPrimero(lead) });
 }
 
 /**
@@ -379,11 +392,50 @@ async function handleIncoming(telefono, texto, extra = {}) {
     }
     const enlaceLanding = enlaceLandingPorPerfil(perfil, lead.id);
     const texto2 = perfil === LEAD_PROFILES.PROFESIONAL
-      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding })
-      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
+      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding, enlaceSesion: _enlaceSesionSiReservaPrimero(lead) })
+      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding, enlaceSesion: _enlaceSesionSiReservaPrimero(lead) });
     console.log(`🔀 [Flujo] Lead ${lead.nombre} cualificado como ${perfil} → landing ENVIADA (pdte. de ver)`);
     await messaging.sendTextMessage(lead.telefono, texto2);
     return;
+  }
+
+  // ─── Sesión RESERVADA: botones de los avisos y feedback ─────────
+  if (lead.sesion && lead.sesion.estado === 'reservada') {
+    const t = normalizar(texto);
+    const s = lead.sesion;
+    if (SESION_CONFIRMA_REGEX.test(t)) {
+      leadManager.updateLead(lead.id, { sesion: { ...s, confirmada: true, confirmadaAt: new Date().toISOString() } });
+      activityLog.appendActivity(lead.id, 'sesion_confirmada', { texto: String(texto).slice(0, 80) });
+      await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionConfirmada({ nombre: lead.nombre }));
+      return;
+    }
+    if (SESION_CAMBIAR_REGEX.test(t)) {
+      activityLog.appendActivity(lead.id, 'sesion_cambiar_dia', { texto: String(texto).slice(0, 80) });
+      const enlace = s.rescheduleUrl || enlaceRedirectorCalendly(lead, 'grupal');
+      await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionCambiarDia({ nombre: lead.nombre, enlace }));
+      return;
+    }
+    if (SESION_YA_VISTA_REGEX.test(t)) {
+      leadManager.updateLead(lead.id, { esperandoFeedback: true });
+      activityLog.appendActivity(lead.id, 'sesion_presentacion_vista', { texto: String(texto).slice(0, 80) });
+      await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionPideFeedback({ nombre: lead.nombre }));
+      return;
+    }
+    if (SESION_PIDE_PRESENTACION_REGEX.test(t)) {
+      await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionPreparacion({
+        nombre: lead.nombre, enlaceLanding: enlaceLandingPorPerfil(lead.perfil, lead.id),
+      }));
+      return;
+    }
+    // Lo que escriba tras "Ya la he visto" (o tras el aviso de preparación)
+    // es su opinión / su duda para Arkaitz: se guarda en la ficha del lead.
+    if (lead.esperandoFeedback && String(texto).trim().length >= 3) {
+      const feedback = [...(lead.feedbackSesion || []), { texto: String(texto).slice(0, 1000), ts: new Date().toISOString() }];
+      leadManager.updateLead(lead.id, { esperandoFeedback: false, feedbackSesion: feedback });
+      activityLog.appendActivity(lead.id, 'feedback_sesion', { texto: String(texto).slice(0, 300) });
+      await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionFeedbackApuntado({ nombre: lead.nombre }));
+      return;
+    }
   }
 
   // ─── Botón "Pásame el enlace" de los recordatorios ──────────────
@@ -406,8 +458,8 @@ async function handleIncoming(telefono, texto, extra = {}) {
   if (pideOtraRama) {
     const enlaceLanding = enlaceLandingPorPerfil(pideOtraRama, lead.id);
     const texto2 = pideOtraRama === LEAD_PROFILES.PROFESIONAL
-      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding })
-      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding });
+      ? messages.mensajeRamaProfesional({ nombre: lead.nombre, enlaceLanding, enlaceSesion: _enlaceSesionSiReservaPrimero(lead) })
+      : messages.mensajeRamaEmprendedor({ nombre: lead.nombre, enlaceLanding, enlaceSesion: _enlaceSesionSiReservaPrimero(lead) });
     console.log(`🔎 [Flujo] ${lead.nombre} (curioso) pidió la rama ${pideOtraRama} → landing enviada`);
     await messaging.sendTextMessage(lead.telefono, texto2);
     return;

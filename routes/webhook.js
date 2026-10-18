@@ -90,38 +90,36 @@ router.post('/new-lead', async (req, res) => {
 router.post('/calendly', async (req, res) => {
   try {
     const { event, payload } = req.body || {};
-    if (event !== 'invitee.created') {
+    if (event !== 'invitee.created' && event !== 'invitee.canceled') {
       return res.json({ ok: true, ignored: event || 'sin evento' });
     }
 
-    const tracking = (payload && payload.tracking) || {};
-    const leadId = conversationFlow.leadIdDesdeUtm(tracking.utm_content);
-    if (!leadId) {
-      console.log('📅 [CalendlyWebhook] Reserva sin utm_content de lead (tráfico externo), ignorada');
+    // Mismo reconocimiento que la sincronización por API (utm → email → teléfono)
+    const calendlySync = require('../services/calendlySync');
+    const lead = payload && calendlySync._leadDeInvitado(payload, leadManager.getAllLeads({}));
+    if (!lead) {
+      console.log('📅 [CalendlyWebhook] Reserva que no corresponde a ningún lead, ignorada');
       return res.json({ ok: true, ignored: 'sin lead' });
     }
 
-    const lead = leadManager.getLeadById(leadId);
-    if (!lead) return res.json({ ok: true, ignored: 'lead no encontrado' });
+    const ev = payload.scheduled_event || {};
+    if (event === 'invitee.canceled') {
+      await calendlySync.registrarCancelacion(lead, payload.uri);
+      return res.json({ ok: true });
+    }
+    activityLog.appendActivity(lead.id, 'calendly_booked', { via: 'webhook', evento: ev.name || null });
 
-    const nombreEvento = (payload.scheduled_event && payload.scheduled_event.name) || null;
-    activityLog.appendActivity(lead.id, 'calendly_booked', { via: 'webhook', evento: nombreEvento });
-
-    if (lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
-      // Reservó el GRUPAL: landing (modo landing) o plaza en la presentación
-      // en directo (modo presentación). Lo resuelve el flujo.
-      const inicio = (payload.scheduled_event && payload.scheduled_event.start_time) || null;
-      await conversationFlow.procesarReservaGrupal(lead, { via: 'webhook', evento: nombreEvento, inicio });
-    } else if (lead.estado === leadManager.LEAD_STATES.REUNION_REGISTRADO) {
-      // Reservó el 1-A-1 → confirmación
-      leadManager.transitionState(lead.id, leadManager.LEAD_STATES.REUNION_ASISTIO);
-      await messaging.sendTextMessage(
-        lead.telefono,
-        `¡Listo ${lead.nombre}! Tu plaza en la sesión de dudas con Arkaitz está reservada ✅\n\nEl enlace de Zoom te llega por email con la confirmación de Calendly. Nos vemos allí 🙌`
-      );
-      console.log(`📅 [CalendlyWebhook] Reserva 1-A-1 de ${lead.nombre} confirmada`);
+    if (config.flujo.trasCualificar === 'presentacion' && lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
+      // Modo presentación en directo: plaza en la presentación (flujo propio).
+      await conversationFlow.procesarReservaGrupal(lead, { via: 'webhook', evento: ev.name || null, inicio: ev.start_time || null });
     } else {
-      console.log(`📅 [CalendlyWebhook] Reserva de ${lead.nombre} con estado ${lead.estado} (ya procesada por el redirect, no-op)`);
+      // Sesión de dudas: se registra la reserva (NO es "asistió": antes se
+      // marcaba reunion_asistio al reservar).
+      await calendlySync.registrarReserva(lead, {
+        inviteeUri: payload.uri, eventoUri: ev.uri, inicio: ev.start_time, fin: ev.end_time,
+        joinUrl: ev.location && (ev.location.join_url || ev.location.location) || null,
+        rescheduleUrl: payload.reschedule_url || null, via: 'webhook',
+      });
     }
 
     res.json({ ok: true });

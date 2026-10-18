@@ -358,6 +358,66 @@ function activationReset() {
     assert.strictEqual(paraTel('34622000011').filter((m) => /pages\.dev/.test(m.body)).length, 1, 'la landing sale una sola vez');
     ok('mensajes en ráfaga: se agrupan y se responde una vez (antes: landing doble, respuestas repetidas)');
 
+    // d6) Reservar primero → preparación → aviso del día → Zoom 1 h antes
+    const calendlySync = require('../services/calendlySync');
+    const nowReal = Date.now;
+    const MEDIODIA = new Date('2026-10-20T10:00:00Z').getTime(); // 12:00 en Madrid
+    Date.now = () => MEDIODIA;
+    try {
+      // La reserva llega de Calendly (utm_content=lead_<id>) → reunion_registrado
+      const p = leadManager.createLead({ nombre: 'Paula', telefono: '34622000012', email: 'paula@x.com', campana: vivas.id, segmento: 'viejos' });
+      leadManager.updateLead(p.id, { estado: 'video_enviado', perfil: 'emprendedor' });
+      const inv = { uri: 'inv-1', email: 'otra@x.com', tracking: { utm_content: `lead_${p.id}` } };
+      assert.strictEqual(calendlySync._leadDeInvitado(inv, leadManager.getAllLeads({})).id, p.id, 'se reconoce por utm');
+      assert.strictEqual(calendlySync._leadDeInvitado({ email: 'PAULA@x.com' }, leadManager.getAllLeads({})).id, p.id, 'o por email');
+      const inicio = new Date(MEDIODIA + 54 * 3600 * 1000).toISOString(); // jueves 18:00 Madrid
+      await calendlySync.registrarReserva(leadManager.getLeadById(p.id), { inviteeUri: 'inv-1', eventoUri: 'ev-1', inicio, joinUrl: 'https://zoom.us/j/123' });
+      let pl = leadManager.getLeadById(p.id);
+      assert.strictEqual(pl.estado, 'reunion_registrado', 'reservar = reunion_registrado (no "asistió")');
+      assert.strictEqual(paraTel('34622000012').length, 0, 'fuera de ventana no se manda texto (Calendly ya manda su email)');
+
+      // Al día siguiente: preparación con plantilla (no ha visto el webinar)
+      config.whatsapp.templateSesionPreparacion = 'sesion_preparacion_three';
+      config.whatsapp.templateSesionHoy = 'sesion_hoy_three';
+      Date.now = () => MEDIODIA + 24 * 3600 * 1000;
+      await scheduler.procesarSesiones();
+      assert.strictEqual(paraTel('34622000012').slice(-1)[0].plantilla, 'sesion_preparacion_three', 'aviso de preparación');
+      await scheduler.procesarSesiones();
+      assert.strictEqual(paraTel('34622000012').length, 1, 'no se repite en el mismo ciclo/día');
+
+      // Contesta con el botón → se le pide opinión y se guarda
+      await conversationFlow.handleIncoming('34622000012', 'Ya la he visto');
+      assert.ok(/qué te ha parecido/i.test(paraTel('34622000012').slice(-1)[0].body));
+      await conversationFlow.handleIncoming('34622000012', 'Me gustaría saber cómo se cobran las comisiones');
+      pl = leadManager.getLeadById(p.id);
+      assert.ok(pl.feedbackSesion && /comisiones/.test(pl.feedbackSesion[0].texto), 'feedback guardado para Arkaitz');
+
+      // El día de la sesión (≤ 14 h antes): aviso "¿cuento contigo?" (ventana abierta → texto)
+      Date.now = () => new Date(inicio).getTime() - 6 * 3600 * 1000;
+      const n6 = paraTel('34622000012').length;
+      await scheduler.procesarSesiones();
+      const avisoHoy = paraTel('34622000012').slice(n6);
+      assert.ok(avisoHoy.length === 1 && avisoHoy[0].plantilla === 'sesion_hoy_three' && avisoHoy[0].params[1] === 'hoy a las 18:00', 'aviso del mismo día (plantilla, ventana cerrada) con la hora');
+      await conversationFlow.handleIncoming('34622000012', 'Allí estaré');
+      assert.ok(leadManager.getLeadById(p.id).sesion.confirmada, 'asistencia confirmada');
+
+      // Una hora antes: el Zoom (acaba de contestar "Allí estaré" → ventana abierta)
+      const messaging = require('../services/messaging');
+      const ventanaReal = messaging.dentroDeVentana;
+      messaging.dentroDeVentana = () => true;
+      Date.now = () => new Date(inicio).getTime() - 60 * 60 * 1000;
+      await scheduler.procesarSesiones();
+      assert.ok(/zoom\.us\/j\/123/.test(paraTel('34622000012').slice(-1)[0].body), 'enlace del Zoom 1 h antes');
+      messaging.dentroDeVentana = ventanaReal;
+
+      // Cambiar de día → enlace para reprogramar; la Fase 3 no le dice "no has reservado"
+      await conversationFlow.handleIncoming('34622000012', 'Cambiar de día');
+      assert.ok(/\/r\/grupal\?l=/.test(paraTel('34622000012').slice(-1)[0].body));
+    } finally {
+      Date.now = nowReal;
+    }
+    ok('sesión reservada: preparación + feedback, aviso del día para confirmar, Zoom 1 h antes, cambiar de día');
+
     // e) Freno de emergencia: error de cuenta de Meta → nada sale hasta reanudar
     scheduler.bloquearEnvios(131042, 'Business eligibility payment issue');
     const n1 = enviados.length;
@@ -412,6 +472,33 @@ function activationReset() {
     assert.ok(/\/r\/grupal\?l=/.test(paraTel(tel)[4].body) && !/te escribe/.test(paraTel(tel)[4].body), 'no promete que le escribirán: le da la sesión');
     assert.ok(leadManager.getLeadByPhone(tel).pideHumanoAt, 'queda marcado para que le escriba una persona');
     ok('router: no contesta saludos cruzados, responde "dale" tras la landing, no repite, pide persona → enlace de la sesión');
+  }
+
+  // ── 9. Incidencias para la zona de desarrollador (cálculo puro) ──
+  {
+    const incidencias = require('../services/incidencias');
+    const base = Date.parse('2026-10-17T10:00:00Z');
+    const ts = (min) => new Date(base + min * 60000).toISOString();
+    const L = [{ id: 'i1', nombre: 'Inc', telefono: '34600000001', estado: 'video_enviado' },
+      { id: 'i2', nombre: 'Desc', telefono: '34600000002', estado: 'descartado' }];
+    const ev = [
+      { ts: ts(0), leadId: 'i1', type: 'message_sent', meta: { preview: '¡Genial! Aquí tienes la presentación: https://x.pages.dev/?l=1', ok: true } },
+      { ts: ts(2), leadId: 'i1', type: 'message_sent', meta: { preview: '¡¡Genial!! Aquí tienes la presentación 👉 https://x.pages.dev/?l=1', ok: true } },
+      { ts: ts(5), leadId: 'i1', type: 'message_sent', meta: { preview: 'Hola', ok: false, code: 131047, error: 'Re-engagement message' } },
+      { ts: ts(10), leadId: 'i1', type: 'pide_humano', meta: { texto: 'quiero hablar con una persona' } },
+      { ts: ts(20), leadId: 'i1', type: 'message_received', meta: { texto: '¿y cuánto cuesta?' } },
+      { ts: ts(0), leadId: 'i2', type: 'message_sent', meta: { preview: '[plantilla recordatorio_presentacion_three]', ok: true } },
+      { ts: ts(5), leadId: 'i2', type: 'state_changed', meta: { from: 'video_enviado', to: 'descartado' } },
+    ];
+    const r = incidencias.calcular(ev, L, { desde: base - 3600000, ahora: base + 120 * 60000 });
+    const tipos = r.map((i) => i.tipo).sort();
+    assert.deepStrictEqual(tipos, ['descarte_tras_recordatorio', 'duplicado', 'error_envio', 'landing_doble', 'pide_humano', 'sin_respuesta']);
+    assert.ok(new Date(r[0].ts) >= new Date(r[r.length - 1].ts), 'más recientes primero');
+    assert.ok(!incidencias.casiIguales('Hola, ¿qué tal?', 'Te paso el enlace de la sesión de dudas'));
+    const clave = r.find((i) => i.tipo === 'duplicado').clave;
+    incidencias.marcarResuelta(clave);
+    assert.ok(incidencias.leerResueltas()[clave], 'la incidencia queda marcada como resuelta');
+    ok('incidencias: duplicado, landing doble, descarte tras recordatorio, pide persona, error de envío y sin respuesta');
   }
 
   console.log(`\n🎉 Todo correcto (${paso} comprobaciones, ${enviados.length} mensajes simulados, 0 reales).\n`);

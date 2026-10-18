@@ -632,6 +632,9 @@ async function procesarRecordatoriosFase3() {
   const ahora = Date.now();
 
   for (const lead of leads) {
+    // Con la sesión ya reservada en Calendly lo lleva la Fase Sesión: aquí no
+    // se le dice "aún no has reservado".
+    if (lead.sesion && ['reservada', 'celebrada'].includes(lead.sesion.estado)) continue;
     // Leads antiguos (o promovidos desde la Fase 2B) pueden no traer fase3.
     const fase3 = (lead.recordatorios && lead.recordatorios.fase3) || { enviados: 0, ultimoEnvio: null };
 
@@ -670,6 +673,116 @@ async function procesarRecordatoriosFase3() {
 /**
  * Ejecuta todos los procesos de follow-up.
  */
+/**
+ * Fase SESIÓN (18-10): leads con la sesión de dudas RESERVADA en Calendly.
+ * Reservar primero y prepararse después; y que no falten:
+ *   1. Preparación (máx. 2, ≥ 20 h entre sí y desde la reserva, nunca el día
+ *      de la sesión): "¿has visto la presentación? ¿qué te ha parecido?" —
+ *      solo si NO ha terminado el webinar. Recoge feedback para Arkaitz.
+ *   2. Mismo día (o la víspera por la tarde si es por la mañana): "¿cuento
+ *      contigo?" con botones Allí estaré / Cambiar de día.
+ *   3. Una hora antes: enlace del Zoom (texto: solo con la ventana abierta,
+ *      que casi siempre lo está porque contestó al aviso del mismo día).
+ *   4. Pasada la sesión sin marcar asistencia: "¿te surgió algo?" + otro día
+ *      (solo con la ventana abierta).
+ * Horario propio: 08–22 h de España (la sesión puede ser por la tarde-noche).
+ */
+function _terminoWebinar(lead) {
+  return activityLog.getActivityByLead(lead.id).some((e) =>
+    e.type === 'calendly_button_revealed' ||
+    ((e.type === 'video_complete' || e.type === 'video_progress_90') && e.meta && e.meta.videoId === 'videoWebinar'));
+}
+
+function _horaMadrid() {
+  return parseInt(new Date(Date.now()).toLocaleString('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false }), 10);
+}
+
+async function procesarSesiones() {
+  const calendlySync = require('./calendlySync');
+  const S = leadManager.LEAD_STATES;
+  const leads = _leadsActivos().filter((l) => l.sesion && l.sesion.estado === 'reservada');
+  if (!leads.length) return;
+  const h = _horaMadrid();
+  const enHorario = h >= 8 && h < 22;
+  const ahora = Date.now();
+  const H = 3600 * 1000;
+
+  for (const lead of leads) {
+    const s = lead.sesion;
+    const inicio = new Date(s.inicio).getTime();
+    const avisos = { preparacion: 0, ...(s.avisos || {}) };
+    const guardar = (cambios) => leadManager.updateLead(lead.id, { sesion: { ...s, avisos: { ...avisos, ...cambios } } });
+    const ventana = messaging.dentroDeVentana(lead.telefono);
+    const nombre = lead.nombre;
+
+    // 4. Ya pasó: si no consta asistencia, se le ofrece otro día y se cierra.
+    if (ahora > inicio + 90 * 60 * 1000) {
+      if (lead.estado === S.REUNION_ASISTIO) {
+        leadManager.updateLead(lead.id, { sesion: { ...s, estado: 'celebrada' } });
+        continue;
+      }
+      if (!avisos.noAsistio && enHorario && ventana) {
+        await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionNoAsistio({
+          nombre, enlace: conversationFlow.enlaceRedirectorCalendly(lead, 'grupal'),
+        }));
+        guardar({ noAsistio: new Date(Date.now()).toISOString() });
+        activityLog.appendActivity(lead.id, 'sesion_no_asistio', { inicio: s.inicio });
+        continue;
+      }
+      if (ahora > inicio + 6 * H) {
+        leadManager.updateLead(lead.id, { sesion: { ...(leadManager.getLeadById(lead.id).sesion), estado: 'celebrada' } });
+        activityLog.appendActivity(lead.id, 'sesion_pasada', { inicio: s.inicio, asistencia: 'sin confirmar' });
+      }
+      continue;
+    }
+    if (!enHorario) continue;
+
+    // 3. Una hora antes: el Zoom.
+    if (!avisos.unaHora && inicio - ahora <= 75 * 60 * 1000) {
+      if (ventana) {
+        await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionUnaHora({
+          nombre, hora: calendlySync.horaDe(s.inicio), joinUrl: s.joinUrl,
+        }));
+      }
+      // Sin ventana no hay texto libre: el email de Calendly lleva el Zoom.
+      guardar({ unaHora: new Date(Date.now()).toISOString() });
+      continue;
+    }
+
+    // 2. Aviso del mismo día (≤ 14 h antes y ≥ 2 h antes): confirmar asistencia.
+    if (!avisos.hoy && !s.confirmada && inicio - ahora <= 14 * H && inicio - ahora >= 2 * H) {
+      const cuando = calendlySync.describirCuando(s.inicio, { relativo: true });
+      const plantilla = config.whatsapp.templateSesionHoy;
+      let envio = null;
+      if (ventana) envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionHoy({ nombre, cuando }));
+      else if (plantilla) envio = await messaging.sendTemplate(lead.telefono, [nombre, cuando], { name: plantilla, lang: config.whatsapp.templateLang, varNames: ['nombre', 'cuando'] });
+      if (envio && _envioOk(envio)) guardar({ hoy: new Date(Date.now()).toISOString() });
+      else if (envio && _rechazoDeMeta(envio)) guardar({ hoy: 'fallido' });
+      continue;
+    }
+
+    // 1. Preparación: que vea la presentación antes (y nos cuente).
+    if (avisos.preparacion < 2 && inicio - ahora >= 20 * H && !_terminoWebinar(lead)) {
+      const desde = Math.max(new Date(s.reservadaAt).getTime(), avisos.ultimaPreparacion ? new Date(avisos.ultimaPreparacion).getTime() : 0);
+      if (ahora - desde < 20 * H || _recienContactado(lead)) continue;
+      const plantilla = config.whatsapp.templateSesionPreparacion;
+      let envio = null;
+      if (ventana) {
+        envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionPreparacion({
+          nombre, enlaceLanding: conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id),
+        }));
+      } else if (plantilla) {
+        envio = await messaging.sendTemplate(lead.telefono, [nombre], { name: plantilla, lang: config.whatsapp.templateLang, varNames: ['nombre'] });
+      }
+      if (envio && (_envioOk(envio) || _rechazoDeMeta(envio))) {
+        guardar({ preparacion: avisos.preparacion + 1, ultimaPreparacion: new Date(Date.now()).toISOString() });
+        // Lo que conteste a "¿qué te ha parecido?" se guarda como feedback.
+        leadManager.updateLead(lead.id, { esperandoFeedback: true });
+      }
+    }
+  }
+}
+
 async function ejecutarCiclo() {
   console.log(`\n⏰ [Scheduler] Ciclo de recordatorios — ${new Date().toLocaleString()}`);
   const bloqueo = getBloqueo();
@@ -678,6 +791,15 @@ async function ejecutarCiclo() {
     return;
   }
   await procesarActivacionDiaria();
+
+  // Reservas de Calendly (quién reservó/canceló) y avisos de la sesión, con
+  // su propio horario (08–22 h de España): van antes del corte de abajo.
+  try {
+    await require('./calendlySync').sincronizar();
+    await procesarSesiones();
+  } catch (err) {
+    console.error('❌ [Scheduler] Fase Sesión:', err.message);
+  }
 
   // Los RECORDATORIOS también respetan el horario de día (mismo que la
   // activación: ACTIVACION_HORA_INICIO–FIN, def. 10–20). Sin esto, un lead
@@ -730,6 +852,7 @@ function iniciar() {
 }
 
 module.exports = {
+  procesarSesiones,
   iniciar,
   ejecutarCiclo,
   procesarActivacionDiaria,

@@ -122,6 +122,26 @@ const PLANTILLAS_META = {
       `¿Te paso el enlace para elegir día? Si no es para ti, pulsa "No me interesa".`,
     botones: ['Sí, pásame el enlace', 'No me interesa'],
   },
+  // Tras RESERVAR la sesión (18-10): que lleguen con la presentación vista y
+  // que no falten. Los botones los reconoce el flujo (BOTONES_SESION).
+  sesion_preparacion: {
+    nombreSugerido: 'sesion_preparacion_three',
+    variable: 'WHATSAPP_TEMPLATE_SESION_PREPARACION',
+    cuerpo:
+      `Hola {{nombre}} 👋 Te escribo de Three Inmobiliaria.\n\n` +
+      `Ya tienes reservada tu sesión de dudas con Arkaitz. Para sacarle el máximo partido, ¿has podido ver la presentación? Así en la sesión vamos directos a tus dudas.\n\n` +
+      `Cuéntame qué te ha parecido o qué te gustaría preguntarle.`,
+    botones: ['Ya la he visto', 'Pásame la presentación', 'Cambiar de día'],
+  },
+  sesion_hoy: {
+    nombreSugerido: 'sesion_hoy_three',
+    variable: 'WHATSAPP_TEMPLATE_SESION_HOY',
+    cuerpo:
+      `Hola {{nombre}} 👋 Te recuerdo que {{cuando}} tienes la sesión de dudas en grupo con Arkaitz por Zoom (30 min).\n\n` +
+      `¿Cuento contigo? Si te ha surgido algo, pulsa "Cambiar de día" y eliges otro momento.`,
+    variables: [{ nombre: 'nombre', ejemplo: 'María' }, { nombre: 'cuando', ejemplo: 'hoy a las 19:00' }],
+    botones: ['Allí estaré', 'Cambiar de día'],
+  },
 };
 
 function _textoSegmento(segmento, nombre) {
@@ -173,7 +193,23 @@ function mensajeReintentarCualificacion({ nombre }) {
 // terminarlo aparece el botón para reservar la reunión 1 a 1. El Calendly grupal
 // NO se ofrece aquí: generaba fricción ("míralo ahora" + "resérvalo para otro
 // momento" a la vez). El camino es uno solo: ver la presentación → reservar 1-a-1.
-function mensajeRamaProfesional({ nombre, enlaceLanding }) {
+// Reservar primero (18-10): con `enlaceSesion`, el mensaje tras cualificar
+// lleva PRIMERO el enlace para elegir día y después la presentación, que se
+// le recuerda ver antes de la sesión (Fase Sesión del scheduler). Sin él, el
+// orden antiguo: presentación → al terminar el webinar se abre la sesión.
+function _ramaReservaPrimero({ saludo, enlaceLanding, enlaceSesion, perfil }) {
+  return (
+    `${saludo}\n\n` +
+    `El siguiente paso es la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom: 30 min, gratis y sin compromiso. Elige el día que te venga bien:\n` +
+    `${enlaceSesion}\n\n` +
+    `Y para llegar con todo claro, aquí tienes la presentación (empieza por el vídeo corto):\n` +
+    `${enlaceLanding}` +
+    _notaPortugues(perfil)
+  );
+}
+
+function mensajeRamaProfesional({ nombre, enlaceLanding, enlaceSesion }) {
+  if (enlaceSesion) return _ramaReservaPrimero({ saludo: `¡Genial ${nombre}! 🙌`, enlaceLanding, enlaceSesion, perfil: 'profesional' });
   return (
     `¡Genial ${nombre}!\n\n` +
     `Aquí tienes la presentación completa del proyecto. Empieza por el vídeo corto y, según avanzas, se desbloquea el resto:\n` +
@@ -183,7 +219,8 @@ function mensajeRamaProfesional({ nombre, enlaceLanding }) {
   );
 }
 
-function mensajeRamaEmprendedor({ nombre, enlaceLanding }) {
+function mensajeRamaEmprendedor({ nombre, enlaceLanding, enlaceSesion }) {
+  if (enlaceSesion) return _ramaReservaPrimero({ saludo: `Entendido ${nombre} 🚀`, enlaceLanding, enlaceSesion, perfil: 'emprendedor' });
   return (
     `Entendido ${nombre} 🚀\n\n` +
     `Aquí tienes la presentación, va al grano. Verás primero un vídeo corto y, según avanzas, se desbloquea el resto:\n` +
@@ -506,6 +543,68 @@ function mensajeEnlaceSesion({ nombre, enlaceSesion }) {
   );
 }
 
+// ─── H. Sesión de dudas RESERVADA (18-10) ───────────────────────────
+// Reservar primero, prepararse después: tras la reserva se le pide ver la
+// presentación (y su opinión), el mismo día se confirma asistencia y 1 h
+// antes se le manda el Zoom. `cuando` = "el jueves 23 de octubre a las 19:00".
+function mensajeSesionReservada({ nombre, cuando, enlaceLanding }) {
+  return (
+    `¡Reservado, ${nombre}! ✅ Tu sesión de dudas con ${config.agent.directorNombre} es ${cuando} (hora de España), por Zoom.\n\n` +
+    `Para sacarle todo el partido, échale un vistazo antes a la presentación (empieza por el vídeo corto):\n${enlaceLanding}\n\n` +
+    `El mismo día te escribo para confirmar y te paso el enlace del Zoom 🙌`
+  );
+}
+
+function mensajeSesionPreparacion({ nombre, enlaceLanding }) {
+  return (
+    `${nombre}, ¿has podido ver la presentación? 👀 Así en la sesión con ${config.agent.directorNombre} vais directos a tus dudas.\n\n` +
+    `${enlaceLanding}\n\n` +
+    `Cuéntame qué te ha parecido o qué te gustaría preguntarle y se lo dejo apuntado.`
+  );
+}
+
+function mensajeSesionHoy({ nombre, cuando }) {
+  return (
+    `¡Hola ${nombre}! Te recuerdo que ${cuando} tienes la sesión de dudas con ${config.agent.directorNombre} por Zoom (30 min).\n\n` +
+    `¿Cuento contigo? Si te ha surgido algo, dime y te paso otro día.`
+  );
+}
+
+function mensajeSesionUnaHora({ nombre, hora, joinUrl }) {
+  return (
+    `${nombre}, ¡en una hora empezamos! (${hora}) 🎯\n\n` +
+    (joinUrl ? `Este es el enlace del Zoom:\n${joinUrl}\n\n` : `El enlace del Zoom lo tienes en el email de confirmación de Calendly.\n\n`) +
+    `Entra un par de minutos antes. ¡Nos vemos!`
+  );
+}
+
+function mensajeSesionConfirmada({ nombre }) {
+  return `¡Perfecto ${nombre}! 🙌 Te escribo una hora antes con el enlace del Zoom.`;
+}
+
+function mensajeSesionCambiarDia({ nombre, enlace }) {
+  return `Sin problema ${nombre} 🙂 Elige aquí el día que mejor te venga:\n${enlace}`;
+}
+
+function mensajeSesionCancelada({ nombre, enlace }) {
+  return `${nombre}, he visto que se ha cancelado tu sesión. Cuando quieras, eliges otro día aquí:\n${enlace}`;
+}
+
+function mensajeSesionNoAsistio({ nombre, enlace }) {
+  return (
+    `${nombre}, hoy no te vimos en la sesión 😕 ¿Te surgió algo?\n\n` +
+    `Hay sesiones varios días a la semana, elige la que mejor te venga:\n${enlace}`
+  );
+}
+
+function mensajeSesionPideFeedback({ nombre }) {
+  return `¡Genial ${nombre}! 🙌 ¿Qué te ha parecido? Si hay algo que quieras que ${config.agent.directorNombre} te aclare en la sesión, cuéntamelo y se lo dejo apuntado.`;
+}
+
+function mensajeSesionFeedbackApuntado({ nombre }) {
+  return `¡Apuntado, ${nombre}! ${config.agent.directorNombre} lo tendrá delante en la sesión ✍️`;
+}
+
 function mensajeReservaPresentacionConfirmada({ nombre }) {
   return (
     `¡Listo ${nombre}! Tu plaza en la presentación está reservada ✅\n\n` +
@@ -523,6 +622,16 @@ module.exports = {
   mensajeInvitacionPresentacion,
   mensajeReservaPresentacionConfirmada,
   mensajeEnlaceSesion,
+  mensajeSesionReservada,
+  mensajeSesionPreparacion,
+  mensajeSesionHoy,
+  mensajeSesionUnaHora,
+  mensajeSesionConfirmada,
+  mensajeSesionCambiarDia,
+  mensajeSesionCancelada,
+  mensajeSesionNoAsistio,
+  mensajeSesionPideFeedback,
+  mensajeSesionFeedbackApuntado,
   mensajeRamaProfesional,
   mensajeRamaEmprendedor,
   mensajeAccesoVideoTrasReserva,

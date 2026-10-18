@@ -56,6 +56,18 @@ module.exports = {
     // manda nada (no se gasta ni se molesta).
     templateRecordatorioPresentacion: process.env.WHATSAPP_TEMPLATE_RECORDATORIO_PRESENTACION || '',
     templateRecordatorioSesion: process.env.WHATSAPP_TEMPLATE_RECORDATORIO_SESION || '',
+    // Tras RESERVAR la sesión (18-10): preparación ("¿has visto la
+    // presentación?", recoge feedback) y aviso del mismo día para confirmar
+    // asistencia. Sin plantilla, solo se envían si la ventana de 24 h está abierta.
+    templateSesionPreparacion: process.env.WHATSAPP_TEMPLATE_SESION_PREPARACION || '',
+    templateSesionHoy: process.env.WHATSAPP_TEMPLATE_SESION_HOY || '',
+  },
+
+  // API de Calendly (token personal: Calendly → Integraciones → API y
+  // webhooks). Con él el sistema sabe quién reservó, cuándo, el enlace de
+  // Zoom y si canceló — sin configurar webhooks.
+  calendly: {
+    token: process.env.CALENDLY_TOKEN || '',
   },
 
   // Canal Telegram (modo piloto previo a producción)
@@ -132,6 +144,10 @@ module.exports = {
 
   // ─── Flujo del embudo ──────────────────────────────────────────
   flujo: {
+    // Reservar primero (18-10, Diego): en modo landing, el mensaje tras
+    // cualificar lleva el enlace de la sesión ANTES que la presentación.
+    // RESERVA_PRIMERO=false vuelve al orden antiguo (webinar → botón).
+    reservaPrimero: process.env.RESERVA_PRIMERO !== 'false',
     // Qué recibe el lead al responder 1/2:
     //   'landing'      → la landing con los vídeos (VSL → webinar → botón 1-a-1).
     //                    Flujo actual, el del lanzamiento de octubre.
