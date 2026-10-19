@@ -834,6 +834,9 @@ async function ejecutarCiclo() {
     console.warn(`🛑 [Scheduler] Envíos PARADOS desde ${bloqueo.desde}: ${bloqueo.motivo}. Nada sale hasta reanudar en el CRM.`);
     return;
   }
+  // Plantillas que Meta haya aprobado desde el último ciclo (cada hora)
+  try { await require('./plantillasMeta').activarAprobadas(); } catch (e) { /* sin red o sin cuenta: nada */ }
+
   await procesarActivacionDiaria();
 
   // Reservas de Calendly (quién reservó/canceló) y avisos de la sesión, con

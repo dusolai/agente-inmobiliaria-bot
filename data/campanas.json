@@ -1,0 +1,14 @@
+{
+  "lista": [
+    {
+      "id": "prueba_sep26",
+      "nombre": "Campaña prueba · septiembre 2026",
+      "estado": "activa",
+      "segmento": null,
+      "leadsPorDia": 20,
+      "creada": "2026-10-19T10:29:28.485Z",
+      "archivadaEn": null,
+      "notas": "Leads anteriores al sistema de campañas (prueba de septiembre 2026)."
+    }
+  ]
+}

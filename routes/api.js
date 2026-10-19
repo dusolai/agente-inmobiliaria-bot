@@ -872,7 +872,9 @@ router.post('/whatsapp/repesca', async (req, res) => {
     const huecos = await require('../services/calendlySync').huecosTexto();
     const cand = scheduler.candidatosRepesca();
     if (req.body && req.body.confirmar) {
-      if (!require('../config/config').whatsapp.templateSesionHuecos) return res.status(400).json({ error: 'Falta WHATSAPP_TEMPLATE_SESION_HUECOS en Seenode' });
+      // Si Meta la acaba de aprobar, se activa sola (sin esperar a la hora)
+      if (!require('../config/config').whatsapp.templateSesionHuecos) await require('../services/plantillasMeta').activarAprobadas({ forzar: true });
+      if (!require('../config/config').whatsapp.templateSesionHuecos) return res.status(400).json({ error: 'La plantilla sesion_huecos_three no está aprobada en Meta ni configurada en Seenode' });
       for (const l of cand) leadManager.updateLead(l.id, { repesca: { estado: 'pendiente', ts: new Date().toISOString() } });
     }
     res.json({ huecos, total: cand.length, encolados: Boolean(req.body && req.body.confirmar), candidatos: cand.map((l) => ({ id: l.id, nombre: l.nombre, estado: l.estado, perfil: l.perfil })) });

@@ -71,10 +71,61 @@ async function listar() {
   }
 }
 
+// Dónde vive en config la plantilla de cada clave (las de segmento, en
+// templatesPorSegmento[clave]).
+const CLAVE_CONFIG = {
+  recordatorio: 'templateRecordatorioCualificacion',
+  recordatorio_presentacion: 'templateRecordatorioPresentacion',
+  recordatorio_sesion: 'templateRecordatorioSesion',
+  sesion_preparacion: 'templateSesionPreparacion',
+  sesion_hoy: 'templateSesionHoy',
+  sesion_huecos: 'templateSesionHuecos',
+};
+function _configurada(clave) {
+  const k = CLAVE_CONFIG[clave];
+  return k ? config.whatsapp[k] : (config.whatsapp.templatesPorSegmento || {})[clave];
+}
+function _configurar(clave, nombre) {
+  const k = CLAVE_CONFIG[clave];
+  if (k) config.whatsapp[k] = nombre;
+  else {
+    config.whatsapp.templatesPorSegmento = config.whatsapp.templatesPorSegmento || {};
+    config.whatsapp.templatesPorSegmento[clave] = nombre;
+  }
+}
+
+/**
+ * Activación automática (19-10): cada plantilla que Meta tiene APROBADA con
+ * su nombre sugerido se usa aunque la variable de Seenode esté vacía. Antes,
+ * una plantilla aprobada se quedaba sin usar hasta que alguien añadía la
+ * variable a mano (los recordatorios de la sesión estuvieron días parados
+ * así). La variable de Seenode, si existe, manda. Se refresca cada hora.
+ */
+const _automaticas = new Set();
+let _ultimaActivacion = 0;
+async function activarAprobadas({ forzar = false } = {}) {
+  if (!forzar && Date.now() - _ultimaActivacion < 60 * 60 * 1000) return { ok: true, activadas: [] };
+  const l = await listar();
+  if (!l.ok) return { ok: false, error: l.error };
+  _ultimaActivacion = Date.now();
+  const porNombre = new Map(l.plantillas.map((t) => [t.name, t]));
+  const activadas = [];
+  for (const r of REQUERIDAS) {
+    const def = messages.PLANTILLAS_META[r.clave];
+    const t = porNombre.get(def.nombreSugerido);
+    if (t && t.status === 'APPROVED' && !_configurada(r.clave)) {
+      _configurar(r.clave, def.nombreSugerido);
+      _automaticas.add(r.clave);
+      activadas.push(def.nombreSugerido);
+    }
+  }
+  if (activadas.length) console.log(`📝 [Plantillas] Activadas automáticamente (aprobadas en Meta, sin variable en Seenode): ${activadas.join(', ')}`);
+  return { ok: true, activadas };
+}
+
 async function requeridas() {
   const l = await listar();
   const porNombre = new Map(((l.ok && l.plantillas) || []).map((t) => [t.name, t]));
-  const configuradas = config.whatsapp.templatesPorSegmento || {};
   return {
     ok: l.ok,
     error: l.error,
@@ -82,13 +133,7 @@ async function requeridas() {
     requeridas: REQUERIDAS.map((r) => {
       const def = messages.PLANTILLAS_META[r.clave];
       const enMeta = porNombre.get(def.nombreSugerido) || null;
-      const enSeenode = r.clave === 'recordatorio' ? config.whatsapp.templateRecordatorioCualificacion
-        : r.clave === 'recordatorio_presentacion' ? config.whatsapp.templateRecordatorioPresentacion
-        : r.clave === 'recordatorio_sesion' ? config.whatsapp.templateRecordatorioSesion
-        : r.clave === 'sesion_preparacion' ? config.whatsapp.templateSesionPreparacion
-        : r.clave === 'sesion_hoy' ? config.whatsapp.templateSesionHoy
-        : r.clave === 'sesion_huecos' ? config.whatsapp.templateSesionHuecos
-        : configuradas[r.clave];
+      const enSeenode = _configurada(r.clave);
       return {
         ...r,
         nombre: def.nombreSugerido,
@@ -97,6 +142,8 @@ async function requeridas() {
         enMeta: enMeta ? { status: enMeta.status, rejected_reason: enMeta.rejected_reason, language: enMeta.language } : null,
         enSeenode: enSeenode || null,
         seenodeOk: enSeenode === def.nombreSugerido,
+        // true cuando se activó sola al verla aprobada en Meta (sin variable)
+        automatica: _automaticas.has(r.clave),
       };
     }),
   };
@@ -138,4 +185,4 @@ async function crear(clave) {
   }
 }
 
-module.exports = { listar, requeridas, crear, REQUERIDAS };
+module.exports = { listar, requeridas, crear, activarAprobadas, REQUERIDAS };

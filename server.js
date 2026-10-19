@@ -201,6 +201,9 @@ async function arrancar() {
 ╚══════════════════════════════════════════════════════╝
     `);
 
+    // ─── Plantillas aprobadas en Meta → activas aunque falte la variable ──
+    require('./services/plantillasMeta').activarAprobadas({ forzar: true }).catch((e) => console.error('❌ [Plantillas] Activación automática:', e.message));
+
     // ─── Iniciar scheduler de recordatorios ─────────────────────
     const scheduler = require('./services/scheduler');
     scheduler.iniciar();
