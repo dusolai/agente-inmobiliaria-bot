@@ -33,7 +33,7 @@ function activo() {
 function _get(url, params) {
   return axios.get(url.startsWith('http') ? url : `${API}${url}`, {
     params,
-    headers: { Authorization: `Bearer ${config.calendly.token}` },
+    headers: { Authorization: `Bearer ${config.calendly.token}`, 'User-Agent': 'Mozilla/5.0 (three-inmo-crm)' },
     timeout: 15000,
   });
 }
