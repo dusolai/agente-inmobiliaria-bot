@@ -219,6 +219,13 @@ function mensajeReintentarCualificacion({ nombre }) {
 // terminarlo aparece el botón para reservar la reunión 1 a 1. El Calendly grupal
 // NO se ofrece aquí: generaba fricción ("míralo ahora" + "resérvalo para otro
 // momento" a la vez). El camino es uno solo: ver la presentación → reservar 1-a-1.
+// Un solo vídeo por landing (22-10): la presentación larga. Minutos que se
+// citan en los mensajes (la de agentes dura 33, la de emprendedores 21).
+const MINUTOS_PRESENTACION = { profesional: 33, emprendedor: 21 };
+function minutosPresentacion(perfil) {
+  return MINUTOS_PRESENTACION[perfil] || MINUTOS_PRESENTACION.emprendedor;
+}
+
 // Reservar primero (18-10): con `enlaceSesion`, el mensaje tras cualificar
 // lleva PRIMERO el enlace para elegir día y después la presentación, que se
 // le recuerda ver antes de la sesión (Fase Sesión del scheduler). Sin él, el
@@ -228,7 +235,7 @@ function _ramaReservaPrimero({ saludo, enlaceLanding, enlaceSesion, perfil }) {
     `${saludo}\n\n` +
     `El siguiente paso es la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom: 30 min, gratis y sin compromiso. Elige el día que te venga bien:\n` +
     `${enlaceSesion}\n\n` +
-    `Y para llegar con todo claro, aquí tienes la presentación (empieza por el vídeo corto):\n` +
+    `Y para llegar con todo claro, aquí tienes la presentación completa del proyecto (${minutosPresentacion(perfil)} min):\n` +
     `${enlaceLanding}` +
     _notaPortugues(perfil)
   );
@@ -238,9 +245,9 @@ function mensajeRamaProfesional({ nombre, enlaceLanding, enlaceSesion }) {
   if (enlaceSesion) return _ramaReservaPrimero({ saludo: `¡Genial ${nombre}! 🙌`, enlaceLanding, enlaceSesion, perfil: 'profesional' });
   return (
     `¡Genial ${nombre}!\n\n` +
-    `Aquí tienes la presentación completa del proyecto. Empieza por el vídeo corto y, según avanzas, se desbloquea el resto:\n` +
+    `Aquí tienes la presentación completa del proyecto (${minutosPresentacion('profesional')} min):\n` +
     `${enlaceLanding}\n\n` +
-    `Al terminar el webinar se te desbloquea el botón para apuntarte a la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom 🎯\n\n` +
+    `Al terminarla, apúntate a la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom 🎯\n\n` +
     `Lo hacemos así a propósito: a esa sesión se viene con la presentación ya vista, para aprovecharla resolviendo dudas en directo.`
   );
 }
@@ -249,9 +256,9 @@ function mensajeRamaEmprendedor({ nombre, enlaceLanding, enlaceSesion }) {
   if (enlaceSesion) return _ramaReservaPrimero({ saludo: `Entendido ${nombre} 🚀`, enlaceLanding, enlaceSesion, perfil: 'emprendedor' });
   return (
     `Entendido ${nombre} 🚀\n\n` +
-    `Aquí tienes la presentación, va al grano. Verás primero un vídeo corto y, según avanzas, se desbloquea el resto:\n` +
+    `Aquí tienes la presentación completa del proyecto, va al grano (${minutosPresentacion('emprendedor')} min):\n` +
     `${enlaceLanding}\n\n` +
-    `Al terminar el webinar se te desbloquea el botón para apuntarte a la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom 🎯\n\n` +
+    `Al terminarla, apúntate a la sesión de dudas en grupo con ${config.agent.directorNombre}, ${config.agent.directorRol}, por Zoom 🎯\n\n` +
     `Lo hacemos así a propósito: a esa sesión se viene con la presentación ya vista, para aprovecharla resolviendo dudas en directo.` +
     _notaPortugues('emprendedor')
   );
@@ -294,7 +301,7 @@ function mensajeBienvenida({ nombre, enlaceVideo }) {
   return (
     `Hola ${nombre} 👋\n\n` +
     `Soy del equipo de ${config.agent.empresaNombre}. Tenemos pendiente tu solicitud.\n\n` +
-    `Antes de seguir, échale un vistazo a este vídeo corto — te resume cómo funciona todo:\n` +
+    `Antes de seguir, échale un vistazo a la presentación — te explica cómo funciona todo:\n` +
     `${enlaceVideo}\n\n` +
     `Al final del vídeo se desbloquea el siguiente paso. Cualquier cosa, me escribes.`
   );
@@ -364,10 +371,10 @@ function recordatorioGrupal3({ nombre, enlaceCalendly }) {
 //   'webinar' → desbloqueó el webinar pero no llegó al final
 function _lineaEtapaFunnel(etapa) {
   if (etapa === 'webinar') {
-    return 'empezaste el webinar pero te quedaste a mitad — justo al final está lo importante';
+    return 'empezaste la presentación pero te quedaste a mitad — justo al final está lo importante';
   }
   if (etapa === 'vsl_hecho') {
-    return 'ya viste el primer vídeo pero aún te queda el webinar — ahí está lo que de verdad importa';
+    return 'te queda por ver la presentación — ahí está lo que de verdad importa';
   }
   if (etapa === 'vsl') {
     return 'no llegaste a terminar el primer vídeo';
@@ -573,20 +580,20 @@ function mensajeEnlaceSesion({ nombre, enlaceSesion }) {
 // Reservar primero, prepararse después: tras la reserva se le pide ver la
 // presentación (y su opinión), el mismo día se confirma asistencia y 1 h
 // antes se le manda el Zoom. `cuando` = "el jueves 23 de octubre a las 19:00".
-function mensajeSesionReservada({ nombre, cuando, enlaceLanding }) {
+function mensajeSesionReservada({ nombre, cuando, enlaceLanding, perfil }) {
   return (
     `¡Reservado, ${nombre}! ✅ Tu sesión de dudas con ${config.agent.directorNombre} es ${cuando} (hora de España), por Zoom.\n\n` +
-    `Para que la sesión te sirva de verdad, antes hay que ver la presentación (empieza por el vídeo corto, 8 min):\n${enlaceLanding}\n\n` +
+    `Para que la sesión te sirva de verdad, antes hay que ver la presentación (${minutosPresentacion(perfil)} min):\n${enlaceLanding}\n\n` +
     `En cuanto la termines se desbloquea tu acceso al Zoom. Cuéntame qué te ha parecido y lo tendrá ${config.agent.directorNombre} delante 🙌`
   );
 }
 
 // La presentación es la LLAVE del Zoom (21-10): sin verla no se entra. Este
 // es el aviso de una hora antes para quien aún no la ha visto.
-function mensajeSesionLlave({ nombre, hora, enlaceLanding }) {
+function mensajeSesionLlave({ nombre, hora, enlaceLanding, perfil }) {
   return (
     `${nombre}, tu sesión con ${config.agent.directorNombre} es a las ${hora} y aún no me consta que hayas visto la presentación 👀\n\n` +
-    `Es la llave para entrar: son 8 minutos y así en la sesión vas directo a tus dudas.\n${enlaceLanding}\n\n` +
+    `Es la llave para entrar: son ${minutosPresentacion(perfil)} minutos y así en la sesión vas directo a tus dudas.\n${enlaceLanding}\n\n` +
     `En cuanto la termines, o me cuentes en una frase qué te ha parecido, te llega el enlace del Zoom al momento.`
   );
 }
@@ -679,6 +686,7 @@ module.exports = {
   mensajeSesionPideFeedback,
   mensajeSesionFeedbackApuntado,
   mensajeSesionLlave,
+  minutosPresentacion,
   mensajeDerivacionArkaitz,
   mensajeRamaProfesional,
   mensajeRamaEmprendedor,

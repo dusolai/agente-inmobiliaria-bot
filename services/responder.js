@@ -101,7 +101,7 @@ function _systemPrompt(lead) {
     'Contexto del negocio (en palabras de Arkaitz): "la oportunidad de tener tu propia inmobiliaria online sin necesidad de experiencia ' +
     'y con formación a cargo de la empresa". Three Inmobiliaria incorpora agentes inmobiliarios y personas que buscan un ingreso extra ' +
     '(prescriptores) a su red. El proceso con cada interesado es: (1) pregunta de perfil — responder 1 si es agente, ' +
-    '2 si busca ingreso extra; (2) ver la presentación en vídeo en la página que se le envía (primero un vídeo corto y luego el webinar); ' +
+    '2 si busca ingreso extra; (2) ver la presentación completa en vídeo en la página que se le envía (un solo vídeo, 21 min para emprendedores y 33 para agentes); ' +
     `(3) sesión de dudas EN GRUPO con ${config.agent.directorNombre} (${config.agent.directorRol}) por Zoom, 30 min, gratis y sin compromiso, donde se resuelven las dudas en directo. Se apunta eligiendo día en un enlace de Calendly.\n\n` +
     'REGLAS ESTRICTAS:\n' +
     '- NO inventes datos, cifras, precios, comisiones ni promesas. Si preguntan cuánto cuesta, cuánto se gana, si hay que ser autónomo, ' +

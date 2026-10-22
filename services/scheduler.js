@@ -551,7 +551,7 @@ async function procesarRecordatoriosFase2B() {
     // espera, sin descartarse, a que exista la plantilla.
     // Quien ya vio el VSL (video_visto) o lo terminó no necesita "termina la
     // presentación": recibe la plantilla de la sesión ("¿te paso el enlace?").
-    const plantilla2b = (lead.estado === S.VIDEO_VISTO || etapa === 'vsl_hecho' || etapa === 'webinar')
+    const plantilla2b = (lead.estado === S.VIDEO_VISTO)
       ? (config.whatsapp.templateRecordatorioSesion || config.whatsapp.templateRecordatorioPresentacion)
       : config.whatsapp.templateRecordatorioPresentacion;
     if (!plantilla2b && !messaging.dentroDeVentana(lead.telefono)) {
@@ -756,7 +756,7 @@ async function procesarSesiones() {
       } else {
         const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
         if (ventana) {
-          await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionLlave({ nombre, hora: calendlySync.horaDe(s.inicio), enlaceLanding }));
+          await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionLlave({ nombre, hora: calendlySync.horaDe(s.inicio), enlaceLanding, perfil: lead.perfil }));
         } else if (config.whatsapp.templateSesionPreparacion) {
           await messaging.sendTemplate(lead.telefono, [nombre], { name: config.whatsapp.templateSesionPreparacion, lang: config.whatsapp.templateLang, varNames: ['nombre'] });
         }

@@ -153,7 +153,7 @@ async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, join
   // su email de confirmación; fuera de ventana no se gasta plantilla).
   if (messaging.dentroDeVentana(lead.telefono)) {
     await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionReservada({
-      nombre: lead.nombre, cuando: describirCuando(inicio), enlaceLanding: _enlaceLanding(lead),
+      nombre: lead.nombre, cuando: describirCuando(inicio), enlaceLanding: _enlaceLanding(lead), perfil: lead.perfil,
     }));
   }
   return true;
