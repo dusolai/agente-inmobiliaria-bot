@@ -238,6 +238,11 @@ async function sendTemplate(to, bodyParams = [], opts = {}) {
   }
 
   const components = parameters.length ? [{ type: 'body', parameters }] : [];
+  // Botón de enlace con parte variable (p. ej. el Zoom de cada sesión): la
+  // plantilla lleva la base fija y aquí va solo el sufijo.
+  if (opts.botonUrl) {
+    components.push({ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: String(opts.botonUrl) }] });
+  }
   return _post(
     {
       messaging_product: 'whatsapp',

@@ -361,7 +361,9 @@ function activationReset() {
     // d6) Reservar primero → preparación → aviso del día → Zoom 1 h antes
     const calendlySync = require('../services/calendlySync');
     const nowReal = Date.now;
-    const MEDIODIA = new Date('2026-10-20T10:00:00Z').getTime(); // 12:00 en Madrid
+    // Siempre en el futuro (5 días desde hoy, 10:00 UTC): si fuera una fecha fija,
+    // al pasar el día real la ventana de 24 h se abriría sola y la prueba cambiaría.
+    const _hoy = new Date(); const MEDIODIA = Date.UTC(_hoy.getUTCFullYear(), _hoy.getUTCMonth(), _hoy.getUTCDate() + 5, 10, 0, 0);
     Date.now = () => MEDIODIA;
     try {
       // La reserva llega de Calendly (utm_content=lead_<id>) → reunion_registrado
@@ -370,7 +372,8 @@ function activationReset() {
       const inv = { uri: 'inv-1', email: 'otra@x.com', tracking: { utm_content: `lead_${p.id}` } };
       assert.strictEqual(calendlySync._leadDeInvitado(inv, leadManager.getAllLeads({})).id, p.id, 'se reconoce por utm');
       assert.strictEqual(calendlySync._leadDeInvitado({ email: 'PAULA@x.com' }, leadManager.getAllLeads({})).id, p.id, 'o por email');
-      const inicio = new Date(MEDIODIA + 54 * 3600 * 1000).toISOString(); // jueves 18:00 Madrid
+      const inicio = new Date(MEDIODIA + 54 * 3600 * 1000).toISOString(); // dos días después, por la tarde
+      const horaSesion = calendlySync.horaDe(inicio);
       await calendlySync.registrarReserva(leadManager.getLeadById(p.id), { inviteeUri: 'inv-1', eventoUri: 'ev-1', inicio, joinUrl: 'https://zoom.us/j/123' });
       let pl = leadManager.getLeadById(p.id);
       assert.strictEqual(pl.estado, 'reunion_registrado', 'reservar = reunion_registrado (no "asistió")');
@@ -397,7 +400,7 @@ function activationReset() {
       const n6 = paraTel('34622000012').length;
       await scheduler.procesarSesiones();
       const avisoHoy = paraTel('34622000012').slice(n6);
-      assert.ok(avisoHoy.length === 1 && avisoHoy[0].plantilla === 'sesion_hoy_three' && avisoHoy[0].params[1] === 'hoy a las 18:00', 'aviso del mismo día (plantilla, ventana cerrada) con la hora');
+      assert.ok(avisoHoy.length === 1 && avisoHoy[0].plantilla === 'sesion_hoy_three' && avisoHoy[0].params[1] === `hoy a las ${horaSesion}`, 'aviso del mismo día (plantilla, ventana cerrada) con la hora');
       await conversationFlow.handleIncoming('34622000012', 'Allí estaré');
       assert.ok(leadManager.getLeadById(p.id).sesion.confirmada, 'asistencia confirmada');
 
@@ -444,6 +447,78 @@ function activationReset() {
       cs.huecosTexto = huecosReal;
     }
     ok('repesca: huecos reales de la semana, solo a quien contestó y no se dio de baja, una vez');
+
+    // d8) Derivación directa a Arkaitz: nunca en el primer intercambio; sí cuando da vueltas
+    {
+      const t0 = Date.now;
+      const base = Date.now();
+      try {
+        const d = leadManager.createLead({ nombre: 'Dora', telefono: '34622000015', campana: vivas.id, segmento: 'viejos' });
+        leadManager.updateLead(d.id, { estado: 'esperando_cualificacion' });
+        await conversationFlow.handleIncoming('34622000015', 'quiero hablar con una persona');
+        assert.ok(!/wa\.me/.test(paraTel('34622000015').slice(-1)[0].body), 'primer mensaje: aún no se le deriva');
+        assert.ok(!leadManager.getLeadById(d.id).derivadoArkaitzAt);
+        await conversationFlow.handleIncoming('34622000015', 'Busco ingresos extra');
+        assert.ok(/\/r\/grupal\?l=/.test(paraTel('34622000015').slice(-1)[0].body), 'cualifica → sesión primero');
+        Date.now = () => base + 7 * 3600 * 1000;
+        await conversationFlow.handleIncoming('34622000015', 'y esto de qué va exactamente?');
+        Date.now = () => base + 14 * 3600 * 1000;
+        await conversationFlow.handleIncoming('34622000015', 'sigo sin entenderlo');
+        assert.ok(!leadManager.getLeadById(d.id).derivadoArkaitzAt, 'dos respuestas automáticas: todavía no');
+        Date.now = () => base + 21 * 3600 * 1000;
+        await conversationFlow.handleIncoming('34622000015', 'pero cómo funciona esto?');
+        const ult = paraTel('34622000015').slice(-1)[0].body;
+        assert.ok(/wa\.me\/34696272778/.test(ult) && /Hola%20Arkaitz/.test(ult) && /Dora/.test(decodeURIComponent(ult)), 'da vueltas sin abrir la presentación → WhatsApp directo de Arkaitz con su nombre');
+        assert.ok(leadManager.getLeadById(d.id).derivadoArkaitzAt, 'derivada');
+        Date.now = () => base + 28 * 3600 * 1000;
+        const n = paraTel('34622000015').length;
+        await conversationFlow.handleIncoming('34622000015', 'hola?');
+        assert.ok(!/wa\.me/.test((paraTel('34622000015').slice(-1)[0] || {}).body || '') || paraTel('34622000015').length === n, 'no se deriva dos veces');
+      } finally {
+        Date.now = t0;
+      }
+      ok('derivación a Arkaitz: no en el primer mensaje; sí tras dar vueltas sin abrir la presentación; una sola vez');
+    }
+
+    // d9) La presentación es la llave del Zoom
+    {
+      const t0 = Date.now;
+      const messaging = require('../services/messaging');
+      const ventanaReal = messaging.dentroDeVentana;
+      try {
+        const z = leadManager.createLead({ nombre: 'Zoe', telefono: '34622000016', campana: vivas.id, segmento: 'viejos' });
+        const inicio = new Date(Date.now() + 60 * 60 * 1000);
+        // la sesión cae en horario (08–22 Madrid): si no, la movemos al mediodía siguiente
+        const hMad = parseInt(inicio.toLocaleString('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false }), 10);
+        if (hMad < 9 || hMad >= 21) inicio.setUTCDate(inicio.getUTCDate() + 1), inicio.setUTCHours(10, 0, 0, 0);
+        const ahora = inicio.getTime() - 60 * 60 * 1000;
+        Date.now = () => ahora;
+        leadManager.updateLead(z.id, { estado: 'reunion_registrado', perfil: 'emprendedor', sesion: { inviteeUri: 'inv-z', inicio: inicio.toISOString(), joinUrl: 'https://us06web.zoom.us/j/999?pwd=abc', estado: 'reservada', reservadaAt: new Date(ahora - 48 * 3600 * 1000).toISOString(), confirmada: true, avisos: { preparacion: 2, hoy: 'x' } } });
+        messaging.dentroDeVentana = () => true;
+        await scheduler.procesarSesiones();
+        const m1 = paraTel('34622000016').slice(-1)[0];
+        assert.ok(m1 && /llave/.test(m1.body) && !/zoom\.us/.test(m1.body), 'una hora antes SIN ver la presentación: la llave, no el Zoom');
+        assert.ok(!leadManager.getLeadById(z.id).sesion.avisos.zoomEnviado);
+        // Termina el vídeo en la landing → el Zoom sale al momento
+        activityLog.appendActivity(z.id, 'video_complete', { videoId: 'videoVsl' });
+        await conversationFlow.presentacionCompletada(leadManager.getLeadById(z.id), 'landing');
+        const m2 = paraTel('34622000016').slice(-1)[0];
+        assert.ok(/zoom\.us\/j\/999/.test(m2.body), 'al terminar la presentación → Zoom');
+        assert.ok(leadManager.getLeadById(z.id).sesion.formado && leadManager.getLeadById(z.id).sesion.avisos.zoomEnviado);
+        // Fuera de ventana, el Zoom va con la plantilla de botón (sufijo del enlace)
+        const z2 = leadManager.createLead({ nombre: 'Zac', telefono: '34622000017', campana: vivas.id, segmento: 'viejos' });
+        leadManager.updateLead(z2.id, { estado: 'reunion_registrado', perfil: 'emprendedor', sesion: { inviteeUri: 'inv-z2', inicio: inicio.toISOString(), joinUrl: 'https://us06web.zoom.us/j/777?pwd=k', estado: 'reservada', reservadaAt: new Date(ahora - 48 * 3600 * 1000).toISOString(), avisos: {} } });
+        messaging.dentroDeVentana = () => false;
+        config.whatsapp.templateSesionZoom = 'sesion_zoom_three';
+        await conversationFlow.enviarZoom(leadManager.getLeadById(z2.id), 'test');
+        const m3 = paraTel('34622000017').slice(-1)[0];
+        assert.ok(m3.plantilla === 'sesion_zoom_three', 'fuera de ventana: plantilla con botón de enlace');
+      } finally {
+        Date.now = t0;
+        messaging.dentroDeVentana = ventanaReal;
+      }
+      ok('la presentación es la llave: sin verla no hay Zoom; al terminarla llega al momento; fuera de ventana, plantilla con botón');
+    }
 
     // e) Freno de emergencia: error de cuenta de Meta → nada sale hasta reanudar
     scheduler.bloquearEnvios(131042, 'Business eligibility payment issue');
@@ -496,9 +571,9 @@ function activationReset() {
     assert.strictEqual(de(), 4, 'no se repite la respuesta automática una y otra vez');
     await conversationFlow.handleIncoming(tel, 'prefiero hablar con alguien, llámame');
     assert.strictEqual(de(), 5, 'pide una persona → aviso');
-    assert.ok(/\/r\/grupal\?l=/.test(paraTel(tel)[4].body) && !/te escribe/.test(paraTel(tel)[4].body), 'no promete que le escribirán: le da la sesión');
-    assert.ok(leadManager.getLeadByPhone(tel).pideHumanoAt, 'queda marcado para que le escriba una persona');
-    ok('router: no contesta saludos cruzados, responde "dale" tras la landing, no repite, pide persona → enlace de la sesión');
+    assert.ok(/wa\.me\/34696272778\?text=/.test(paraTel(tel)[4].body) && !/te escribe/.test(paraTel(tel)[4].body), 'pide persona → WhatsApp directo de Arkaitz con el mensaje escrito');
+    assert.ok(leadManager.getLeadByPhone(tel).derivadoArkaitzAt && leadManager.getLeadByPhone(tel).pideHumanoAt, 'queda marcado como derivado');
+    ok('router: no contesta saludos cruzados, responde "dale" tras la landing, no repite, pide persona → WhatsApp de Arkaitz');
   }
 
   // ── 9. Incidencias para la zona de desarrollador (cálculo puro) ──

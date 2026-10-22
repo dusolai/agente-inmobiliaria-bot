@@ -195,6 +195,10 @@ router.post('/event', (req, res) => {
         type === 'webinar_unlocked' ||
         type === 'video_complete' ||
         type === 'video_progress_90';
+      // Con la sesión reservada, terminar el vídeo es la LLAVE del Zoom
+      if (señalDeVisto && lead.sesion && lead.sesion.estado === 'reservada') {
+        conversationFlow.presentacionCompletada(leadManager.getLeadById(lead.id), 'landing').catch(() => {});
+      }
       if (señalDeVisto && lead.estado === leadManager.LEAD_STATES.VIDEO_ENVIADO) {
         const r = leadManager.transitionState(lead.id, leadManager.LEAD_STATES.VIDEO_VISTO);
         if (!r.error) {

@@ -36,6 +36,7 @@ const REQUERIDAS = [
   { clave: 'sesion_preparacion', variable: 'WHATSAPP_TEMPLATE_SESION_PREPARACION', para: 'Sesión reservada: ¿has visto la presentación?' },
   { clave: 'sesion_hoy', variable: 'WHATSAPP_TEMPLATE_SESION_HOY', para: 'Sesión reservada: aviso del mismo día (confirmar)' },
   { clave: 'sesion_huecos', variable: 'WHATSAPP_TEMPLATE_SESION_HUECOS', para: 'Repesca: huecos de la semana a quien ya dijo su perfil' },
+  { clave: 'sesion_zoom', variable: 'WHATSAPP_TEMPLATE_SESION_ZOOM', para: 'Sesión reservada: acceso al Zoom (botón de enlace)' },
 ];
 
 async function listar() {
@@ -80,6 +81,7 @@ const CLAVE_CONFIG = {
   sesion_preparacion: 'templateSesionPreparacion',
   sesion_hoy: 'templateSesionHoy',
   sesion_huecos: 'templateSesionHuecos',
+  sesion_zoom: 'templateSesionZoom',
 };
 function _configurada(clave) {
   const k = CLAVE_CONFIG[clave];
@@ -167,7 +169,10 @@ async function crear(clave) {
       },
       {
         type: 'BUTTONS',
-        buttons: (def.botones || messages.PLANTILLAS_META.botones).map((t) => ({ type: 'QUICK_REPLY', text: t })),
+        // Botón de enlace con sufijo variable (Zoom) o botones de respuesta rápida
+        buttons: def.botonUrl
+          ? [{ type: 'URL', text: def.botonUrl.texto, url: `${def.botonUrl.base}{{1}}`, example: [def.botonUrl.ejemplo] }]
+          : (def.botones || messages.PLANTILLAS_META.botones).map((t) => ({ type: 'QUICK_REPLY', text: t })),
       },
     ],
   };

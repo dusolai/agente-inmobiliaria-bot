@@ -693,6 +693,15 @@ function _terminoWebinar(lead) {
     ((e.type === 'video_complete' || e.type === 'video_progress_90') && e.meta && e.meta.videoId === 'videoWebinar'));
 }
 
+// ¿Llega "formado"? Terminó el vídeo corto (o el webinar) en la landing, o nos
+// contó por WhatsApp qué le pareció, o ya quedó marcado al completarla.
+function _formado(lead) {
+  if (lead.sesion && (lead.sesion.formado || lead.sesion.presentacionConfirmada)) return true;
+  if ((lead.feedbackSesion || []).length) return true;
+  return activityLog.getActivityByLead(lead.id).some((e) =>
+    e.type === 'video_complete' || e.type === 'video_progress_90' || e.type === 'webinar_unlocked' || e.type === 'calendly_button_revealed');
+}
+
 function _horaMadrid() {
   return parseInt(new Date(Date.now()).toLocaleString('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hour12: false }), 10);
 }
@@ -737,15 +746,25 @@ async function procesarSesiones() {
     }
     if (!enHorario) continue;
 
-    // 3. Una hora antes: el Zoom.
+    // 3. Una hora antes: el Zoom… solo si ha visto la presentación. Si no,
+    //    la presentación es la LLAVE: se la mandamos y, en cuanto la termine
+    //    (landing) o nos cuente qué le ha parecido (WhatsApp), el Zoom sale
+    //    al momento (conversationFlow.presentacionCompletada).
     if (!avisos.unaHora && inicio - ahora <= 75 * 60 * 1000) {
-      if (ventana) {
-        await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionUnaHora({
-          nombre, hora: calendlySync.horaDe(s.inicio), joinUrl: s.joinUrl,
-        }));
+      if (_formado(lead)) {
+        await conversationFlow.enviarZoom(lead, 'scheduler');
+      } else {
+        const enlaceLanding = conversationFlow.enlaceLandingPorPerfil(lead.perfil, lead.id);
+        if (ventana) {
+          await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionLlave({ nombre, hora: calendlySync.horaDe(s.inicio), enlaceLanding }));
+        } else if (config.whatsapp.templateSesionPreparacion) {
+          await messaging.sendTemplate(lead.telefono, [nombre], { name: config.whatsapp.templateSesionPreparacion, lang: config.whatsapp.templateLang, varNames: ['nombre'] });
+        }
+        activityLog.appendActivity(lead.id, 'sesion_llave', { inicio: s.inicio });
       }
-      // Sin ventana no hay texto libre: el email de Calendly lleva el Zoom.
-      guardar({ unaHora: new Date(Date.now()).toISOString() });
+      // enviarZoom ya ha podido tocar lead.sesion: se guarda sobre lo fresco
+      const fresco = leadManager.getLeadById(lead.id);
+      leadManager.updateLead(lead.id, { sesion: { ...fresco.sesion, avisos: { ...(fresco.sesion.avisos || {}), unaHora: new Date(Date.now()).toISOString() } } });
       continue;
     }
 
@@ -762,7 +781,7 @@ async function procesarSesiones() {
     }
 
     // 1. Preparación: que vea la presentación antes (y nos cuente).
-    if (avisos.preparacion < 2 && inicio - ahora >= 20 * H && !_terminoWebinar(lead)) {
+    if (avisos.preparacion < 2 && inicio - ahora >= 20 * H && !_formado(lead)) {
       const desde = Math.max(new Date(s.reservadaAt).getTime(), avisos.ultimaPreparacion ? new Date(avisos.ultimaPreparacion).getTime() : 0);
       if (ahora - desde < 20 * H || _recienContactado(lead)) continue;
       const plantilla = config.whatsapp.templateSesionPreparacion;

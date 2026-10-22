@@ -187,6 +187,115 @@ async function _darDeBaja(lead, texto, via = 'palabra') {
   );
 }
 
+// ─── Derivación directa a Arkaitz (reunión 21-10) ───────────────
+// Quien se pierde (pide una persona, no abre enlaces, da vueltas sin avanzar
+// o pregunta lo mismo tras ya haberle contestado) recibe el WhatsApp directo
+// de Arkaitz con el mensaje ya escrito (wa.me). Le atiende él en persona: su
+// WhatsApp Business le saluda al momento. Nunca en el primer intercambio y
+// una sola vez por lead. Se registra como `derivado_arkaitz` (lo ve el CRM).
+function enlaceWhatsappArkaitz(lead, punto) {
+  const tel = String(config.agent.directorWhatsapp || '').replace(/[^\d]/g, '');
+  if (!tel) return null;
+  const nombre = lead.nombre && lead.nombre !== 'Sin nombre' ? lead.nombre : '';
+  const texto = `Hola ${config.agent.directorNombre}, soy ${nombre || '…'}. Vengo de la campaña de ${config.agent.empresaNombre}` +
+    (punto ? ` y me he quedado en ${punto}.` : ' y tengo una duda.');
+  return `https://wa.me/${tel}?text=${encodeURIComponent(texto)}`;
+}
+
+function _puntoDelEmbudo(lead) {
+  switch (lead.estado) {
+    case LEAD_STATES.ESPERANDO_CUALIFICACION: return 'la primera pregunta';
+    case LEAD_STATES.VIDEO_ENVIADO: return 'la presentación';
+    case LEAD_STATES.VIDEO_VISTO: return 'la reserva de la sesión';
+    case LEAD_STATES.REUNION_REGISTRADO: return 'la sesión de dudas';
+    default: return '';
+  }
+}
+
+function _puedeDerivar(lead) {
+  if (!config.flujo.derivacion.activa || !enlaceWhatsappArkaitz(lead)) return false;
+  if (lead.derivadoArkaitzAt) return false;
+  const recibidos = activityLog.getActivityByLead(lead.id).filter((e) => e.type === 'message_received').length;
+  // Nunca a las primeras de cambio: ya dijo su perfil o lleva 2+ mensajes
+  return Boolean(lead.perfil && lead.perfil !== 'sin_definir') || recibidos >= 2;
+}
+
+async function derivarAArkaitz(lead, motivo, texto) {
+  if (!_puedeDerivar(lead)) return false;
+  const now = new Date(Date.now()).toISOString();
+  const enlace = enlaceWhatsappArkaitz(lead, _puntoDelEmbudo(lead));
+  leadManager.updateLead(lead.id, { derivadoArkaitzAt: now, pideHumanoAt: lead.pideHumanoAt || now });
+  activityLog.appendActivity(lead.id, 'derivado_arkaitz', { motivo, texto: String(texto || '').slice(0, 200) });
+  console.log(`🙋 [Flujo] ${lead.nombre} → WhatsApp directo de ${config.agent.directorNombre} (${motivo})`);
+  await messaging.sendTextMessage(lead.telefono, messages.mensajeDerivacionArkaitz({ nombre: lead.nombre, enlace }));
+  return true;
+}
+
+// ¿Parece perdido? (a) da vueltas: ya ha recibido N respuestas automáticas en
+// esta misma fase sin haber abierto la presentación ni Calendly; (b) "poco
+// tecnológico": tiene la presentación desde hace 48 h, contesta, y nunca la
+// abrió. Devuelve el motivo o null. Con sesión reservada, nunca.
+function _pareceperdido(lead) {
+  const D = config.flujo.derivacion;
+  if (!D.activa) return null;
+  if (![LEAD_STATES.VIDEO_ENVIADO, LEAD_STATES.VIDEO_VISTO].includes(lead.estado)) return null;
+  if (lead.sesion && lead.sesion.estado === 'reservada') return null;
+  const ev = activityLog.getActivityByLead(lead.id);
+  if (ev.some((e) => /^(landing_view|video_play|calendly_intent)/.test(e.type))) return null;
+  const respuestas = ev.filter((e) => e.type === 'router_reply' && e.meta && e.meta.estado === lead.estado).length;
+  if (respuestas >= D.respuestasSinAvanzar) return 'da vueltas sin abrir la presentación';
+  const envio = (lead.historial || []).filter((h) => h.estado === LEAD_STATES.VIDEO_ENVIADO).pop();
+  const horas = envio ? (Date.now() - new Date(envio.fecha).getTime()) / 3600000 : 0;
+  if (respuestas >= 1 && horas >= D.horasSinAbrir) return `no abre la presentación (${Math.round(horas)} h)`;
+  return null;
+}
+
+// ─── La presentación es la LLAVE del Zoom (21-10) ────────────────
+// Con sesión reservada, el acceso al Zoom se desbloquea al terminar la
+// presentación (evento de la landing) o al contar en una frase qué le ha
+// parecido (WhatsApp). Si la sesión es en menos de 3 h, el Zoom sale al momento.
+async function enviarZoom(lead, via = 'scheduler') {
+  const s = lead.sesion;
+  if (!s || s.estado !== 'reservada') return false;
+  const calendlySync = require('./calendlySync');
+  let envio = null;
+  if (messaging.dentroDeVentana(lead.telefono)) {
+    envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionUnaHora({
+      nombre: lead.nombre, hora: calendlySync.horaDe(s.inicio), joinUrl: s.joinUrl,
+    }));
+  } else if (config.whatsapp.templateSesionZoom && s.joinUrl) {
+    // Plantilla con botón de enlace: la base es fija, va solo el sufijo
+    const sufijo = String(s.joinUrl).split('zoom.us/j/')[1];
+    if (sufijo) {
+      envio = await messaging.sendTemplate(lead.telefono, [lead.nombre, calendlySync.describirCuando(s.inicio, { relativo: true })], {
+        name: config.whatsapp.templateSesionZoom, lang: config.whatsapp.templateLang, varNames: ['nombre', 'cuando'], botonUrl: sufijo,
+      });
+    }
+  }
+  const ok = Boolean(envio) && envio.success !== false;
+  if (ok) {
+    const fresco = leadManager.getLeadById(lead.id);
+    leadManager.updateLead(lead.id, { sesion: { ...fresco.sesion, avisos: { ...(fresco.sesion.avisos || {}), zoomEnviado: new Date(Date.now()).toISOString() } } });
+    activityLog.appendActivity(lead.id, 'sesion_zoom_enviado', { via, inicio: s.inicio });
+  }
+  return ok;
+}
+
+async function presentacionCompletada(lead, via = 'landing') {
+  const s = lead.sesion;
+  if (!s || s.estado !== 'reservada') return false;
+  if (!s.formado) {
+    leadManager.updateLead(lead.id, { sesion: { ...s, formado: true, formadoAt: new Date(Date.now()).toISOString() } });
+    activityLog.appendActivity(lead.id, 'sesion_formado', { via });
+    console.log(`🎓 [Flujo] ${lead.nombre} llega formado a la sesión (${via})`);
+  }
+  const faltan = new Date(s.inicio).getTime() - Date.now();
+  if (faltan > 0 && faltan <= 3 * 3600 * 1000 && !(s.avisos && s.avisos.zoomEnviado)) {
+    return enviarZoom(leadManager.getLeadById(lead.id), via);
+  }
+  return true;
+}
+
 // Reservar primero: enlace de la sesión para el mensaje tras cualificar
 // (null si RESERVA_PRIMERO=false o si ya tiene una sesión reservada).
 function _enlaceSesionSiReservaPrimero(lead) {
@@ -222,7 +331,11 @@ async function _rutear(lead, texto, { textoPorDefecto = null, silenciar = false 
     case 'humano':
       leadManager.updateLead(lead.id, { pideHumanoAt: new Date().toISOString() });
       activityLog.appendActivity(lead.id, 'pide_humano', { texto: String(texto).slice(0, 200) });
-      if (d.texto && !silenciar) await messaging.sendTextMessage(lead.telefono, d.texto);
+      if (silenciar) return null;
+      // Pide una persona / no abre enlaces → WhatsApp directo de Arkaitz.
+      // Si aún no toca derivar (primer intercambio), la respuesta de reglas.
+      if (await derivarAArkaitz(lead, 'pide una persona', texto)) return null;
+      if (d.texto) await messaging.sendTextMessage(lead.telefono, d.texto);
       return null;
     case 'silencio':
       return null;
@@ -434,6 +547,8 @@ async function handleIncoming(telefono, texto, extra = {}) {
       leadManager.updateLead(lead.id, { esperandoFeedback: false, feedbackSesion: feedback });
       activityLog.appendActivity(lead.id, 'feedback_sesion', { texto: String(texto).slice(0, 300) });
       await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionFeedbackApuntado({ nombre: lead.nombre }));
+      // Su opinión vale como "presentación vista": desbloquea el Zoom
+      await presentacionCompletada(leadManager.getLeadById(lead.id), 'whatsapp');
       return;
     }
   }
@@ -470,6 +585,9 @@ async function handleIncoming(telefono, texto, extra = {}) {
   // ("dale", una duda, "llámame"…). El router decide: contestar y recordarle
   // su siguiente paso, pasarlo a una persona, darle de baja o no decir nada.
   // Con IA decide el modelo; sin IA, reglas fijas — nunca se queda colgado.
+  const motivoPerdido = _pareceperdido(lead);
+  if (motivoPerdido && !extra.silenciar && await derivarAArkaitz(lead, motivoPerdido, texto)) return;
+
   const perfilRouter = await _rutear(lead, texto, { silenciar: Boolean(extra.silenciar) });
   if (perfilRouter) {
     console.log(`🔎 [Flujo] ${lead.nombre}: el router entiende que quiere la rama ${perfilRouter} → landing enviada`);
@@ -586,6 +704,10 @@ module.exports = {
   perfilDesdeFormulario,
   handleIncoming,
   recibir,
+  enlaceWhatsappArkaitz,
+  derivarAArkaitz,
+  presentacionCompletada,
+  enviarZoom,
   procesarReservaGrupal,
   procesarAsistenciaReunion,
   interpretarRespuesta,

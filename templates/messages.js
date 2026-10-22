@@ -154,6 +154,20 @@ const PLANTILLAS_META = {
     variables: [{ nombre: 'nombre', ejemplo: 'María' }, { nombre: 'cuando', ejemplo: 'hoy a las 19:00' }],
     botones: ['Allí estaré', 'Cambiar de día'],
   },
+  // Acceso al Zoom con BOTÓN DE ENLACE: vale fuera de la ventana de 24 h. La
+  // base del enlace es fija (todas las salas de Arkaitz cuelgan de ella) y
+  // el sufijo (id + contraseña) va como variable del botón.
+  sesion_zoom: {
+    nombreSugerido: 'sesion_zoom_three',
+    variable: 'WHATSAPP_TEMPLATE_SESION_ZOOM',
+    cuerpo:
+      `Hola {{nombre}} 👋 ¡Es la hora! Tu sesión de dudas con Arkaitz por Zoom empieza {{cuando}}.
+
+` +
+      `Pulsa el botón para entrar. Entra un par de minutos antes y ten a mano tus preguntas 🙌`,
+    variables: [{ nombre: 'nombre', ejemplo: 'María' }, { nombre: 'cuando', ejemplo: 'hoy a las 17:00' }],
+    botonUrl: { texto: 'Entrar al Zoom', base: 'https://us06web.zoom.us/j/', ejemplo: '86040440455?pwd=abc123' },
+  },
 };
 
 function _textoSegmento(segmento, nombre) {
@@ -562,8 +576,28 @@ function mensajeEnlaceSesion({ nombre, enlaceSesion }) {
 function mensajeSesionReservada({ nombre, cuando, enlaceLanding }) {
   return (
     `¡Reservado, ${nombre}! ✅ Tu sesión de dudas con ${config.agent.directorNombre} es ${cuando} (hora de España), por Zoom.\n\n` +
-    `Para sacarle todo el partido, échale un vistazo antes a la presentación (empieza por el vídeo corto):\n${enlaceLanding}\n\n` +
-    `El mismo día te escribo para confirmar y te paso el enlace del Zoom 🙌`
+    `Para que la sesión te sirva de verdad, antes hay que ver la presentación (empieza por el vídeo corto, 8 min):\n${enlaceLanding}\n\n` +
+    `En cuanto la termines se desbloquea tu acceso al Zoom. Cuéntame qué te ha parecido y lo tendrá ${config.agent.directorNombre} delante 🙌`
+  );
+}
+
+// La presentación es la LLAVE del Zoom (21-10): sin verla no se entra. Este
+// es el aviso de una hora antes para quien aún no la ha visto.
+function mensajeSesionLlave({ nombre, hora, enlaceLanding }) {
+  return (
+    `${nombre}, tu sesión con ${config.agent.directorNombre} es a las ${hora} y aún no me consta que hayas visto la presentación 👀\n\n` +
+    `Es la llave para entrar: son 8 minutos y así en la sesión vas directo a tus dudas.\n${enlaceLanding}\n\n` +
+    `En cuanto la termines, o me cuentes en una frase qué te ha parecido, te llega el enlace del Zoom al momento.`
+  );
+}
+
+// Derivación directa (21-10): a quien se pierde se le da el WhatsApp de
+// Arkaitz con el mensaje ya escrito. Nada de "te escribirá": escribe él.
+function mensajeDerivacionArkaitz({ nombre, enlace }) {
+  return (
+    `${nombre}, para no marearte más: habla directamente con ${config.agent.directorNombre}, ${config.agent.directorRol}. ` +
+    `Él te atiende en persona y te resuelve cualquier duda.\n\n` +
+    `Pulsa aquí y le llega tu mensaje ya escrito 👇\n${enlace}`
   );
 }
 
@@ -571,14 +605,14 @@ function mensajeSesionPreparacion({ nombre, enlaceLanding }) {
   return (
     `${nombre}, ¿has podido ver la presentación? 👀 Así en la sesión con ${config.agent.directorNombre} vais directos a tus dudas.\n\n` +
     `${enlaceLanding}\n\n` +
-    `Cuéntame qué te ha parecido o qué te gustaría preguntarle y se lo dejo apuntado.`
+    `Cuando la termines, cuéntame en una frase qué te ha parecido o qué quieres preguntarle: se lo dejo apuntado y queda desbloqueado tu acceso al Zoom.`
   );
 }
 
 function mensajeSesionHoy({ nombre, cuando }) {
   return (
     `¡Hola ${nombre}! Te recuerdo que ${cuando} tienes la sesión de dudas con ${config.agent.directorNombre} por Zoom (30 min).\n\n` +
-    `¿Cuento contigo? Si te ha surgido algo, dime y te paso otro día.`
+    `¿Cuento contigo? El enlace del Zoom te llega una hora antes (si ya has visto la presentación). Si te ha surgido algo, dime y te paso otro día.`
   );
 }
 
@@ -644,6 +678,8 @@ module.exports = {
   mensajeSesionNoAsistio,
   mensajeSesionPideFeedback,
   mensajeSesionFeedbackApuntado,
+  mensajeSesionLlave,
+  mensajeDerivacionArkaitz,
   mensajeRamaProfesional,
   mensajeRamaEmprendedor,
   mensajeAccesoVideoTrasReserva,

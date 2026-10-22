@@ -63,6 +63,8 @@ module.exports = {
     templateSesionHoy: process.env.WHATSAPP_TEMPLATE_SESION_HOY || '',
     // Repesca con los huecos de la semana (a quien ya dijo su perfil)
     templateSesionHuecos: process.env.WHATSAPP_TEMPLATE_SESION_HUECOS || '',
+    // Acceso al Zoom con botón de enlace (fuera de la ventana de 24 h)
+    templateSesionZoom: process.env.WHATSAPP_TEMPLATE_SESION_ZOOM || '',
   },
 
   // API de Calendly (token personal: Calendly → Integraciones → API y
@@ -155,6 +157,15 @@ module.exports = {
     // cualificar lleva el enlace de la sesión ANTES que la presentación.
     // RESERVA_PRIMERO=false vuelve al orden antiguo (webinar → botón).
     reservaPrimero: process.env.RESERVA_PRIMERO !== 'false',
+    // Derivación directa a Arkaitz (21-10): cuándo se considera que un lead
+    // "se pierde". Nunca en el primer intercambio; una sola vez por lead.
+    derivacion: {
+      activa: process.env.DERIVACION_ARKAITZ !== 'false',
+      // respuestas automáticas en la misma fase sin abrir la presentación
+      respuestasSinAvanzar: parseInt(process.env.DERIVACION_RESPUESTAS, 10) || 2,
+      // horas con la presentación enviada, contestando, sin abrirla nunca
+      horasSinAbrir: parseInt(process.env.DERIVACION_HORAS_SIN_ABRIR, 10) || 48,
+    },
     // Qué recibe el lead al responder 1/2:
     //   'landing'      → la landing con los vídeos (VSL → webinar → botón 1-a-1).
     //                    Flujo actual, el del lanzamiento de octubre.
@@ -197,6 +208,10 @@ module.exports = {
     // el rol para que el lead sepa quién es: "con Arkaitz, el director del proyecto").
     directorNombre: process.env.DIRECTOR_NOMBRE || 'Arkaitz',
     directorRol: process.env.DIRECTOR_ROL || 'el director del proyecto',
+    // WhatsApp personal de Arkaitz (reunión 21-10): a quien se pierde se le
+    // da este contacto directo con el mensaje ya escrito (wa.me). Vacío = no
+    // se deriva a nadie.
+    directorWhatsapp: (process.env.DIRECTOR_WHATSAPP || '34696272778').replace(/[^\d]/g, ''),
     // Recordatorios a ritmo de 2 al día (cada 12 h).
     reminderIntervalHours: parseInt(process.env.REMINDER_INTERVAL_HOURS) || 12,
     // Cadencia pedida: DOS recordatorios cada 24 h → uno cada 12 h (720 min).
