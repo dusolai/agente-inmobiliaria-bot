@@ -75,8 +75,12 @@ module.exports = {
     // (CALENDLY_API_TOKEN, CALENDLY_PAT…), la primera variable CALENDLY_* que
     // contenga un token personal (JWT "eyJ…").
     token: process.env.CALENDLY_TOKEN || Object.keys(process.env)
-      .filter((k) => /^CALENDLY/i.test(k) && /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(String(process.env[k]).trim()))
-      .map((k) => String(process.env[k]).trim())[0] || '',
+      .map((k) => String(process.env[k]).trim())
+      // Cualquier variable (se llame como se llame: CALENDY_TOKEN, TOKEN_CALENDLY…)
+      // cuyo valor sea un token de Calendly: un JWT emitido por auth.calendly.com
+      .filter((v) => /^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(v) && (() => {
+        try { return Buffer.from(v.split('.')[1], 'base64').toString('utf8').includes('calendly.com'); } catch (e) { return false; }
+      })())[0] || '',
   },
 
   // Canal Telegram (modo piloto previo a producción)
