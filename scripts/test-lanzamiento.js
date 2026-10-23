@@ -603,6 +603,40 @@ function activationReset() {
     ok('incidencias: duplicado, landing doble, descarte tras recordatorio, pide persona, error de envío y sin respuesta');
   }
 
+  // ── 10. Panel "Sesiones de dudas" del CRM (cálculo puro) ──
+  {
+    const sesiones = require('../services/sesiones');
+    const ahora = Date.parse('2026-10-23T12:00:00Z');
+    const h = (n) => new Date(ahora + n * 3600000).toISOString();
+    const L = [
+      { id: 's1', nombre: 'Zoe', telefono: '34600000011', perfil: 'emprendedor', estado: 'reunion_registrado', derivadoArkaitzAt: h(-5),
+        feedbackSesion: [{ texto: '¿Cómo se cobran las comisiones?', ts: h(-20) }],
+        sesion: { inicio: h(48), fin: h(48.5), joinUrl: 'https://zoom.us/j/1', estado: 'reservada', confirmada: true, formado: true, avisos: { preparacion: 1, hoy: h(-1), zoomEnviado: null } } },
+      { id: 's2', nombre: 'Ana', telefono: '34600000012', perfil: 'profesional', estado: 'reunion_registrado', sesion: { inicio: h(48), estado: 'reservada', confirmada: false, avisos: {} } },
+      { id: 's7', nombre: 'Carla', estado: 'video_visto', sesion: { inicio: h(48), estado: 'cancelada', avisos: {} } },
+      { id: 's3', nombre: 'Luis', estado: 'reunion_asistio', sesion: { inicio: h(-30), estado: 'celebrada', avisos: {} } },
+      { id: 's4', nombre: 'Marta', estado: 'reunion_registrado', sesion: { inicio: h(-30), estado: 'celebrada', asistio: false, noAsistioMarcadoAt: h(-28), avisos: {} } },
+      { id: 's5', nombre: 'Viejo', estado: 'reunion_registrado', sesion: { inicio: h(-20 * 24), estado: 'celebrada', avisos: {} } },
+      { id: 's6', nombre: 'Sin sesión', estado: 'video_enviado' },
+    ];
+    const r = sesiones.listar(L, ahora);
+    assert.strictEqual(r.sesiones.length, 2, 'misma hora = misma sesión; fuera de −14/+45 días no entra');
+    assert.ok(r.sesiones[0].pasada && !r.sesiones[1].pasada, 'ascendente por hora: la pasada primero');
+    const prox = r.sesiones[1];
+    assert.deepStrictEqual(prox.asistentes.map((a) => a.nombre), ['Ana', 'Carla', 'Zoe'], 'asistentes por nombre');
+    assert.strictEqual(prox.joinUrl, 'https://zoom.us/j/1');
+    assert.ok(/octubre a las/.test(prox.cuando), 'cuándo en palabras');
+    const zoe = prox.asistentes.find((a) => a.nombre === 'Zoe');
+    assert.ok(zoe.confirmada && zoe.formado && zoe.derivado && zoe.asistio === null && zoe.avisos.hoy === h(-1));
+    assert.deepStrictEqual(zoe.dudas, ['¿Cómo se cobran las comisiones?'], 'las dudas para Arkaitz van en la fila');
+    assert.strictEqual(prox.asistentes.find((a) => a.nombre === 'Carla').estadoSesion, 'cancelada');
+    const pas = r.sesiones[0];
+    assert.strictEqual(pas.asistentes.find((a) => a.nombre === 'Luis').asistio, true, 'reunion_asistio cuenta como asistió');
+    assert.strictEqual(pas.asistentes.find((a) => a.nombre === 'Marta').asistio, false, 'lo marcado desde el CRM manda');
+    assert.deepStrictEqual(r.resumen, { proximas: 1, reservados: 2, confirmados: 1, formados: 1, asistieronUltimos14d: 1, noAsistieronUltimos14d: 1 });
+    ok('panel de sesiones: agrupa por hora, ordena, lee confirmación/presentación/dudas y resume la asistencia');
+  }
+
   console.log(`\n🎉 Todo correcto (${paso} comprobaciones, ${enviados.length} mensajes simulados, 0 reales).\n`);
   process.exit(0);
 })().catch((err) => {

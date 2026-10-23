@@ -249,6 +249,26 @@
   .inc-row .inc-det{color:#475569;font-size:.78rem;word-break:break-word}
   .inc-row .inc-acc{display:flex;gap:.3rem;white-space:nowrap}
   .inc-row .inc-acc .btn{font-size:.7rem;padding:.25rem .5rem}
+  /* Sesiones de dudas (panel del cliente) */
+  .ses-nums{display:grid;grid-template-columns:repeat(6,1fr);gap:.8rem;margin-bottom:1rem}
+  @media (max-width:880px){.ses-nums{grid-template-columns:repeat(3,1fr)}}
+  .ses-card{background:#faf8fc;border:1px solid var(--line);border-radius:12px;padding:.6rem .9rem;margin-bottom:.6rem}
+  .ses-card.pasada{background:#f5f5f8}
+  .ses-head{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.2rem}
+  .ses-head b{font-size:.95rem;color:var(--purple)}
+  .ses-head a{color:var(--purple);font-weight:800}
+  .ses-row{display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:start;padding:.5rem .2rem;border-bottom:1px dashed var(--line);font-size:.84rem}
+  .ses-row:last-child{border-bottom:none}
+  .ses-row.cancelada{opacity:.55}
+  .ses-row .at-nombre{cursor:pointer}
+  .ses-row .at-nombre:hover{color:var(--purple);text-decoration:underline}
+  .ses-chips{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.25rem;align-items:center}
+  .ses-chip{display:inline-block;font-size:.62rem;font-weight:800;padding:.14rem .5rem;border-radius:50px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;background:#ececf3;color:#555}
+  .ses-chip.ok{background:#d7f0e2;color:#1f6b3e} .ses-chip.warn{background:#fff3d6;color:#a67400} .ses-chip.ko{background:#fde2e2;color:#a33} .ses-chip.info{background:#dde9ff;color:#274686}
+  .ses-dudas{margin-top:.35rem;padding:.3rem .6rem;border-left:3px solid var(--amber);background:#fffbeb;border-radius:0 8px 8px 0;color:#475569;font-size:.8rem;font-style:italic}
+  .ses-acc{display:flex;gap:.3rem;flex-wrap:wrap;justify-content:flex-end;max-width:300px}
+  .ses-acc .btn{font-size:.7rem;padding:.25rem .5rem}
+  @media (max-width:700px){.ses-row{grid-template-columns:1fr}.ses-acc{justify-content:flex-start;max-width:none}}
   /* Botones de la plantilla, como los ve el lead en su WhatsApp */
   .burbuja-btns{display:flex;flex-direction:column;gap:1px;margin:.4rem -.6rem -.4rem;border-top:1px solid rgba(0,0,0,.08)}
   .wa-btn{text-align:center;padding:.4rem;font-size:.78rem;font-weight:600;color:#1c8adb;background:rgba(255,255,255,.55);border-top:1px solid rgba(0,0,0,.06)}
@@ -414,6 +434,28 @@
         <button class="btn" id="inc-refrescar" style="border:1px solid #ccc">↻ Actualizar</button>
       </div>
       <div id="inc-lista"><div class="empty">Cargando incidencias…</div></div>
+    </div>
+
+    <div class="panel" id="sesionesPanel">
+      <h2>📅 Sesiones de dudas <small>quién ha reservado el Zoom con Arkaitz, si viene, si llega con la presentación vista y qué dudas trae</small></h2>
+      <div class="ses-nums">
+        <div class="csv-num"><b id="ses-proximas">—</b><span>Próximas sesiones</span></div>
+        <div class="csv-num"><b id="ses-reservados">—</b><span>Reservados</span></div>
+        <div class="csv-num g"><b id="ses-confirmados">—</b><span>Confirmaron</span></div>
+        <div class="csv-num"><b id="ses-formados">—</b><span>Presentación vista</span></div>
+        <div class="csv-num g"><b id="ses-asistieron">—</b><span>Asistieron · 14 d</span></div>
+        <div class="csv-num o"><b id="ses-noasistieron">—</b><span>No asistieron · 14 d</span></div>
+      </div>
+      <div id="ses-lista"><div class="empty">Cargando sesiones…</div></div>
+      <details id="ses-pasadas-box" style="margin-top:.6rem;display:none">
+        <summary class="csv-hint" style="cursor:pointer">Sesiones pasadas (últimos 14 días) · <b id="ses-pasadas-n">0</b> — marca aquí quién asistió</summary>
+        <div id="ses-pasadas" style="margin-top:.5rem"></div>
+      </details>
+      <div id="ses-nota" class="csv-hint" style="display:none;margin-top:.6rem;color:#a67400;font-weight:700"></div>
+      <div class="csv-controls" style="margin:.6rem 0 0">
+        <button class="btn" id="ses-refrescar" style="border:1px solid #ccc">↻ Actualizar</button>
+        <span class="csv-hint">Se actualiza solo cada minuto · los avisos automáticos (preparación, «¿cuento contigo?», Zoom una hora antes) los manda el agente; aquí puedes adelantarlos y marcar la asistencia.</span>
+      </div>
     </div>
 
     <div class="panel" id="csvFlowPanel">
@@ -979,6 +1021,9 @@
       case 'sesion_llave':       return `🔑 una hora antes sin ver la presentación: se le pidió verla para recibir el Zoom`;
       case 'sesion_zoom_enviado': return `🎥 recibió el enlace del Zoom`;
       case 'sesion_no_asistio':  return `😕 no entró al Zoom: se le ofreció otro día`;
+      case 'sesion_asistio':     return `🤝 asistió a la sesión (marcado por Arkaitz)`;
+      case 'sesion_no_asistio_marcado': return `❌ no asistió (marcado por Arkaitz)`;
+      case 'sesion_aviso_manual': return `📣 aviso «¿cuento contigo?» enviado desde el CRM`;
       case 'repesca_enviada':    return `🎣 repesca con los huecos de la semana (${m.huecos || ''})`;
       case 'pide_enlace_sesion': return `🔗 pidió el enlace de la sesión → enviado`;
       case 'calendly_intent':    return `🖱️ abrió el enlace de Calendly`;
@@ -1068,6 +1113,9 @@
   async function refreshStatus() {
     try {
       const s = await fetchJSON('/api/system/status');
+      // El panel de sesiones avisa si falta CALENDLY_TOKEN (sin él no entran reservas)
+      _calendlySyncActivo = !(s.calendly && s.calendly.sync && s.calendly.sync.activo === false);
+      notaCalendly();
       const waProv = s.whatsapp.provider === 'cloud' ? ' (API oficial)' : s.whatsapp.provider === 'baileys' ? ' (Baileys)' : '';
       setStatus('st-whatsapp', (s.whatsapp.connected ? 'WhatsApp conectado' : 'WhatsApp desconectado') + waProv, s.whatsapp.connected ? 'ok' : 'ko');
       setStatus('st-telegram', s.telegram.enabled ? 'Telegram activo' : 'Telegram inactivo', s.telegram.enabled ? 'ok' : 'warn');
@@ -2000,12 +2048,141 @@
     catch { toast('No se pudo copiar'); }
   }));
 
+  // ── Sesiones de dudas (panel del cliente) ──
+  // GET /api/sesiones: las reservas de Calendly agrupadas por hora, con si
+  // cada uno confirmó, vio la presentación, recibió el Zoom y sus dudas para
+  // Arkaitz. Las acciones van a /api/sesiones/:leadId/… y se recarga el panel.
+  let _calendlySyncActivo = null; // null = aún sin dato de /api/system/status
+  let _sesHayAlguna = false;
+  function notaCalendly() {
+    const el = $('ses-nota'); if (!el) return;
+    const mostrar = _calendlySyncActivo === false && !_sesHayAlguna;
+    el.style.display = mostrar ? 'block' : 'none';
+    el.textContent = mostrar ? '⚠️ La sincronización con Calendly no está activa (falta CALENDLY_TOKEN en Seenode).' : '';
+  }
+  // "Miércoles 28 de octubre · 10:00" (hora de España)
+  function fmtSesion(iso) {
+    const d = new Date(iso);
+    const dia = d.toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid', weekday: 'long', day: 'numeric', month: 'long' }).replace(',', '');
+    const hora = d.toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' });
+    return `${dia.charAt(0).toUpperCase()}${dia.slice(1)} · ${hora}`;
+  }
+  const sesChip = (txt, cls) => `<span class="ses-chip${cls ? ' ' + cls : ''}">${txt}</span>`;
+  function filaSesion(a, pasada) {
+    const cancelada = a.estadoSesion === 'cancelada';
+    const chips = [];
+    if (a.perfil) chips.push(`<span class="lr-perfil ${escH(a.perfil)}">${escH(a.perfil)}</span>`);
+    if (cancelada) chips.push(sesChip('Canceló', 'ko'));
+    else {
+      chips.push(a.confirmada ? sesChip('Confirmó', 'ok') : sesChip('Sin confirmar'));
+      if (!a.confirmada && a.avisos.hoy) chips.push(a.avisos.hoy === 'fallido' ? sesChip('Aviso fallido', 'ko') : sesChip('Avisado', 'info'));
+      chips.push(a.formado ? sesChip('Presentación vista', 'ok') : sesChip('Sin ver', 'warn'));
+      if (a.zoomEnviado) chips.push(sesChip('Zoom enviado', 'info'));
+    }
+    if (a.derivado) chips.push(sesChip('Derivado a Arkaitz', 'info'));
+    if (a.asistio === true) chips.push(sesChip('Asistió', 'ok'));
+    if (a.asistio === false) chips.push(sesChip('No asistió', 'ko'));
+    const acc = [];
+    if (!cancelada) {
+      if (!pasada && a.estadoSesion === 'reservada') {
+        acc.push(`<button class="btn" data-ses-acc="zoom" data-ses-lead="${escH(a.leadId)}" title="Le llega el enlace del Zoom ahora mismo">🎥 ${a.zoomEnviado ? 'Reenviar' : 'Enviar'} Zoom</button>`);
+        acc.push(`<button class="btn" data-ses-acc="aviso" data-ses-lead="${escH(a.leadId)}" title="Le pregunta «¿cuento contigo?» ahora mismo">📣 Avisar hoy</button>`);
+        if (!a.formado) acc.push(`<button class="btn" data-ses-acc="formado" data-ses-lead="${escH(a.leadId)}" title="Ya vio la presentación: queda desbloqueado su Zoom">🎓 Marcar presentación vista</button>`);
+      }
+      if (a.asistio !== true) acc.push(`<button class="btn green" data-ses-acc="asistio" data-ses-lead="${escH(a.leadId)}">✅ Asistió</button>`);
+      if (a.asistio !== false) acc.push(`<button class="btn danger" data-ses-acc="no_asistio" data-ses-lead="${escH(a.leadId)}">❌ No asistió</button>`);
+    }
+    return `<div class="ses-row${cancelada ? ' cancelada' : ''}">
+      <div>
+        <span class="at-nombre" data-ses-ver="${escH(a.leadId)}" title="Ver la ficha del lead">${escH(a.nombre)}</span> <span class="csv-hint">${escH(a.telefono)}</span>
+        <div class="ses-chips">${chips.join('')}</div>
+        ${a.dudas.length ? `<div class="ses-dudas">${a.dudas.map((d) => `«${escH(d)}»`).join('<br>')}</div>` : ''}
+      </div>
+      <div class="ses-acc">${acc.join('')}</div>
+    </div>`;
+  }
+  function tarjetaSesion(s) {
+    const vivos = s.asistentes.filter((a) => a.estadoSesion !== 'cancelada').length;
+    return `<div class="ses-card${s.pasada ? ' pasada' : ''}">
+      <div class="ses-head">
+        <b>📅 ${fmtSesion(s.inicio)}</b>
+        <span class="csv-hint">${vivos} apuntado${vivos === 1 ? '' : 's'}${s.joinUrl ? ` · <a href="${escH(s.joinUrl).replace(/"/g, '&quot;')}" target="_blank" rel="noopener">Zoom ↗</a>` : ''}</span>
+      </div>
+      ${s.asistentes.map((a) => filaSesion(a, s.pasada)).join('')}
+    </div>`;
+  }
+  async function loadSesiones() {
+    try {
+      const r = await fetchJSON('/api/sesiones');
+      const R = r.resumen || {};
+      $('ses-proximas').textContent = R.proximas ?? 0;
+      $('ses-reservados').textContent = R.reservados ?? 0;
+      $('ses-confirmados').textContent = R.confirmados ?? 0;
+      $('ses-formados').textContent = R.formados ?? 0;
+      $('ses-asistieron').textContent = R.asistieronUltimos14d ?? 0;
+      $('ses-noasistieron').textContent = R.noAsistieronUltimos14d ?? 0;
+      const proximas = (r.sesiones || []).filter((s) => !s.pasada);
+      const pasadas = (r.sesiones || []).filter((s) => s.pasada);
+      _sesHayAlguna = (r.sesiones || []).length > 0;
+      $('ses-lista').innerHTML = proximas.length
+        ? proximas.map(tarjetaSesion).join('')
+        : '<div class="at-vacio">Todavía no hay sesiones reservadas. Cuando alguien reserve en Calendly aparecerá aquí.</div>';
+      $('ses-pasadas-box').style.display = pasadas.length ? '' : 'none';
+      $('ses-pasadas-n').textContent = pasadas.length;
+      $('ses-pasadas').innerHTML = pasadas.map(tarjetaSesion).join('');
+      notaCalendly();
+    } catch (e) {
+      $('ses-lista').innerHTML = `<div class="empty">Error: ${escH(e.message)}</div>`;
+    }
+  }
+  // Acción sobre un asistente. Lee el motivo que explica el servidor (no solo "400").
+  async function accionSesion(leadId, accion, body) {
+    const res = await fetch(`/api/sesiones/${encodeURIComponent(leadId)}/${accion}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+    });
+    let r = {};
+    try { r = await res.json(); } catch (e) {}
+    if (!res.ok || r.ok === false) throw new Error(r.error || `${res.status} ${res.statusText}`);
+    return r;
+  }
+  const SES_ACCIONES = {
+    asistio:    { url: 'asistencia', body: { asistio: true },  confirmar: '¿Marcar que ASISTIÓ a la sesión?', hecho: '✅ Marcado como asistió' },
+    no_asistio: { url: 'asistencia', body: { asistio: false }, confirmar: '¿Marcar que NO asistió a la sesión?', hecho: '❌ Marcado como no asistió' },
+    zoom:       { url: 'zoom', hecho: '🎥 Enlace del Zoom enviado' },
+    aviso:      { url: 'aviso', hecho: '📣 Aviso «¿cuento contigo?» enviado' },
+    formado:    { url: 'formado', hecho: '🎓 Presentación marcada como vista' },
+  };
+  $('sesionesPanel').addEventListener('click', async (e) => {
+    const ver = e.target.closest('[data-ses-ver]');
+    if (ver) {
+      selectedLeadId = ver.dataset.sesVer; renderLeads(); refreshLeadDetail();
+      const d = $('leadDetail'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const b = e.target.closest('[data-ses-acc]');
+    if (!b) return;
+    const acc = SES_ACCIONES[b.dataset.sesAcc];
+    if (!acc) return;
+    if (acc.confirmar && !confirm(acc.confirmar)) return;
+    b.disabled = true;
+    try {
+      const r = await accionSesion(b.dataset.sesLead, acc.url, acc.body);
+      toast(acc.hecho + (r.nota ? ` (${r.nota})` : '') + (b.dataset.sesAcc === 'formado' && r.zoomEnviado ? ' · Zoom enviado' : ''));
+    } catch (err) {
+      toast('❌ ' + err.message);
+    }
+    loadSesiones();
+  });
+  $('ses-refrescar').addEventListener('click', loadSesiones);
+
   // Arranque
   refreshStatus();
   loadCampanas().then(refresh);
   setInterval(refresh, 3000);
   setInterval(refreshStatus, 10000);
   setInterval(loadCampanas, 30000);
+  loadSesiones();
+  setInterval(loadSesiones, 60 * 1000);
   async function entrarDev(pass) {
     try {
       const r = await (await _fetchOrig('/api/dev/login', { method: 'POST', headers: { 'X-Dev-Pass': pass } })).json();

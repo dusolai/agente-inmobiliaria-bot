@@ -955,4 +955,116 @@ router.get('/plantillas', (req, res) => {
   }
 });
 
+// ─── Sesiones de dudas (Zoom con Arkaitz) ─────────────────────────
+// Panel del CRM para el CLIENTE: quién ha reservado la sesión en Calendly,
+// si viene, si llega con la presentación vista y qué dudas trae. NO es zona
+// de desarrollador: lo gestiona Arkaitz. El cálculo está en services/sesiones.
+/** GET /api/sesiones → { ahora, sesiones:[{ inicio, fin, joinUrl, cuando, pasada, asistentes:[…] }], resumen } (campañas vivas, −14 d … +45 d). */
+router.get('/sesiones', (req, res) => {
+  try {
+    res.json(require('../services/sesiones').listar(leadManager.getAllLeads({ campana: 'activas' }), Date.now()));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lead de la acción; si no existe o no tiene sesión, responde el error y devuelve null.
+function _leadConSesion(req, res) {
+  const lead = leadManager.getLeadById(req.params.leadId);
+  if (!lead) { res.status(404).json({ ok: false, error: 'Lead no encontrado' }); return null; }
+  if (!lead.sesion) { res.status(400).json({ ok: false, error: 'Este lead no tiene ninguna sesión reservada' }); return null; }
+  return lead;
+}
+
+/**
+ * POST /api/sesiones/:leadId/asistencia  Body: { asistio: true|false }
+ *  true  → asistió: avanza el lead (reunion_asistio) y cierra la sesión (celebrada).
+ *  false → no vino: queda marcado; la sesión se deja como está para que el
+ *          scheduler le mande igualmente el "¿te surgió algo?" con otro día.
+ */
+router.post('/sesiones/:leadId/asistencia', async (req, res) => {
+  try {
+    const lead = _leadConSesion(req, res);
+    if (!lead) return;
+    if (!req.body || typeof req.body.asistio !== 'boolean') return res.status(400).json({ ok: false, error: 'Falta asistio (true/false)' });
+    const now = new Date().toISOString();
+    let nota = null;
+    if (req.body.asistio) {
+      const r = await require('../services/conversationFlow').procesarAsistenciaReunion(lead, { via: 'crm' });
+      // Si ya estaba en reunion_asistio no es un error; otra transición no válida se avisa pero la sesión queda marcada igual
+      if (r && r.error && lead.estado !== leadManager.LEAD_STATES.REUNION_ASISTIO) nota = r.error;
+      const fresco = leadManager.getLeadById(lead.id);
+      leadManager.updateLead(lead.id, { sesion: { ...fresco.sesion, estado: 'celebrada', asistio: true, asistioAt: now } });
+      activityLog.appendActivity(lead.id, 'sesion_asistio', { via: 'crm', inicio: lead.sesion.inicio });
+    } else {
+      leadManager.updateLead(lead.id, { sesion: { ...lead.sesion, asistio: false, noAsistioMarcadoAt: now } });
+      activityLog.appendActivity(lead.id, 'sesion_no_asistio_marcado', { via: 'crm', inicio: lead.sesion.inicio });
+    }
+    res.json({ ok: true, lead: leadManager.getLeadById(lead.id), nota });
+  } catch (err) {
+    console.error('❌ [API] Error /sesiones/asistencia:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/** POST /api/sesiones/:leadId/zoom → (re)envía el enlace del Zoom ahora (texto en ventana; si no, plantilla con botón). */
+router.post('/sesiones/:leadId/zoom', async (req, res) => {
+  try {
+    const lead = _leadConSesion(req, res);
+    if (!lead) return;
+    if (lead.sesion.estado !== 'reservada') return res.status(400).json({ ok: false, error: 'La sesión no está reservada (cancelada o ya celebrada)' });
+    const enviado = await require('../services/conversationFlow').enviarZoom(lead, 'crm');
+    if (!enviado) return res.status(400).json({ ok: false, error: 'No se pudo enviar: fuera de la ventana de 24 h y sin plantilla de Zoom aprobada' });
+    res.json({ ok: true, lead: leadManager.getLeadById(lead.id) });
+  } catch (err) {
+    console.error('❌ [API] Error /sesiones/zoom:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/** POST /api/sesiones/:leadId/formado → marca "presentación vista" (y si la sesión es en < 3 h, sale el Zoom al momento). */
+router.post('/sesiones/:leadId/formado', async (req, res) => {
+  try {
+    const lead = _leadConSesion(req, res);
+    if (!lead) return;
+    if (lead.sesion.estado !== 'reservada') return res.status(400).json({ ok: false, error: 'La sesión no está reservada (cancelada o ya celebrada)' });
+    await require('../services/conversationFlow').presentacionCompletada(lead, 'crm');
+    const fresco = leadManager.getLeadById(lead.id);
+    if (!fresco.sesion || !fresco.sesion.formado) return res.status(400).json({ ok: false, error: 'No se pudo marcar' });
+    res.json({ ok: true, lead: fresco, zoomEnviado: Boolean(fresco.sesion.avisos && fresco.sesion.avisos.zoomEnviado) });
+  } catch (err) {
+    console.error('❌ [API] Error /sesiones/formado:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/** POST /api/sesiones/:leadId/aviso → manda ahora el "¿cuento contigo?" (texto en ventana; si no, plantilla sesion_hoy). */
+router.post('/sesiones/:leadId/aviso', async (req, res) => {
+  try {
+    const lead = _leadConSesion(req, res);
+    if (!lead) return;
+    if (lead.sesion.estado !== 'reservada') return res.status(400).json({ ok: false, error: 'La sesión no está reservada (cancelada o ya celebrada)' });
+    const messaging = require('../services/messaging');
+    const messages = require('../templates/messages');
+    const config = require('../config/config');
+    const cuando = require('../services/calendlySync').describirCuando(lead.sesion.inicio, { relativo: true });
+    let envio = null;
+    if (messaging.dentroDeVentana(lead.telefono)) {
+      envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionHoy({ nombre: lead.nombre, cuando }), { delaySeconds: 0 });
+    } else if (config.whatsapp.templateSesionHoy) {
+      envio = await messaging.sendTemplate(lead.telefono, [lead.nombre, cuando], { name: config.whatsapp.templateSesionHoy, lang: config.whatsapp.templateLang, varNames: ['nombre', 'cuando'] });
+    } else {
+      return res.status(400).json({ ok: false, error: 'No se pudo enviar: fuera de la ventana de 24 h y sin la plantilla sesion_hoy aprobada' });
+    }
+    if (!envio || envio.success === false) return res.status(400).json({ ok: false, error: (envio && envio.error) || 'No se pudo enviar' });
+    const fresco = leadManager.getLeadById(lead.id);
+    leadManager.updateLead(lead.id, { sesion: { ...fresco.sesion, avisos: { ...(fresco.sesion.avisos || {}), hoy: new Date().toISOString() } } });
+    activityLog.appendActivity(lead.id, 'sesion_aviso_manual', { via: 'crm', inicio: lead.sesion.inicio, cuando });
+    res.json({ ok: true, lead: leadManager.getLeadById(lead.id) });
+  } catch (err) {
+    console.error('❌ [API] Error /sesiones/aviso:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;
