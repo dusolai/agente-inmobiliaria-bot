@@ -2078,6 +2078,8 @@
       if (!a.confirmada && a.avisos.hoy) chips.push(a.avisos.hoy === 'fallido' ? sesChip('Aviso fallido', 'ko') : sesChip('Avisado', 'info'));
       chips.push(a.formado ? sesChip('Presentación vista', 'ok') : sesChip('Sin ver', 'warn'));
       if (a.zoomEnviado) chips.push(sesChip('Zoom enviado', 'info'));
+      if (a.pidioCambio) chips.push(sesChip('Pidió cambiar de día', 'ko'));
+      if (a.riesgo === 'alto') chips.push(`<span class="ses-chip ko" title="${escH((a.motivosRiesgo || []).join(' · '))}">⚠ Riesgo de no venir</span>`);
     }
     if (a.derivado) chips.push(sesChip('Derivado a Arkaitz', 'info'));
     if (a.asistio === true) chips.push(sesChip('Asistió', 'ok'));

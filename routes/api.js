@@ -971,12 +971,16 @@ router.get('/sesiones', (req, res) => {
       for (const a of ses.asistentes) {
         const lead = porId.get(a.leadId);
         const sg = S.seguimiento(lead, activityLog.getActivityByLead(a.leadId), Date.now());
+        // "Vio la presentación" con TODAS las pruebas (también si terminó el
+        // vídeo antes de reservar: María, 27-10), no solo la marca de la sesión
+        a.formado = sg.pasos.some((p) => p.clave === 'presentacion' && p.estado === 'hecho');
         a.riesgo = sg.riesgo;
         a.motivosRiesgo = sg.motivos;
         a.pidioCambio = sg.pidioCambio;
         a.ventanaAbierta = require('../services/messaging').dentroDeVentana(lead.telefono);
       }
     }
+    out.resumen.formados = out.sesiones.filter((x) => !x.pasada).reduce((n, x) => n + x.asistentes.filter((a) => a.estadoSesion === 'reservada' && a.formado).length, 0);
     out.resumen.enRiesgo = out.sesiones.filter((x) => !x.pasada).reduce((n, x) => n + x.asistentes.filter((a) => a.riesgo === 'alto').length, 0);
     res.json(out);
   } catch (err) {
