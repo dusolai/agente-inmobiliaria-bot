@@ -126,7 +126,7 @@ function detalleHTML(a, sg, pasada) {
   }
   acciones.push(`<button data-acc="asistio" data-id="${a.leadId}">✅ Vino</button>`);
   acciones.push(`<button data-acc="noasistio" data-id="${a.leadId}">❌ No vino</button>`);
-  if (tel) acciones.push(`<a href="https://wa.me/${tel}" target="_blank" rel="noopener"><button class="prim">📱 Escribirle desde mi WhatsApp</button></a>`);
+  if (tel) acciones.push(`<a href="https://wa.me/${tel}" target="_blank" rel="noopener"><button class="prim">📱 Escribir a ${esc(String(a.nombre).split(' ')[0])} desde mi WhatsApp</button></a>`);
   return `
     ${dudas}
     <div class="cols">
