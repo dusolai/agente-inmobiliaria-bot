@@ -999,8 +999,64 @@ router.get('/sesiones/:leadId/seguimiento', (req, res) => {
       lead: { id: lead.id, nombre: lead.nombre, telefono: lead.telefono, perfil: lead.perfil, estado: lead.estado, sesion: lead.sesion, dudas: (lead.feedbackSesion || []).map((f) => f.texto) },
       ventanaAbierta: require('../services/messaging').dentroDeVentana(lead.telefono),
       cuando: require('../services/calendlySync').describirCuando(lead.sesion.inicio),
+      siguiente: lead.sesion.estado === 'reservada' ? _siguientePaso(lead, sg) : null,
       ...sg,
     });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * El recordatorio que TOCA ahora a esta persona (27-10), para mandarlo con un
+ * botón aunque no haya escrito en 24 h (va con plantilla):
+ *   - falta < 3 h                → el Zoom
+ *   - no ha visto la presentación → «¿has visto la presentación?» (preparación)
+ *   - la ha visto, sin confirmar  → «¿cuento contigo?»
+ *   - ya confirmó                 → el Zoom
+ * Si contesta, se abre la ventana de 24 h y ya se le puede escribir libre.
+ */
+function _siguientePaso(lead, sg) {
+  const s = lead.sesion;
+  const faltaMs = new Date(s.inicio).getTime() - Date.now();
+  const vio = sg.pasos.some((p) => p.clave === 'presentacion' && p.estado === 'hecho');
+  if (faltaMs <= 3 * 3600 * 1000) return { clave: 'zoom', texto: 'Mandarle el enlace del Zoom' };
+  if (!vio) return { clave: 'preparacion', texto: 'Pedirle que vea la presentación' };
+  if (!s.confirmada) return { clave: 'aviso', texto: 'Preguntarle si viene' };
+  return { clave: 'zoom', texto: 'Mandarle el enlace del Zoom' };
+}
+
+router.post('/sesiones/:leadId/siguiente', async (req, res) => {
+  try {
+    const lead = _leadConSesion(req, res);
+    if (!lead) return;
+    if (lead.sesion.estado !== 'reservada') return res.status(400).json({ ok: false, error: 'La sesión no está reservada' });
+    const sg = require('../services/sesiones').seguimiento(lead, activityLog.getActivityByLead(lead.id), Date.now());
+    const paso = _siguientePaso(lead, sg);
+    const messaging = require('../services/messaging');
+    const messages = require('../templates/messages');
+    const config = require('../config/config');
+    const cf = require('../services/conversationFlow');
+    const calendlySync = require('../services/calendlySync');
+    const ventana = messaging.dentroDeVentana(lead.telefono);
+    let envio = null;
+    if (paso.clave === 'zoom') {
+      const ok = await cf.enviarZoom(lead, 'crm');
+      if (!ok) return res.status(400).json({ ok: false, error: 'No se pudo mandar el Zoom (sin enlace o sin plantilla aprobada)' });
+      return res.json({ ok: true, paso });
+    }
+    if (paso.clave === 'preparacion') {
+      if (ventana) envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionPreparacion({ nombre: lead.nombre, enlaceLanding: cf.enlaceLandingPorPerfil(lead.perfil, lead.id) }), { delaySeconds: 0 });
+      else if (config.whatsapp.templateSesionPreparacion) envio = await messaging.sendTemplate(lead.telefono, [lead.nombre], { name: config.whatsapp.templateSesionPreparacion, lang: config.whatsapp.templateLang, varNames: ['nombre'] });
+      leadManager.updateLead(lead.id, { esperandoFeedback: true });
+    } else {
+      const cuando = calendlySync.describirCuando(lead.sesion.inicio, { relativo: true });
+      if (ventana) envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionHoy({ nombre: lead.nombre, cuando }), { delaySeconds: 0 });
+      else if (config.whatsapp.templateSesionHoy) envio = await messaging.sendTemplate(lead.telefono, [lead.nombre, cuando], { name: config.whatsapp.templateSesionHoy, lang: config.whatsapp.templateLang, varNames: ['nombre', 'cuando'] });
+    }
+    if (!envio || envio.success === false) return res.status(400).json({ ok: false, error: (envio && envio.error) || 'No se pudo enviar' });
+    activityLog.appendActivity(lead.id, 'sesion_recordatorio_crm', { paso: paso.clave });
+    res.json({ ok: true, paso });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

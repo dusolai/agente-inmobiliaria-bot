@@ -437,7 +437,7 @@
     </div>
 
     <div class="panel" id="sesionesPanel">
-      <h2>📅 Sesiones de dudas <small>quién ha reservado el Zoom con Arkaitz, si viene, si llega con la presentación vista y qué dudas trae</small></h2>
+      <h2>📅 Sesiones de dudas <small>quién ha reservado el Zoom con Arkaitz, si viene, si llega con la presentación vista y qué dudas trae</small> · <a href="/sesiones.html" target="_blank" style="font-size:.8em">Abrir seguimiento completo y chat ↗</a></h2>
       <div class="ses-nums">
         <div class="csv-num"><b id="ses-proximas">—</b><span>Próximas sesiones</span></div>
         <div class="csv-num"><b id="ses-reservados">—</b><span>Reservados</span></div>
@@ -2087,6 +2087,7 @@
     const acc = [];
     if (!cancelada) {
       if (!pasada && a.estadoSesion === 'reservada') {
+        acc.push(`<button class="btn green" data-ses-acc="siguiente" data-ses-lead="${escH(a.leadId)}" title="Le manda ahora el recordatorio que le toca (aunque no haya escrito en 24 h). Si contesta, ya puedes chatear con él en el seguimiento completo">📨 Mandar lo que toca</button>`);
         acc.push(`<button class="btn" data-ses-acc="zoom" data-ses-lead="${escH(a.leadId)}" title="Le llega el enlace del Zoom ahora mismo">🎥 ${a.zoomEnviado ? 'Reenviar' : 'Enviar'} Zoom</button>`);
         acc.push(`<button class="btn" data-ses-acc="aviso" data-ses-lead="${escH(a.leadId)}" title="Le pregunta «¿cuento contigo?» ahora mismo">📣 Avisar hoy</button>`);
         if (!a.formado) acc.push(`<button class="btn" data-ses-acc="formado" data-ses-lead="${escH(a.leadId)}" title="Ya vio la presentación: queda desbloqueado su Zoom">🎓 Marcar presentación vista</button>`);
@@ -2150,6 +2151,7 @@
   const SES_ACCIONES = {
     asistio:    { url: 'asistencia', body: { asistio: true },  confirmar: '¿Marcar que ASISTIÓ a la sesión?', hecho: '✅ Marcado como asistió' },
     no_asistio: { url: 'asistencia', body: { asistio: false }, confirmar: '¿Marcar que NO asistió a la sesión?', hecho: '❌ Marcado como no asistió' },
+    siguiente:  { url: 'siguiente', hecho: '📨 Recordatorio enviado' },
     zoom:       { url: 'zoom', hecho: '🎥 Enlace del Zoom enviado' },
     aviso:      { url: 'aviso', hecho: '📣 Aviso «¿cuento contigo?» enviado' },
     formado:    { url: 'formado', hecho: '🎓 Presentación marcada como vista' },

@@ -119,6 +119,7 @@ function detalleHTML(a, sg, pasada) {
   const tel = String(a.telefono || '').replace(/\D/g, '');
   const acciones = [];
   if (!pasada && a.estadoSesion === 'reservada') {
+    if (sg.siguiente) acciones.push(`<button class="prim" data-acc="siguiente" data-id="${a.leadId}">📨 ${esc(sg.siguiente.texto)} (lo que toca)</button>`);
     acciones.push(`<button data-acc="aviso" data-id="${a.leadId}">📣 Preguntar si viene</button>`);
     acciones.push(`<button data-acc="zoom" data-id="${a.leadId}">🎥 Mandarle el Zoom</button>`);
     if (!a.formado) acciones.push(`<button data-acc="formado" data-id="${a.leadId}">🎓 Marcar presentación vista</button>`);
@@ -131,7 +132,7 @@ function detalleHTML(a, sg, pasada) {
     <div class="cols">
       <div><h3>Seguimiento paso a paso</h3><ul class="pasos">${pasos}</ul></div>
       <div><h3>Conversación</h3><div class="chat">${chat}</div>
-        <div class="escribir"><textarea id="txt-${a.leadId}" placeholder="${sg.ventanaAbierta ? 'Escribe un mensaje…' : 'No ha escrito en 24 h: WhatsApp solo deja plantillas. Usa los botones o tu WhatsApp.'}" ${sg.ventanaAbierta ? '' : 'disabled'}></textarea>
+        <div class="escribir"><textarea id="txt-${a.leadId}" placeholder="${sg.ventanaAbierta ? 'Escribe un mensaje…' : 'Para escribirle libre, primero tiene que contestar: pulsa «📨 lo que toca» abajo y en cuanto responda se abre el chat.'}" ${sg.ventanaAbierta ? '' : 'disabled'}></textarea>
           <button class="prim" data-acc="mensaje" data-id="${a.leadId}" ${sg.ventanaAbierta ? '' : 'disabled'}>Enviar</button></div>
       </div>
     </div>
@@ -198,6 +199,7 @@ async function cargarSeguimiento(id) {
 // ─── Acciones ───────────────────────────────────────────────────────
 const ACC = {
   aviso:     { url: (id) => `/api/sesiones/${id}/aviso`, ok: 'Mensaje «¿cuento contigo?» enviado' },
+  siguiente: { url: (id) => `/api/sesiones/${id}/siguiente`, ok: 'Recordatorio enviado. Si contesta, ya podrás escribirle desde aquí' },
   zoom:      { url: (id) => `/api/sesiones/${id}/zoom`, ok: 'Enlace del Zoom enviado' },
   formado:   { url: (id) => `/api/sesiones/${id}/formado`, ok: 'Marcado como presentación vista' },
   asistio:   { url: (id) => `/api/sesiones/${id}/asistencia`, body: { asistio: true }, ok: 'Apuntado: vino', confirmar: '¿Confirmas que vino a la sesión?' },
