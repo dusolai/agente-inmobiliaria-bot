@@ -140,7 +140,8 @@ function _conEntrega(evs) {
 
 function seguimiento(lead, eventos, ahora = Date.now()) {
   const s = lead.sesion || {};
-  const desde = s.reservadaAt ? new Date(s.reservadaAt).getTime() - 7 * DIA : 0;
+  // 60 días antes de reservar: quien vio la presentación antes (María) cuenta
+  const desde = s.reservadaAt ? new Date(s.reservadaAt).getTime() - 60 * DIA : 0;
   const evs = (eventos || []).filter((e) => new Date(e.ts).getTime() >= desde).sort((a, b) => a.ts.localeCompare(b.ts));
   const primero = (pred) => evs.find(pred) || null;
   const desdeReserva = (e) => !s.reservadaAt || e.ts >= s.reservadaAt;

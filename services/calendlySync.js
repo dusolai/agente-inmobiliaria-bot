@@ -134,7 +134,12 @@ function _marcarReservado(lead) {
  */
 async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, joinUrl, rescheduleUrl, via = 'api' }) {
   const prev = lead.sesion || null;
-  if (prev && prev.inviteeUri === inviteeUri && prev.estado === 'reservada') {
+  // Misma reserva, o el mismo lead reservó DOS veces el mismo hueco (María,
+  // 27-10): no es una reserva nueva. Sin esto, con dos invitados activos la
+  // sync alternaba entre ambos cada ciclo y reiniciaba avisos y saludos.
+  const mismoHueco = prev && prev.estado === 'reservada' && prev.inicio && inicio &&
+    new Date(prev.inicio).getTime() === new Date(inicio).getTime();
+  if (prev && prev.estado === 'reservada' && (prev.inviteeUri === inviteeUri || mismoHueco)) {
     if (prev.inicio !== inicio || prev.joinUrl !== joinUrl) {
       leadManager.updateLead(lead.id, { sesion: { ...prev, inicio, fin, joinUrl, rescheduleUrl } });
     }

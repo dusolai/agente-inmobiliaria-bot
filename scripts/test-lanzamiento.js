@@ -497,6 +497,12 @@ function activationReset() {
       assert.ok(sg.pasos.find((p) => p.clave === 'presentacion').estado === 'pendiente');
       assert.ok(sg.conversacion.some((c) => c.de === 'lead' && /no he visto/.test(c.texto)));
       ok('seguimiento: «no la he visto» no desbloquea; riesgo alto si pidió cambiar de día; pasos y conversación');
+      // Doble reserva del mismo hueco: no alterna ni reinicia avisos
+      const cs2 = require('../services/calendlySync');
+      await cs2.registrarReserva(leadManager.getLeadById(f.id), { inviteeUri: 'inv-f2', eventoUri: 'ev', inicio: ini, joinUrl: 'https://zoom.us/j/1' });
+      const tras = leadManager.getLeadById(f.id).sesion;
+      assert.strictEqual(tras.inviteeUri, 'inv-f', 'el segundo invitado del mismo hueco no sustituye al primero');
+      ok('doble reserva del mismo hueco: se ignora (sin alternar ni reiniciar avisos)');
     }
 
     // d9) La presentación es la llave del Zoom
