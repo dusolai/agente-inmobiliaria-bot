@@ -103,4 +103,89 @@ function listar(leads, ahora = Date.now()) {
   return { ahora: new Date(ahora).toISOString(), sesiones, resumen };
 }
 
-module.exports = { listar, DIAS_ATRAS, DIAS_ADELANTE };
+// ─── Seguimiento exhaustivo y riesgo de no venir (27-10) ─────────────
+// Pura: recibe el lead y SUS eventos. Reconstruye cada paso (con fecha y si
+// llegó / lo leyó) y la conversación completa desde que reservó.
+
+const ETIQUETA_SALIDA = {
+  '[plantilla sesion_preparacion_three]': 'Preparación: «¿has visto la presentación?»',
+  '[plantilla sesion_hoy_three]': 'Aviso «¿cuento contigo?»',
+  '[plantilla sesion_zoom_three]': 'Enlace del Zoom (botón)',
+  '[plantilla sesion_huecos_three]': 'Repesca con los huecos de la semana',
+  '[plantilla recordatorio_sesion_three]': 'Recordatorio: apúntate a la sesión',
+  '[plantilla recordatorio_presentacion_three]': 'Recordatorio: termina la presentación',
+};
+
+// Estado de entrega de cada mensaje enviado: el mejor estado que llega
+// después de él y antes del siguiente envío.
+function _conEntrega(evs) {
+  const out = [];
+  let ultimo = null;
+  for (const e of evs) {
+    const m = e.meta || {};
+    if (e.type === 'message_sent') {
+      ultimo = { ts: e.ts, de: m.manual ? 'crm' : 'sistema', texto: ETIQUETA_SALIDA[m.preview] || m.preview || '', entrega: m.ok === false ? 'fallido' : 'enviado' };
+      out.push(ultimo);
+    } else if (e.type === 'message_status' && ultimo) {
+      const rango = { enviado: 0, entregado: 1, leido: 2, fallido: 3 };
+      const nuevo = m.status === 'read' ? 'leido' : m.status === 'delivered' ? 'entregado' : m.status === 'failed' ? 'fallido' : null;
+      if (nuevo && rango[nuevo] > rango[ultimo.entrega]) ultimo.entrega = nuevo;
+    } else if (e.type === 'message_received') {
+      out.push({ ts: e.ts, de: 'lead', texto: m.texto || '', entrega: null });
+      ultimo = null;
+    }
+  }
+  return out;
+}
+
+function seguimiento(lead, eventos, ahora = Date.now()) {
+  const s = lead.sesion || {};
+  const desde = s.reservadaAt ? new Date(s.reservadaAt).getTime() - 7 * DIA : 0;
+  const evs = (eventos || []).filter((e) => new Date(e.ts).getTime() >= desde).sort((a, b) => a.ts.localeCompare(b.ts));
+  const primero = (pred) => evs.find(pred) || null;
+  const desdeReserva = (e) => !s.reservadaAt || e.ts >= s.reservadaAt;
+  const conversacion = _conEntrega(evs);
+  const msgTras = (ts) => conversacion.filter((c) => c.de !== 'lead' && c.ts >= ts);
+  const inicio = new Date(s.inicio).getTime();
+
+  const vio = primero((e) => /^(video_complete|calendly_button_revealed)$/.test(e.type) || e.type === 'video_progress_90');
+  const empezo = primero((e) => e.type === 'video_play');
+  const progreso = evs.filter((e) => /^video_progress_\d+$/.test(e.type)).map((e) => Number(e.type.split('_').pop())).reduce((m, n) => Math.max(m, n), 0);
+  const cambio = [...evs].reverse().find((e) => e.type === 'sesion_cambiar_dia' && desdeReserva(e)) || null;
+  const zoom = primero((e) => e.type === 'sesion_zoom_enviado');
+  const conf = primero((e) => e.type === 'sesion_confirmada');
+  const prep = msgTras(s.reservadaAt || '').filter((c) => /Preparación|has podido ver la presentación/.test(c.texto));
+  const hoy = msgTras(s.reservadaAt || '').filter((c) => /cuento contigo/i.test(c.texto));
+
+  const paso = (clave, titulo, hecho, ts, detalle, fallo) => ({ clave, titulo, estado: hecho ? 'hecho' : fallo ? 'fallo' : 'pendiente', ts: ts || null, detalle: detalle || '' });
+  const entregaTxt = (arr) => (arr.length ? `${arr.length} enviado(s) · último ${arr[arr.length - 1].entrega}` : '');
+  const pasos = [
+    paso('reserva', 'Reservó en Calendly', Boolean(s.reservadaAt), s.reservadaAt),
+    paso('preparacion', 'Le pedimos ver la presentación', prep.length > 0, prep[0] && prep[0].ts, entregaTxt(prep)),
+    paso('presentacion', 'Vio la presentación', Boolean(s.formado || vio), (vio && vio.ts) || s.formadoAt,
+      vio ? 'terminó el vídeo en la web' : s.formado ? 'lo dijo por WhatsApp' : empezo ? `empezó el vídeo (llegó al ${progreso}%)` : 'no ha abierto el vídeo'),
+    paso('aviso', 'Aviso del día «¿cuento contigo?»', hoy.length > 0, hoy[0] && hoy[0].ts, entregaTxt(hoy)),
+    paso('confirma', 'Confirmó que viene', Boolean(s.confirmada), (conf && conf.ts) || s.confirmadaAt, cambio ? `ojo: pidió cambiar de día (${cambio.ts.slice(0, 10)})` : ''),
+    paso('zoom', 'Recibió el enlace del Zoom', Boolean(zoom || (s.avisos && s.avisos.zoomEnviado)), (zoom && zoom.ts) || (s.avisos && s.avisos.zoomEnviado)),
+    paso('asistencia', 'Entró a la sesión', s.asistio === true || lead.estado === 'reunion_asistio', s.asistioAt, s.asistio === false ? 'no se presentó' : '', s.asistio === false),
+  ];
+
+  // Riesgo de que no venga (solo sesiones futuras)
+  const motivos = [];
+  if (s.estado === 'reservada' && inicio > ahora) {
+    if (cambio) motivos.push('pidió cambiar de día y no ha cambiado la reserva');
+    const enviadosTras = msgTras(s.reservadaAt || '');
+    // Si contestó, lo leyó (hay quien tiene desactivado el doble check azul)
+    const contesto = conversacion.some((c) => c.de === 'lead' && c.ts >= (s.reservadaAt || ''));
+    if (enviadosTras.length && !contesto && !enviadosTras.some((c) => c.entrega === 'leido')) motivos.push('no ha leído ningún mensaje desde que reservó');
+    if (!s.formado && !vio) motivos.push(empezo ? `no terminó la presentación (${progreso}%)` : 'no ha visto la presentación');
+    if (!s.confirmada && inicio - ahora < 14 * 3600 * 1000) motivos.push('no ha confirmado');
+    if (!conversacion.some((c) => c.de === 'lead' && c.ts >= (s.reservadaAt || ''))) motivos.push('no ha escrito nada desde que reservó');
+  }
+  const graves = motivos.filter((m) => /cambiar de día|no ha leído/.test(m)).length;
+  const riesgo = !motivos.length ? 'bajo' : graves || motivos.length >= 3 ? 'alto' : 'medio';
+
+  return { pasos, conversacion, riesgo, motivos, pidioCambio: Boolean(cambio) };
+}
+
+module.exports = { listar, seguimiento, DIAS_ATRAS, DIAS_ADELANTE };

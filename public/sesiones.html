@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sesiones de dudas · Three Inmobiliaria</title>
+<style>
+  /* Seguimiento de las sesiones de dudas (27-10): una página propia para
+     Arkaitz. Quién viene, cómo llega y qué le falta, con la conversación
+     entera y los botones para actuar desde aquí. */
+  :root{--ink:#1d1640;--quiet:#6b6585;--line:#e6e1f2;--bg:#f7f5fc;--card:#fff;
+    --ok:#1f8a4c;--okbg:#e5f6ec;--warn:#a86400;--warnbg:#fff3dc;--ko:#c0392b;--kobg:#fde8e6;--acc:#311B92;--acc2:#FF6B35}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+  header{background:linear-gradient(135deg,var(--acc),#5b2fd1);color:#fff;padding:18px 20px}
+  header h1{margin:0;font-size:1.35rem}
+  header p{margin:4px 0 0;opacity:.85;font-size:.9rem}
+  main{max-width:1100px;margin:0 auto;padding:16px}
+  .resumen{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+  .num{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .num b{display:block;font-size:1.6rem}
+  .num span{color:var(--quiet);font-size:.82rem}
+  .num.alerta b{color:var(--ko)}
+  .nota{background:var(--warnbg);color:var(--warn);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:.9rem}
+  .sesion{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:16px;overflow:hidden}
+  .sesion-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;background:#f1edfb;flex-wrap:wrap}
+  .sesion-head h2{margin:0;font-size:1.05rem;text-transform:capitalize}
+  .sesion-head a{color:var(--acc);font-weight:600;text-decoration:none}
+  .persona{border-top:1px solid var(--line);padding:12px 16px}
+  .fila{display:flex;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer}
+  .semaforo{width:12px;height:12px;border-radius:50%;flex:none}
+  .r-alto{background:var(--ko)} .r-medio{background:#e0a020} .r-bajo{background:var(--ok)}
+  .nombre{font-weight:700}
+  .tel{color:var(--quiet);font-size:.88rem}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:.75rem;padding:3px 8px;border-radius:999px;background:#eee;color:#444;white-space:nowrap}
+  .chip.ok{background:var(--okbg);color:var(--ok)} .chip.warn{background:var(--warnbg);color:var(--warn)} .chip.ko{background:var(--kobg);color:var(--ko)}
+  .motivos{color:var(--ko);font-size:.85rem;margin:6px 0 0 22px}
+  .detalle{display:none;margin-top:12px;padding-left:22px}
+  .persona.abierta .detalle{display:block}
+  .cols{display:grid;grid-template-columns:1fr 1.3fr;gap:16px}
+  @media (max-width:760px){.cols{grid-template-columns:1fr}}
+  h3{font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;color:var(--quiet);margin:4px 0 8px}
+  .pasos{list-style:none;margin:0;padding:0}
+  .pasos li{display:flex;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:.9rem}
+  .pasos .ic{width:20px;flex:none;text-align:center}
+  .pasos .ts{color:var(--quiet);font-size:.78rem;display:block}
+  .pasos .det{color:var(--quiet);font-size:.8rem;display:block}
+  .chat{max-height:340px;overflow:auto;background:#faf9fd;border:1px solid var(--line);border-radius:10px;padding:8px}
+  .msg{max-width:85%;margin:6px 0;padding:7px 10px;border-radius:10px;font-size:.88rem;white-space:pre-wrap;word-wrap:break-word}
+  .msg.lead{background:#fff;border:1px solid var(--line)}
+  .msg.sistema,.msg.crm{background:#e9e3fb;margin-left:auto}
+  .msg.crm{background:#dff3e8}
+  .msg small{display:block;color:var(--quiet);font-size:.72rem;margin-top:3px}
+  .dudas{background:var(--warnbg);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:.9rem}
+  .acciones{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  button{font:inherit;font-size:.85rem;border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 10px;cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.prim{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .escribir{display:flex;gap:6px;margin-top:8px}
+  .escribir textarea{flex:1;font:inherit;font-size:.88rem;border:1px solid var(--line);border-radius:8px;padding:8px;min-height:44px}
+  .aviso-ventana{font-size:.8rem;color:var(--quiet);margin-top:4px}
+  .vacio{background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:24px;text-align:center;color:var(--quiet)}
+  details{margin-top:8px} summary{cursor:pointer;color:var(--quiet);font-weight:600;padding:8px 0}
+  #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;display:none;max-width:90%;z-index:9}
+</style>
+</head>
+<body>
+<header>
+  <h1>📅 Sesiones de dudas</h1>
+  <p>Quién viene, cómo llega y qué le falta. Pulsa en una persona para ver todo su seguimiento y actuar.</p>
+</header>
+<main>
+  <div class="resumen" id="resumen"></div>
+  <div id="nota"></div>
+  <div id="proximas"></div>
+  <details id="pasadasBox"><summary>Sesiones pasadas (últimos 14 días): marca quién vino</summary><div id="pasadas"></div></details>
+</main>
+<div id="toast"></div>
+
+<script>
+// ─── Datos ──────────────────────────────────────────────────────────
+const abiertas = new Set();          // personas desplegadas (se conservan al refrescar)
+const seguimientos = new Map();      // leadId → seguimiento cargado
+
+async function api(url, opts) {
+  const r = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
+  let j = null; try { j = await r.json(); } catch (e) {}
+  if (!r.ok || (j && j.ok === false)) throw new Error((j && j.error) || `${r.status} ${r.statusText}`);
+  return j;
+}
+function toast(t) { const el = document.getElementById('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => (el.style.display = 'none'), 4500); }
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fecha = (iso) => iso ? new Date(iso).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+const titulo = (iso) => new Date(iso).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
+// ─── Pintar ─────────────────────────────────────────────────────────
+function chips(a) {
+  const c = [];
+  if (a.estadoSesion === 'cancelada') return '<span class="chip ko">Canceló</span>';
+  c.push(a.confirmada ? '<span class="chip ok">✔ Confirmó</span>' : '<span class="chip warn">Sin confirmar</span>');
+  c.push(a.formado ? '<span class="chip ok">🎓 Vio la presentación</span>' : '<span class="chip warn">Sin ver la presentación</span>');
+  if (a.zoomEnviado) c.push('<span class="chip ok">🎥 Tiene el Zoom</span>');
+  if (a.pidioCambio) c.push('<span class="chip ko">🔁 Pidió cambiar de día</span>');
+  if (a.derivado) c.push('<span class="chip">📲 Tiene tu número</span>');
+  if (a.asistio === true) c.push('<span class="chip ok">🤝 Vino</span>');
+  if (a.asistio === false) c.push('<span class="chip ko">✖ No vino</span>');
+  c.push(a.ventanaAbierta ? '<span class="chip">💬 Puedes escribirle</span>' : '<span class="chip">⏳ Solo plantillas</span>');
+  return c.join('');
+}
+
+function detalleHTML(a, sg, pasada) {
+  if (!sg) return '<p class="aviso-ventana">Cargando seguimiento…</p>';
+  const ic = { hecho: '✅', pendiente: '⬜', fallo: '❌' };
+  const pasos = sg.pasos.map((p) => `<li><span class="ic">${ic[p.estado]}</span><span>${esc(p.titulo)}<span class="ts">${p.ts ? fecha(p.ts) : ''}</span>${p.detalle ? `<span class="det">${esc(p.detalle)}</span>` : ''}</span></li>`).join('');
+  const entrega = { enviado: '✓ enviado', entregado: '✓✓ entregado', leido: '✓✓ leído', fallido: '⚠ no llegó' };
+  const chat = sg.conversacion.length ? sg.conversacion.map((m) => `<div class="msg ${m.de}">${esc(m.texto)}<small>${m.de === 'lead' ? esc(a.nombre) : m.de === 'crm' ? 'Tú' : 'Sistema'} · ${fecha(m.ts)}${m.entrega ? ' · ' + entrega[m.entrega] : ''}</small></div>`).join('') : '<p class="aviso-ventana">Sin mensajes.</p>';
+  const dudas = (sg.lead.dudas || []).length ? `<div class="dudas"><b>Lo que te dejó escrito:</b> ${sg.lead.dudas.map((d) => '«' + esc(d) + '»').join(' · ')}</div>` : '';
+  const tel = String(a.telefono || '').replace(/\D/g, '');
+  const acciones = [];
+  if (!pasada && a.estadoSesion === 'reservada') {
+    acciones.push(`<button data-acc="aviso" data-id="${a.leadId}">📣 Preguntar si viene</button>`);
+    acciones.push(`<button data-acc="zoom" data-id="${a.leadId}">🎥 Mandarle el Zoom</button>`);
+    if (!a.formado) acciones.push(`<button data-acc="formado" data-id="${a.leadId}">🎓 Marcar presentación vista</button>`);
+  }
+  acciones.push(`<button data-acc="asistio" data-id="${a.leadId}">✅ Vino</button>`);
+  acciones.push(`<button data-acc="noasistio" data-id="${a.leadId}">❌ No vino</button>`);
+  if (tel) acciones.push(`<a href="https://wa.me/${tel}" target="_blank" rel="noopener"><button class="prim">📱 Escribirle desde mi WhatsApp</button></a>`);
+  return `
+    ${dudas}
+    <div class="cols">
+      <div><h3>Seguimiento paso a paso</h3><ul class="pasos">${pasos}</ul></div>
+      <div><h3>Conversación</h3><div class="chat">${chat}</div>
+        <div class="escribir"><textarea id="txt-${a.leadId}" placeholder="${sg.ventanaAbierta ? 'Escribe un mensaje…' : 'No ha escrito en 24 h: WhatsApp solo deja plantillas. Usa los botones o tu WhatsApp.'}" ${sg.ventanaAbierta ? '' : 'disabled'}></textarea>
+          <button class="prim" data-acc="mensaje" data-id="${a.leadId}" ${sg.ventanaAbierta ? '' : 'disabled'}>Enviar</button></div>
+      </div>
+    </div>
+    <div class="acciones">${acciones.join('')}</div>`;
+}
+
+function personaHTML(a, pasada) {
+  const ab = abiertas.has(a.leadId);
+  const motivos = !pasada && a.motivosRiesgo && a.motivosRiesgo.length ? `<div class="motivos">⚠ ${a.motivosRiesgo.map(esc).join(' · ')}</div>` : '';
+  return `<div class="persona ${ab ? 'abierta' : ''}" id="p-${a.leadId}">
+    <div class="fila" data-toggle="${a.leadId}">
+      <span class="semaforo r-${pasada ? 'bajo' : a.riesgo || 'medio'}" title="Riesgo de que no venga: ${a.riesgo || ''}"></span>
+      <span class="nombre">${esc(a.nombre)}</span><span class="tel">${esc(a.telefono)}</span>
+      <span class="chips">${chips(a)}</span>
+    </div>${motivos}
+    <div class="detalle" id="d-${a.leadId}">${ab ? detalleHTML(a, seguimientos.get(a.leadId), pasada) : ''}</div>
+  </div>`;
+}
+
+function sesionHTML(s) {
+  const n = s.asistentes.filter((a) => a.estadoSesion !== 'cancelada').length;
+  return `<div class="sesion"><div class="sesion-head"><h2>${titulo(s.inicio)} · ${n} ${n === 1 ? 'persona' : 'personas'}</h2>
+    ${s.joinUrl ? `<a href="${esc(s.joinUrl)}" target="_blank" rel="noopener">Abrir el Zoom ↗</a>` : ''}</div>
+    ${s.asistentes.map((a) => personaHTML(a, s.pasada)).join('')}</div>`;
+}
+
+let ultimo = null;
+async function cargar() {
+  try {
+    const d = await api('/api/sesiones');
+    ultimo = d;
+    const r = d.resumen;
+    document.getElementById('resumen').innerHTML = [
+      ['Próximas sesiones', r.proximas], ['Reservados', r.reservados], ['Confirmaron', r.confirmados],
+      ['Vieron la presentación', r.formados], ['En riesgo de no venir', r.enRiesgo || 0, 'alerta'],
+      ['Vinieron (14 días)', r.asistieronUltimos14d], ['No vinieron (14 días)', r.noAsistieronUltimos14d],
+    ].map(([t, v, c]) => `<div class="num ${c && v ? c : ''}"><b>${v}</b><span>${t}</span></div>`).join('');
+    const prox = d.sesiones.filter((s) => !s.pasada);
+    const pas = d.sesiones.filter((s) => s.pasada).reverse();
+    document.getElementById('proximas').innerHTML = prox.length ? prox.map(sesionHTML).join('') : '<div class="vacio">Todavía no hay sesiones reservadas. Cuando alguien reserve en Calendly aparecerá aquí.</div>';
+    document.getElementById('pasadas').innerHTML = pas.length ? pas.map(sesionHTML).join('') : '<p class="aviso-ventana">No hay sesiones pasadas.</p>';
+    try {
+      const st = await (await fetch('/api/system/status')).json();
+      const sync = st.calendly && st.calendly.sync;
+      document.getElementById('nota').innerHTML = sync && !sync.activo ? '<div class="nota">⚠ Las reservas nuevas de Calendly no entran solas (falta el token de Calendly en Seenode). Avisa a Diego.</div>' : '';
+    } catch (e) {}
+    // Los desplegados recargan su seguimiento
+    for (const id of abiertas) cargarSeguimiento(id);
+  } catch (e) { toast('No se pudo cargar: ' + e.message); }
+}
+
+function asistente(id) {
+  for (const s of (ultimo && ultimo.sesiones) || []) for (const a of s.asistentes) if (a.leadId === id) return { a, pasada: s.pasada };
+  return null;
+}
+async function cargarSeguimiento(id) {
+  try {
+    seguimientos.set(id, await api(`/api/sesiones/${id}/seguimiento`));
+    const x = asistente(id); const el = document.getElementById('d-' + id);
+    if (x && el) { el.innerHTML = detalleHTML(x.a, seguimientos.get(id), x.pasada); const c = el.querySelector('.chat'); if (c) c.scrollTop = c.scrollHeight; }
+  } catch (e) { toast('Seguimiento: ' + e.message); }
+}
+
+// ─── Acciones ───────────────────────────────────────────────────────
+const ACC = {
+  aviso:     { url: (id) => `/api/sesiones/${id}/aviso`, ok: 'Mensaje «¿cuento contigo?» enviado' },
+  zoom:      { url: (id) => `/api/sesiones/${id}/zoom`, ok: 'Enlace del Zoom enviado' },
+  formado:   { url: (id) => `/api/sesiones/${id}/formado`, ok: 'Marcado como presentación vista' },
+  asistio:   { url: (id) => `/api/sesiones/${id}/asistencia`, body: { asistio: true }, ok: 'Apuntado: vino', confirmar: '¿Confirmas que vino a la sesión?' },
+  noasistio: { url: (id) => `/api/sesiones/${id}/asistencia`, body: { asistio: false }, ok: 'Apuntado: no vino. Se le ofrecerá otro día.', confirmar: '¿Confirmas que NO vino?' },
+};
+document.addEventListener('click', async (ev) => {
+  const t = ev.target.closest('[data-toggle]');
+  if (t && !ev.target.closest('button,a')) {
+    const id = t.dataset.toggle; const p = document.getElementById('p-' + id);
+    if (abiertas.has(id)) { abiertas.delete(id); p.classList.remove('abierta'); }
+    else { abiertas.add(id); p.classList.add('abierta'); cargarSeguimiento(id); }
+    return;
+  }
+  const b = ev.target.closest('button[data-acc]'); if (!b) return;
+  const id = b.dataset.id, acc = b.dataset.acc;
+  try {
+    b.disabled = true;
+    if (acc === 'mensaje') {
+      const ta = document.getElementById('txt-' + id); const texto = (ta.value || '').trim();
+      if (!texto) return toast('Escribe el mensaje');
+      await api(`/api/sesiones/${id}/mensaje`, { method: 'POST', body: JSON.stringify({ texto }) });
+      ta.value = ''; toast('Mensaje enviado');
+    } else {
+      const a = ACC[acc]; if (a.confirmar && !confirm(a.confirmar)) return;
+      const r = await api(a.url(id), { method: 'POST', body: JSON.stringify(a.body || {}) });
+      toast(a.ok + (r.nota ? ' · ' + r.nota : ''));
+    }
+    await cargar(); cargarSeguimiento(id);
+  } catch (e) { toast(e.message); } finally { b.disabled = false; }
+});
+
+cargar();
+setInterval(cargar, 60 * 1000);
+</script>
+</body>
+</html>

@@ -480,6 +480,25 @@ function activationReset() {
       ok('derivación a Arkaitz: no en el primer mensaje; sí tras dar vueltas sin abrir la presentación; una sola vez');
     }
 
+    // d8b) Seguimiento: "no la he visto" no cuenta; riesgo y pasos
+    {
+      const S = require('../services/sesiones');
+      const f = leadManager.createLead({ nombre: 'Fran', telefono: '34622000018', campana: vivas.id, segmento: 'viejos' });
+      const ini = new Date(Date.now() + 30 * 3600 * 1000).toISOString();
+      leadManager.updateLead(f.id, { estado: 'reunion_registrado', perfil: 'emprendedor', esperandoFeedback: true,
+        sesion: { inviteeUri: 'inv-f', inicio: ini, estado: 'reservada', reservadaAt: new Date(Date.now() - 3600 * 1000).toISOString(), avisos: {} } });
+      await conversationFlow.handleIncoming('34622000018', 'Que no he visto nada');
+      assert.ok(!leadManager.getLeadById(f.id).sesion.formado, '«no he visto nada» no la marca como vista');
+      assert.ok(/presentación/.test(paraTel('34622000018').slice(-1)[0].body), 'se le reenvía la presentación');
+      activityLog.appendActivity(f.id, 'sesion_cambiar_dia', { texto: 'Cambiar de día' });
+      const sg = S.seguimiento(leadManager.getLeadById(f.id), activityLog.getActivityByLead(f.id), Date.now());
+      assert.strictEqual(sg.riesgo, 'alto', 'pidió cambiar de día y no cambió → riesgo alto');
+      assert.ok(sg.motivos.some((m) => /cambiar de día/.test(m)) && sg.motivos.some((m) => /presentación/.test(m)));
+      assert.ok(sg.pasos.find((p) => p.clave === 'presentacion').estado === 'pendiente');
+      assert.ok(sg.conversacion.some((c) => c.de === 'lead' && /no he visto/.test(c.texto)));
+      ok('seguimiento: «no la he visto» no desbloquea; riesgo alto si pidió cambiar de día; pasos y conversación');
+    }
+
     // d9) La presentación es la llave del Zoom
     {
       const t0 = Date.now;

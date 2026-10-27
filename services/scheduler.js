@@ -746,6 +746,15 @@ async function procesarSesiones() {
     }
     if (!enHorario) continue;
 
+    // 3b. RED DE SEGURIDAD (27-10): a 20 min de empezar, quien aún no tiene el
+    //     Zoom lo recibe igual, haya visto o no la presentación. Mejor que
+    //     venga sin verla a que no venga. Arkaitz lo ve en el panel.
+    if (!avisos.zoomEnviado && inicio - ahora <= 20 * 60 * 1000 && inicio - ahora > -10 * 60 * 1000) {
+      const ok = await conversationFlow.enviarZoom(lead, 'red_seguridad');
+      if (ok) activityLog.appendActivity(lead.id, 'sesion_zoom_red_seguridad', { inicio: s.inicio, formado: _formado(lead) });
+      continue;
+    }
+
     // 3. Una hora antes: el Zoom… solo si ha visto la presentación. Si no,
     //    la presentación es la LLAVE: se la mandamos y, en cuanto la termine
     //    (landing) o nos cuente qué le ha parecido (WhatsApp), el Zoom sale

@@ -962,9 +962,67 @@ router.get('/plantillas', (req, res) => {
 /** GET /api/sesiones → { ahora, sesiones:[{ inicio, fin, joinUrl, cuando, pasada, asistentes:[…] }], resumen } (campañas vivas, −14 d … +45 d). */
 router.get('/sesiones', (req, res) => {
   try {
-    res.json(require('../services/sesiones').listar(leadManager.getAllLeads({ campana: 'activas' }), Date.now()));
+    const S = require('../services/sesiones');
+    const leads = leadManager.getAllLeads({ campana: 'activas' });
+    const out = S.listar(leads, Date.now());
+    // Riesgo de no venir por asistente (27-10): el panel lo pinta en rojo/ámbar
+    const porId = new Map(leads.map((l) => [l.id, l]));
+    for (const ses of out.sesiones) {
+      for (const a of ses.asistentes) {
+        const lead = porId.get(a.leadId);
+        const sg = S.seguimiento(lead, activityLog.getActivityByLead(a.leadId), Date.now());
+        a.riesgo = sg.riesgo;
+        a.motivosRiesgo = sg.motivos;
+        a.pidioCambio = sg.pidioCambio;
+        a.ventanaAbierta = require('../services/messaging').dentroDeVentana(lead.telefono);
+      }
+    }
+    out.resumen.enRiesgo = out.sesiones.filter((x) => !x.pasada).reduce((n, x) => n + x.asistentes.filter((a) => a.riesgo === 'alto').length, 0);
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+/** GET /api/sesiones/:leadId/seguimiento → pasos, conversación con estado de entrega y riesgo. */
+router.get('/sesiones/:leadId/seguimiento', (req, res) => {
+  try {
+    const lead = _leadConSesion(req, res);
+    if (!lead) return;
+    const sg = require('../services/sesiones').seguimiento(lead, activityLog.getActivityByLead(lead.id), Date.now());
+    res.json({
+      ok: true,
+      lead: { id: lead.id, nombre: lead.nombre, telefono: lead.telefono, perfil: lead.perfil, estado: lead.estado, sesion: lead.sesion, dudas: (lead.feedbackSesion || []).map((f) => f.texto) },
+      ventanaAbierta: require('../services/messaging').dentroDeVentana(lead.telefono),
+      cuando: require('../services/calendlySync').describirCuando(lead.sesion.inicio),
+      ...sg,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/sesiones/:leadId/mensaje  Body: { texto }
+ * Mensaje libre desde el panel. Solo con la ventana de 24 h abierta (si no,
+ * Meta no lo entrega): fuera de ella, usar «Avisar hoy» o «Reenviar Zoom».
+ */
+router.post('/sesiones/:leadId/mensaje', async (req, res) => {
+  try {
+    const lead = _leadConSesion(req, res);
+    if (!lead) return;
+    const texto = String((req.body && req.body.texto) || '').trim();
+    if (!texto) return res.status(400).json({ ok: false, error: 'Escribe el mensaje' });
+    const messaging = require('../services/messaging');
+    if (!messaging.dentroDeVentana(lead.telefono)) {
+      return res.status(400).json({ ok: false, error: 'No ha escrito en las últimas 24 h: WhatsApp no deja mandar texto libre. Usa «Avisar hoy» o «Reenviar Zoom» (van con plantilla), o escríbele desde tu móvil.' });
+    }
+    const envio = await messaging.sendTextMessage(lead.telefono, texto, { delaySeconds: 0, meta: { manual: true } });
+    if (!envio || envio.success === false) return res.status(400).json({ ok: false, error: (envio && envio.error) || 'No se pudo enviar' });
+    activityLog.appendActivity(lead.id, 'sesion_mensaje_crm', { texto: texto.slice(0, 300) });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

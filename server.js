@@ -59,7 +59,7 @@ function requireAdmin(req, res, next) {
 
 app.use((req, res, next) => {
   const p = req.path;
-  const esPanel = p === '/monitor.html' || p === '/test.html' || p === '/revision-videos.html' || p === '/qr' || p === '/crm' || p.startsWith('/admin');
+  const esPanel = p === '/monitor.html' || p === '/test.html' || p === '/revision-videos.html' || p === '/sesiones.html' || p === '/sesiones' || p === '/qr' || p === '/crm' || p.startsWith('/admin');
   const esApiPrivada = p.startsWith('/api/') && p !== '/api/config';
   if (esPanel || esApiPrivada) return requireAdmin(req, res, next);
   next();
@@ -74,6 +74,8 @@ app.get(['/admin', '/admin/', '/admin/index.html', '/crm'], (req, res) => {
 });
 
 // ─── Archivos estáticos ───────────────────────────────────────────
+// Página de seguimiento de las sesiones de dudas (para Arkaitz): three.dusolai.com/sesiones
+app.get('/sesiones', (req, res) => res.redirect('/sesiones.html'));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Rutas ────────────────────────────────────────────────────────

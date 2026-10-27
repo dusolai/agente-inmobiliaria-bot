@@ -130,6 +130,7 @@ const PIDE_ENLACE_REGEX = /\b(pasame|mandame|enviame|dame|pasa|manda|envia)( me)
 const SESION_CONFIRMA_REGEX = /^(alli estare|ahi estare|alli estaremos|confirmo|confirmado|cuenta conmigo|cuenta(d)? conmigo|si,? (alli|ahi) estare|si,? confirmo|si,? voy|voy|ok,? (alli|ahi) estare)\b/;
 const SESION_CAMBIAR_REGEX = /(cambiar (de )?dia|cambiar (la )?(fecha|hora|cita)|otro dia|no (voy a )?poder|no puedo (ir|asistir|conectarme)?|me ha surgido|reprogramar)/;
 const SESION_YA_VISTA_REGEX = /^(ya la he visto|ya la vi|ya lo he visto|ya lo vi|la he visto)\b/;
+const NO_LA_HE_VISTO_REGEX = /\b(no (la |lo )?(he|e|hemos) (visto|podido|tenido)|no (la |lo )?vi\b|todavia no|aun no|no he visto nada|no la he mirado|no me ha dado tiempo|no he tenido tiempo)/;
 const SESION_PIDE_PRESENTACION_REGEX = /(pasame|mandame|enviame|dame) (la )?presentacion/;
 const SALUDO_REGEX = /^(e+i+|e+y+|hey+|hola+|holi+s?|buenas+|buenos dias|buenas (tardes|noches)|hi|hello|que tal|saludos)( (que tal|buenas|hola))?[\s!.?¡¿👋😊🙂]*$/u;
 function esSaludo(texto) {
@@ -546,6 +547,15 @@ async function handleIncoming(telefono, texto, extra = {}) {
       const feedback = [...(lead.feedbackSesion || []), { texto: String(texto).slice(0, 1000), ts: new Date().toISOString() }];
       leadManager.updateLead(lead.id, { esperandoFeedback: false, feedbackSesion: feedback });
       activityLog.appendActivity(lead.id, 'feedback_sesion', { texto: String(texto).slice(0, 300) });
+      // "Que no he visto nada" NO es haberla visto (Francisco, 25-10): se le
+      // reenvía la presentación y no se marca como formado.
+      if (NO_LA_HE_VISTO_REGEX.test(normalizar(texto))) {
+        activityLog.appendActivity(lead.id, 'sesion_no_vista', { texto: String(texto).slice(0, 200) });
+        await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionPreparacion({
+          nombre: lead.nombre, enlaceLanding: enlaceLandingPorPerfil(lead.perfil, lead.id),
+        }));
+        return;
+      }
       await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionFeedbackApuntado({ nombre: lead.nombre }));
       // Su opinión vale como "presentación vista": desbloquea el Zoom
       await presentacionCompletada(leadManager.getLeadById(lead.id), 'whatsapp');
