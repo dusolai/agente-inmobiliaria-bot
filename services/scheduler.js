@@ -709,7 +709,8 @@ function _horaMadrid() {
 async function procesarSesiones() {
   const calendlySync = require('./calendlySync');
   const S = leadManager.LEAD_STATES;
-  const leads = _leadsActivos().filter((l) => l.sesion && l.sesion.estado === 'reservada');
+  // Reservadas, y las ya celebradas a las que aún no se les ha leído la asistencia
+  const leads = _leadsActivos().filter((l) => l.sesion && (l.sesion.estado === 'reservada' || (l.sesion.estado === 'celebrada' && l.sesion.asistio == null)));
   if (!leads.length) return;
   const h = _horaMadrid();
   const enHorario = h >= 8 && h < 22;
@@ -724,10 +725,37 @@ async function procesarSesiones() {
     const ventana = messaging.dentroDeVentana(lead.telefono);
     const nombre = lead.nombre;
 
+    // 4a. ASISTENCIA AUTOMÁTICA (28-10): de 40 min a 12 h después de empezar,
+    //     se pregunta a Zoom quién entró y se marca vino / no vino sin que
+    //     nadie tenga que hacerlo. Se reintenta cada ciclo hasta que Zoom
+    //     tenga el informe (tarda unos minutos tras cerrar la sala).
+    if (s.asistio == null && ahora > inicio + 40 * 60 * 1000 && ahora < inicio + 12 * H) {
+      const zoom = require('./zoom');
+      const r = await zoom.asistenciaDe(s.joinUrl, { email: s.email || lead.email, nombres: [s.nombreInvitado, lead.nombre] });
+      const fresco = leadManager.getLeadById(lead.id);
+      if (r.ok) {
+        leadManager.updateLead(lead.id, { sesion: { ...fresco.sesion, asistio: r.asistio, asistenciaVia: 'zoom', asistenciaMinutos: r.minutos, [r.asistio ? 'asistioAt' : 'noAsistioMarcadoAt']: new Date(Date.now()).toISOString() } });
+        activityLog.appendActivity(lead.id, r.asistio ? 'sesion_asistio' : 'sesion_no_asistio_marcado', { via: 'zoom', minutos: r.minutos, participante: r.participante, enSala: r.total });
+        if (r.asistio) await conversationFlow.procesarAsistenciaReunion(leadManager.getLeadById(lead.id), { minutos: r.minutos, via: 'zoom' });
+        console.log(`🎥 [Scheduler] Asistencia por Zoom: ${lead.nombre} ${r.asistio ? `VINO (${r.minutos} min)` : 'NO VINO'}`);
+        continue;
+      } else if (!fresco.sesion.zoomError) {
+        leadManager.updateLead(lead.id, { sesion: { ...fresco.sesion, zoomError: r.error } });
+        console.warn(`🎥 [Scheduler] No se pudo leer la asistencia de ${lead.nombre} en Zoom: ${r.error}`);
+      }
+    }
+    // Pasadas 12 h sin poder leer Zoom: no consta que entrara → no vino.
+    if (s.asistio == null && ahora > inicio + 12 * H) {
+      const fresco = leadManager.getLeadById(lead.id);
+      leadManager.updateLead(lead.id, { sesion: { ...fresco.sesion, asistio: false, asistenciaVia: 'sin_datos', noAsistioMarcadoAt: new Date(Date.now()).toISOString() } });
+      activityLog.appendActivity(lead.id, 'sesion_no_asistio_marcado', { via: 'sin_datos_zoom' });
+    }
+
     // 4. Ya pasó: si no consta asistencia, se le ofrece otro día y se cierra.
     if (ahora > inicio + 90 * 60 * 1000) {
-      if (lead.estado === S.REUNION_ASISTIO) {
-        leadManager.updateLead(lead.id, { sesion: { ...s, estado: 'celebrada' } });
+      const sAct = leadManager.getLeadById(lead.id).sesion || s;
+      if (lead.estado === S.REUNION_ASISTIO || sAct.asistio === true) {
+        leadManager.updateLead(lead.id, { sesion: { ...sAct, estado: 'celebrada' } });
         continue;
       }
       if (!avisos.noAsistio && enHorario && ventana) {

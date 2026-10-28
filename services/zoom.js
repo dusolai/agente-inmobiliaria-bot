@@ -94,4 +94,46 @@ async function checkAttendance(meetingId, email) {
   return { attended: !!found, participant: found || null };
 }
 
-module.exports = { getMeetingParticipants, checkAttendance, isConfigured };
+// ─── Asistencia automática a la sesión de dudas (28-10) ─────────────
+// El id de la reunión sale del enlace de Calendly (us06web.zoom.us/j/<id>).
+function meetingIdDe(joinUrl) {
+  const m = String(joinUrl || '').match(/zoom\.us\/j\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+const _norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, ' ').trim();
+
+/**
+ * ¿Entró este lead a la sala? Por email (si Zoom lo da) o por nombre: el
+ * nombre que pone en Zoom contiene su nombre de pila y, si lo hay, algún
+ * apellido. Devuelve { ok, asistio, minutos, participante } u { ok:false, error }.
+ */
+async function asistenciaDe(joinUrl, { email, nombres = [] }) {
+  const id = meetingIdDe(joinUrl);
+  if (!id) return { ok: false, error: 'sin id de reunión en el enlace' };
+  if (!isConfigured()) return { ok: false, error: 'Zoom sin credenciales' };
+  const token = await getAccessToken();
+  if (!token) return { ok: false, error: 'Zoom no da token' };
+  let lista;
+  try {
+    const res = await axios.get(`https://api.zoom.us/v2/past_meetings/${id}/participants`, {
+      headers: { Authorization: `Bearer ${token}` }, params: { page_size: 300 }, timeout: 15000,
+    });
+    lista = res.data.participants || [];
+  } catch (err) {
+    const d = err.response && err.response.data;
+    // 3001 = la reunión no existe / aún no ha terminado / no es de esta cuenta
+    return { ok: false, error: (d && (d.message || d.code)) || err.message, codigo: d && d.code };
+  }
+  const em = String(email || '').toLowerCase();
+  const tokens = nombres.map(_norm).filter(Boolean).map((n) => n.split(/\s+/));
+  const p = lista.find((x) => {
+    if (em && String(x.user_email || '').toLowerCase() === em) return true;
+    const zn = _norm(x.name).split(/\s+/);
+    return tokens.some((t) => t.length && zn.includes(t[0]) && (t.length === 1 || zn.length === 1 || t.slice(1).some((ap) => zn.includes(ap))));
+  });
+  const minutos = p ? Math.round(lista.filter((x) => x.name === p.name).reduce((m, x) => m + (x.duration || 0), 0) / 60) : 0;
+  return { ok: true, asistio: Boolean(p), minutos, participante: p ? p.name : null, total: lista.length };
+}
+
+module.exports = { getMeetingParticipants, checkAttendance, isConfigured, asistenciaDe, meetingIdDe };

@@ -881,6 +881,17 @@ router.post('/whatsapp/repesca', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+/** GET /api/whatsapp/zoom-asistencia?leadId= → prueba la lectura de asistencia en Zoom (dev). */
+router.get('/whatsapp/zoom-asistencia', async (req, res) => {
+  try {
+    const lead = leadManager.getLeadById(req.query.leadId);
+    if (!lead || !lead.sesion) return res.status(404).json({ error: 'lead sin sesión' });
+    const zoom = require('../services/zoom');
+    res.json({ configurado: zoom.isConfigured(), meetingId: zoom.meetingIdDe(lead.sesion.joinUrl),
+      resultado: await zoom.asistenciaDe(lead.sesion.joinUrl, { email: lead.sesion.email || lead.email, nombres: [lead.sesion.nombreInvitado, lead.nombre] }) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 /** GET /api/whatsapp/diagnostico → todo lo que Meta dice del número, la cuenta y el webhook. */
 router.get('/whatsapp/diagnostico', async (req, res) => {
   try { res.json(await require('../services/whatsappSalud').diagnostico()); }

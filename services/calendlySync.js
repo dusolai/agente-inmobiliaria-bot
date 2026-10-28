@@ -132,7 +132,7 @@ function _marcarReservado(lead) {
  * estaba registrada (mismo invitado) solo actualiza hora/enlace.
  * Devuelve true si es una reserva NUEVA.
  */
-async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, joinUrl, rescheduleUrl, via = 'api' }) {
+async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, joinUrl, rescheduleUrl, email = null, nombreInvitado = null, via = 'api' }) {
   const prev = lead.sesion || null;
   // Misma reserva, o el mismo lead reservó DOS veces el mismo hueco (María,
   // 27-10): no es una reserva nueva. Sin esto, con dos invitados activos la
@@ -153,6 +153,7 @@ async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, join
   }
   const sesion = {
     inviteeUri, eventoUri, inicio, fin, joinUrl: joinUrl || null, rescheduleUrl: rescheduleUrl || null,
+    email: email || null, nombreInvitado: nombreInvitado || null,
     estado: 'reservada', reservadaAt: new Date(Date.now()).toISOString(), confirmada: false,
     avisos: { preparacion: 0, ultimaPreparacion: null, hoy: null, unaHora: null, noAsistio: null },
   };
@@ -223,6 +224,7 @@ async function sincronizar() {
         inviteeUri: inv.uri, eventoUri: ev.uri, inicio: ev.start_time, fin: ev.end_time,
         joinUrl: ev.location && (ev.location.join_url || ev.location.location) || null,
         rescheduleUrl: inv.reschedule_url || null,
+        email: inv.email || null, nombreInvitado: inv.name || null,
       });
       if (ok) nuevas++;
     }
