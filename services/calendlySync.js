@@ -139,6 +139,12 @@ async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, join
   // sync alternaba entre ambos cada ciclo y reiniciaba avisos y saludos.
   const mismoHueco = prev && prev.estado === 'reservada' && prev.inicio && inicio &&
     new Date(prev.inicio).getTime() === new Date(inicio).getTime();
+  // Una reserva ya registrada que pasó a "celebrada" (o marcada asistió/no
+  // asistió) NO vuelve a ser nueva: antes, tras la sesión de Ricardo (28-10),
+  // la sync la re-registraba cada 5 min. Y una sesión que ya empezó nunca se
+  // registra como reserva nueva.
+  if (prev && prev.inviteeUri === inviteeUri && prev.estado !== 'cancelada') return false;
+  if (inicio && new Date(inicio).getTime() < Date.now()) return false;
   if (prev && prev.estado === 'reservada' && (prev.inviteeUri === inviteeUri || mismoHueco)) {
     if (prev.inicio !== inicio || prev.joinUrl !== joinUrl) {
       leadManager.updateLead(lead.id, { sesion: { ...prev, inicio, fin, joinUrl, rescheduleUrl } });

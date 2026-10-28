@@ -503,6 +503,13 @@ function activationReset() {
       const tras = leadManager.getLeadById(f.id).sesion;
       assert.strictEqual(tras.inviteeUri, 'inv-f', 'el segundo invitado del mismo hueco no sustituye al primero');
       ok('doble reserva del mismo hueco: se ignora (sin alternar ni reiniciar avisos)');
+      // Sesión ya celebrada: la sync no la vuelve a registrar (Ricardo, 28-10)
+      const g = leadManager.createLead({ nombre: 'Gus', telefono: '34622000019', campana: vivas.id, segmento: 'viejos' });
+      const pasado = new Date(Date.now() - 8 * 3600 * 1000).toISOString();
+      leadManager.updateLead(g.id, { estado: 'reunion_registrado', sesion: { inviteeUri: 'inv-g', inicio: pasado, estado: 'celebrada', avisos: {} } });
+      const nueva = await cs2.registrarReserva(leadManager.getLeadById(g.id), { inviteeUri: 'inv-g', eventoUri: 'ev', inicio: pasado });
+      assert.strictEqual(nueva, false); assert.strictEqual(leadManager.getLeadById(g.id).sesion.estado, 'celebrada', 'sigue celebrada');
+      ok('una sesión ya celebrada no se vuelve a registrar como reserva nueva');
     }
 
     // d9) La presentación es la llave del Zoom
