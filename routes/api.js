@@ -1073,6 +1073,78 @@ router.post('/sesiones/:leadId/siguiente', async (req, res) => {
   }
 });
 
+// ─── Seguimiento manual del equipo (reunión 30-10) ─────────────────
+// Arkaitz / Marta llaman a quien reserva y a quien no se presenta, y deciden
+// ellos quién se descarta. Nada de esto lo hace el sistema solo.
+function _seguimientoDe(lead) {
+  return { llamadas: [], descartado: null, ...(lead.seguimientoSesion || {}) };
+}
+
+/** POST /api/sesiones/:leadId/llamada  Body: { resultado: 'confirmada'|'no_contesta'|'reagenda'|'otra', nota? } */
+router.post('/sesiones/:leadId/llamada', (req, res) => {
+  const lead = _leadConSesion(req, res);
+  if (!lead) return;
+  const resultado = String((req.body && req.body.resultado) || '').trim();
+  if (!['confirmada', 'no_contesta', 'reagenda', 'otra'].includes(resultado)) return res.status(400).json({ ok: false, error: 'Resultado de la llamada no válido' });
+  const nota = String((req.body && req.body.nota) || '').slice(0, 500);
+  const sg = _seguimientoDe(lead);
+  sg.llamadas = [...sg.llamadas, { ts: new Date().toISOString(), resultado, nota }];
+  const cambios = { seguimientoSesion: sg };
+  // Confirmó por teléfono: cuenta como confirmada (no se le pregunta otra vez)
+  if (resultado === 'confirmada' && lead.sesion.estado === 'reservada') cambios.sesion = { ...lead.sesion, confirmada: true, confirmadaAt: new Date().toISOString(), confirmadaVia: 'llamada' };
+  leadManager.updateLead(lead.id, cambios);
+  activityLog.appendActivity(lead.id, 'sesion_llamada', { resultado, nota: nota.slice(0, 200) });
+  res.json({ ok: true, lead: leadManager.getLeadById(lead.id) });
+});
+
+/** POST /api/sesiones/:leadId/descartar  Body: { motivo } — solo a mano, tras hablar con él */
+router.post('/sesiones/:leadId/descartar', (req, res) => {
+  const lead = _leadConSesion(req, res);
+  if (!lead) return;
+  const motivo = String((req.body && req.body.motivo) || 'sin interés').slice(0, 300);
+  const sg = _seguimientoDe(lead);
+  sg.descartado = { ts: new Date().toISOString(), motivo };
+  leadManager.updateLead(lead.id, { seguimientoSesion: sg });
+  activityLog.appendActivity(lead.id, 'sesion_descartado_manual', { motivo });
+  res.json({ ok: true, lead: leadManager.getLeadById(lead.id) });
+});
+
+/** POST /api/sesiones/:leadId/otro-dia — a quien no vino: los huecos libres de la semana para reservar */
+router.post('/sesiones/:leadId/otro-dia', async (req, res) => {
+  try {
+    const lead = _leadConSesion(req, res);
+    if (!lead) return;
+    const messaging = require('../services/messaging');
+    const messages = require('../templates/messages');
+    const config = require('../config/config');
+    const cf = require('../services/conversationFlow');
+    let envio = null;
+    if (messaging.dentroDeVentana(lead.telefono)) {
+      envio = await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionNoAsistio({ nombre: lead.nombre, enlace: cf.enlaceRedirectorCalendly(lead, 'grupal') }), { delaySeconds: 0 });
+    } else if (config.whatsapp.templateSesionHuecos) {
+      const huecos = await require('../services/calendlySync').huecosTexto();
+      if (!huecos) return res.status(400).json({ ok: false, error: 'No hay huecos libres en Calendly esta semana' });
+      envio = await messaging.sendTemplate(lead.telefono, [lead.nombre, huecos], { name: config.whatsapp.templateSesionHuecos, lang: config.whatsapp.templateLang, varNames: ['nombre', 'huecos'] });
+    }
+    if (!envio || envio.success === false) return res.status(400).json({ ok: false, error: (envio && envio.error) || 'No se pudo enviar' });
+    activityLog.appendActivity(lead.id, 'sesion_otro_dia_crm', {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/** POST /api/sesiones/:leadId/recuperar — deshace el descarte manual */
+router.post('/sesiones/:leadId/recuperar', (req, res) => {
+  const lead = _leadConSesion(req, res);
+  if (!lead) return;
+  const sg = _seguimientoDe(lead);
+  sg.descartado = null;
+  leadManager.updateLead(lead.id, { seguimientoSesion: sg });
+  activityLog.appendActivity(lead.id, 'sesion_recuperado_manual', {});
+  res.json({ ok: true, lead: leadManager.getLeadById(lead.id) });
+});
+
 /**
  * POST /api/sesiones/:leadId/mensaje  Body: { texto }
  * Mensaje libre desde el panel. Solo con la ventana de 24 h abierta (si no,

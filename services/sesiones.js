@@ -14,7 +14,8 @@ const calendlySync = require('./calendlySync');
 const DIA = 24 * 3600 * 1000;
 // Ventana del panel: sesiones de los últimos 14 días (para marcar asistencia)
 // y de los próximos 45 (lo que hay reservado).
-const DIAS_ATRAS = 14;
+// 45 días atrás: los «no presentados» se siguen llamando semanas después (reunión 30-10)
+const DIAS_ATRAS = 45;
 const DIAS_ADELANTE = 45;
 
 /** true / false si consta; null si nadie lo ha marcado todavía. */
@@ -44,7 +45,27 @@ function _asistente(lead) {
     // Lo que escribió para Arkaitz ("¿qué te ha parecido?"): se lee antes de la sesión
     dudas: (lead.feedbackSesion || []).map((f) => f && f.texto).filter(Boolean),
     avisos: { preparacion: av.preparacion || 0, hoy: av.hoy || null, unaHora: av.unaHora || null, noAsistio: av.noAsistio || null },
+    // Seguimiento manual del equipo (reunión 30-10): llamadas y descarte a mano
+    llamadas: (lead.seguimientoSesion && lead.seguimientoSesion.llamadas) || [],
+    descartadoManual: (lead.seguimientoSesion && lead.seguimientoSesion.descartado) || null,
+    oportunidad: (lead.historialSesiones || []).length + 1,
+    noPresentadoVeces: (lead.historialSesiones || []).filter((h) => h.asistio !== true && h.estado !== 'cancelada').length,
   };
+}
+
+/**
+ * Pestaña del panel (reunión 30-10, a petición de Arkaitz):
+ *   agendados     → cita por venir
+ *   nopresentados → la cita pasó (o la canceló) y no vino: hay que llamarle
+ *   descartados   → el equipo habló con él y lo descartó A MANO
+ *   vinieron      → asistió
+ * Nada pasa a «descartados» solo: lo decide una persona.
+ */
+function pestanaDe(a, pasada) {
+  if (a.descartadoManual) return 'descartados';
+  if (a.asistio === true) return 'vinieron';
+  if (!pasada && a.estadoSesion === 'reservada') return 'agendados';
+  return 'nopresentados';
 }
 
 /**
@@ -78,7 +99,9 @@ function listar(leads, ahora = Date.now()) {
     // El enlace del Zoom es el mismo para todos; vale el primero que lo tenga
     if (!ses.joinUrl && s.joinUrl) ses.joinUrl = s.joinUrl;
     if (!ses.fin && s.fin) ses.fin = s.fin;
-    ses.asistentes.push(_asistente(lead));
+    const asis = _asistente(lead);
+    asis.pestana = pestanaDe(asis, ses.pasada);
+    ses.asistentes.push(asis);
   }
 
   const sesiones = [...porInicio.values()].sort((a, b) => a.inicio.localeCompare(b.inicio));
@@ -100,6 +123,14 @@ function listar(leads, ahora = Date.now()) {
     resumen.formados += reservados.filter((a) => a.formado).length;
   }
 
+  const todos = sesiones.flatMap((s) => s.asistentes);
+  resumen.pestanas = {
+    agendados: todos.filter((a) => a.pestana === 'agendados').length,
+    nopresentados: todos.filter((a) => a.pestana === 'nopresentados').length,
+    descartados: todos.filter((a) => a.pestana === 'descartados').length,
+    vinieron: todos.filter((a) => a.pestana === 'vinieron').length,
+    porLlamar: todos.filter((a) => a.pestana === 'agendados' && !a.llamadas.length).length,
+  };
   return { ahora: new Date(ahora).toISOString(), sesiones, resumen };
 }
 
@@ -189,4 +220,4 @@ function seguimiento(lead, eventos, ahora = Date.now()) {
   return { pasos, conversacion, riesgo, motivos, pidioCambio: Boolean(cambio) };
 }
 
-module.exports = { listar, seguimiento, DIAS_ATRAS, DIAS_ADELANTE };
+module.exports = { listar, seguimiento, pestanaDe, DIAS_ATRAS, DIAS_ADELANTE };

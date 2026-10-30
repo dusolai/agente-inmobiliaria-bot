@@ -758,10 +758,17 @@ async function procesarSesiones() {
         leadManager.updateLead(lead.id, { sesion: { ...sAct, estado: 'celebrada' } });
         continue;
       }
-      if (!avisos.noAsistio && enHorario && ventana) {
-        await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionNoAsistio({
-          nombre, enlace: conversationFlow.enlaceRedirectorCalendly(lead, 'grupal'),
-        }));
+      // 1ª y 2ª falta: se le ofrece otro día (texto o, sin ventana, la
+      // repesca con los huecos reales). Va al panel como «no presentado».
+      if (!avisos.noAsistio && enHorario && (ventana || config.whatsapp.templateSesionHuecos)) {
+        if (ventana) {
+          await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionNoAsistio({
+            nombre, enlace: conversationFlow.enlaceRedirectorCalendly(lead, 'grupal'),
+          }));
+        } else {
+          const huecos = await require('./calendlySync').huecosTexto();
+          if (huecos) await messaging.sendTemplate(lead.telefono, [nombre, huecos], { name: config.whatsapp.templateSesionHuecos, lang: config.whatsapp.templateLang, varNames: ['nombre', 'huecos'] });
+        }
         guardar({ noAsistio: new Date(Date.now()).toISOString() });
         activityLog.appendActivity(lead.id, 'sesion_no_asistio', { inicio: s.inicio });
         continue;
@@ -805,8 +812,9 @@ async function procesarSesiones() {
       continue;
     }
 
-    // 2. Aviso del mismo día (≤ 14 h antes y ≥ 2 h antes): confirmar asistencia.
-    if (!avisos.hoy && !s.confirmada && inicio - ahora <= 14 * H && inicio - ahora >= 2 * H) {
+    // 2. Aviso para confirmar: la VÍSPERA (≤ 28 h antes, reunión 30-10) o, si
+    //    reservó para hoy, en cuanto se pueda (≥ 2 h antes).
+    if (!avisos.hoy && !s.confirmada && inicio - ahora <= 28 * H && inicio - ahora >= 2 * H) {
       const cuando = calendlySync.describirCuando(s.inicio, { relativo: true });
       const plantilla = config.whatsapp.templateSesionHoy;
       let envio = null;

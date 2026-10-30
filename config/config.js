@@ -67,6 +67,7 @@ module.exports = {
     templateSesionZoom: process.env.WHATSAPP_TEMPLATE_SESION_ZOOM || '',
     // Aviso a Arkaitz por cada reserva nueva
     templateAvisoReserva: process.env.WHATSAPP_TEMPLATE_AVISO_RESERVA || '',
+    templateAvisoCancelacion: process.env.WHATSAPP_TEMPLATE_AVISO_CANCELACION || '',
   },
 
   // API de Calendly (token personal: Calendly → Integraciones → API y

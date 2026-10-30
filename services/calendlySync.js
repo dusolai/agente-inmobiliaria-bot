@@ -151,6 +151,13 @@ async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, join
     }
     return false;
   }
+  // La sesión anterior (si la hubo) pasa al historial: así se cuentan las
+  // oportunidades (política de 3 oportunidades, reunión 30-10)
+  const historial = [...(lead.historialSesiones || [])];
+  if (prev && prev.inviteeUri && prev.inviteeUri !== inviteeUri && !historial.some((h) => h.inviteeUri === prev.inviteeUri)) {
+    historial.push({ inviteeUri: prev.inviteeUri, inicio: prev.inicio, estado: prev.estado, asistio: prev.asistio == null ? null : prev.asistio });
+    leadManager.updateLead(lead.id, { historialSesiones: historial, seguimientoSesion: null });
+  }
   const sesion = {
     inviteeUri, eventoUri, inicio, fin, joinUrl: joinUrl || null, rescheduleUrl: rescheduleUrl || null,
     email: email || null, nombreInvitado: nombreInvitado || null,
@@ -162,6 +169,12 @@ async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, join
   activityLog.appendActivity(lead.id, 'sesion_reservada', { inicio, via, reprogramada: Boolean(prev && prev.inviteeUri !== inviteeUri) });
   console.log(`📅 [Calendly] ${lead.nombre} reservó la sesión: ${describirCuando(inicio)}`);
   await avisarArkaitz(lead, inicio).catch((e) => console.error('❌ [Calendly] Aviso a Arkaitz:', e.message));
+  // Tercera oportunidad: ya faltó dos veces → mensaje cordial pero claro
+  const faltas = historial.filter((h) => h.asistio !== true && h.estado !== 'cancelada').length;
+  if (faltas >= 2 && messaging.dentroDeVentana(lead.telefono)) {
+    await messaging.sendTextMessage(lead.telefono, messages.mensajeTerceraOportunidad({ nombre: lead.nombre, cuando: describirCuando(inicio) }));
+    activityLog.appendActivity(lead.id, 'sesion_tercera_oportunidad', { inicio, faltas });
+  }
   // Confirmación por WhatsApp solo con la ventana abierta (Calendly ya manda
   // su email de confirmación; fuera de ventana no se gasta plantilla).
   if (messaging.dentroDeVentana(lead.telefono)) {
@@ -177,20 +190,24 @@ async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, join
  * (config.agent.directorWhatsapp). Texto si él ha escrito al número del
  * sistema en 24 h; si no, la plantilla de utilidad aviso_reserva_three.
  */
-async function avisarArkaitz(lead, inicio) {
+async function avisarArkaitz(lead, inicio, { cancelada = false } = {}) {
   const tel = String(config.agent.directorWhatsapp || '').replace(/[^\d]/g, '');
   if (!tel) return false;
   const cuando = describirCuando(inicio);
   const telLead = `+${String(lead.telefono || '').replace(/[^\d]/g, '')}`;
   const nombre = lead.nombre || 'Alguien';
   let envio = null;
+  const plantilla = cancelada ? config.whatsapp.templateAvisoCancelacion : config.whatsapp.templateAvisoReserva;
   if (messaging.dentroDeVentana(tel)) {
-    envio = await messaging.sendTextMessage(tel, `📅 Nueva reserva en la sesión de dudas: ${nombre} se ha apuntado ${cuando}. Su teléfono es ${telLead}.\n\nSeguimiento: https://three.dusolai.com/sesiones`, { delaySeconds: 0 });
-  } else if (config.whatsapp.templateAvisoReserva) {
-    envio = await messaging.sendTemplate(tel, [nombre, cuando, telLead], { name: config.whatsapp.templateAvisoReserva, lang: config.whatsapp.templateLang, varNames: ['nombre', 'cuando', 'telefono'] });
+    const texto = cancelada
+      ? `❌ ${nombre} ha CANCELADO su sesión de ${cuando}. Su teléfono es ${telLead}: llámale para recuperarle.\n\nSeguimiento: https://three.dusolai.com/sesiones`
+      : `📅 Nueva reserva en la sesión de dudas: ${nombre} se ha apuntado ${cuando}. Su teléfono es ${telLead}.\n\nSeguimiento: https://three.dusolai.com/sesiones`;
+    envio = await messaging.sendTextMessage(tel, texto, { delaySeconds: 0 });
+  } else if (plantilla) {
+    envio = await messaging.sendTemplate(tel, [nombre, cuando, telLead], { name: plantilla, lang: config.whatsapp.templateLang, varNames: ['nombre', 'cuando', 'telefono'] });
   }
   const ok = Boolean(envio) && envio.success !== false;
-  activityLog.appendActivity(lead.id, 'aviso_arkaitz_reserva', { ok, cuando });
+  activityLog.appendActivity(lead.id, cancelada ? 'aviso_arkaitz_cancelacion' : 'aviso_arkaitz_reserva', { ok, cuando });
   return ok;
 }
 
@@ -204,6 +221,7 @@ async function registrarCancelacion(lead, inviteeUri) {
     activityLog.appendActivity(lead.id, 'state_changed', { from: S.REUNION_REGISTRADO, to: S.VIDEO_VISTO, motivo: 'cancelo_calendly' });
   }
   activityLog.appendActivity(lead.id, 'sesion_cancelada', { inicio: s.inicio });
+  await avisarArkaitz(leadManager.getLeadById(lead.id), s.inicio, { cancelada: true }).catch((e) => console.error('❌ [Calendly] Aviso de cancelación:', e.message));
   console.log(`📅 [Calendly] ${lead.nombre} canceló la sesión del ${describirCuando(s.inicio)}`);
   if (messaging.dentroDeVentana(lead.telefono)) {
     await messaging.sendTextMessage(lead.telefono, messages.mensajeSesionCancelada({ nombre: lead.nombre, enlace: _enlaceReservar(lead) }));

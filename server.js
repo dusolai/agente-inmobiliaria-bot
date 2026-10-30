@@ -96,11 +96,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ─── Ruta principal → CRM ─────────────────────────────────────────
-// La raíz lleva al panel (lo que se usa a diario). El QR de WhatsApp
-// vive en /qr y también dentro del CRM, pestaña "WhatsApp".
+// ─── Ruta principal → panel de sesiones ───────────────────────────
+// Reunión 30-10: Arkaitz, Marta y el equipo entran a lo sencillo (quién
+// viene, a quién llamar). El CRM completo sigue en /monitor.html (/crm).
 app.get('/', (req, res) => {
-  res.redirect('/monitor.html');
+  res.redirect('/sesiones.html');
 });
 
 // ─── /qr (Generación Visual de QR de WhatsApp) ────────────────────

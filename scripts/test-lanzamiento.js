@@ -655,11 +655,11 @@ function activationReset() {
       { id: 's7', nombre: 'Carla', estado: 'video_visto', sesion: { inicio: h(48), estado: 'cancelada', avisos: {} } },
       { id: 's3', nombre: 'Luis', estado: 'reunion_asistio', sesion: { inicio: h(-30), estado: 'celebrada', avisos: {} } },
       { id: 's4', nombre: 'Marta', estado: 'reunion_registrado', sesion: { inicio: h(-30), estado: 'celebrada', asistio: false, noAsistioMarcadoAt: h(-28), avisos: {} } },
-      { id: 's5', nombre: 'Viejo', estado: 'reunion_registrado', sesion: { inicio: h(-20 * 24), estado: 'celebrada', avisos: {} } },
+      { id: 's5', nombre: 'Viejo', estado: 'reunion_registrado', sesion: { inicio: h(-50 * 24), estado: 'celebrada', avisos: {} } },
       { id: 's6', nombre: 'Sin sesión', estado: 'video_enviado' },
     ];
     const r = sesiones.listar(L, ahora);
-    assert.strictEqual(r.sesiones.length, 2, 'misma hora = misma sesión; fuera de −14/+45 días no entra');
+    assert.strictEqual(r.sesiones.length, 2, 'misma hora = misma sesión; fuera de −45/+45 días no entra');
     assert.ok(r.sesiones[0].pasada && !r.sesiones[1].pasada, 'ascendente por hora: la pasada primero');
     const prox = r.sesiones[1];
     assert.deepStrictEqual(prox.asistentes.map((a) => a.nombre), ['Ana', 'Carla', 'Zoe'], 'asistentes por nombre');
@@ -672,8 +672,16 @@ function activationReset() {
     const pas = r.sesiones[0];
     assert.strictEqual(pas.asistentes.find((a) => a.nombre === 'Luis').asistio, true, 'reunion_asistio cuenta como asistió');
     assert.strictEqual(pas.asistentes.find((a) => a.nombre === 'Marta').asistio, false, 'lo marcado desde el CRM manda');
-    assert.deepStrictEqual(r.resumen, { proximas: 1, reservados: 2, confirmados: 1, formados: 1, asistieronUltimos14d: 1, noAsistieronUltimos14d: 1 });
+    // Pestañas (reunión 30-10): Carla canceló y Marta faltó → no presentados; Luis vino
+    assert.deepStrictEqual(r.resumen, { proximas: 1, reservados: 2, confirmados: 1, formados: 1, asistieronUltimos14d: 1, noAsistieronUltimos14d: 1,
+      pestanas: { agendados: 2, nopresentados: 2, descartados: 0, vinieron: 1, porLlamar: 2 } });
     ok('panel de sesiones: agrupa por hora, ordena, lee confirmación/presentación/dudas y resume la asistencia');
+
+    // Descarte SOLO a mano: un no presentado descartado por el equipo pasa a «descartados»
+    const conDescarte = L.map((l) => (l.id === 's4' ? { ...l, seguimientoSesion: { descartado: { ts: h(-1), motivo: 'no le interesa' } } } : l));
+    const r2 = sesiones.listar(conDescarte, ahora);
+    assert.strictEqual(r2.resumen.pestanas.descartados, 1); assert.strictEqual(r2.resumen.pestanas.nopresentados, 1);
+    ok('pestañas: agendados / no presentados / descartados (solo a mano) / vinieron');
   }
 
   console.log(`\n🎉 Todo correcto (${paso} comprobaciones, ${enviados.length} mensajes simulados, 0 reales).\n`);

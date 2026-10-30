@@ -38,6 +38,7 @@ const REQUERIDAS = [
   { clave: 'sesion_huecos', variable: 'WHATSAPP_TEMPLATE_SESION_HUECOS', para: 'Repesca: huecos de la semana a quien ya dijo su perfil' },
   { clave: 'sesion_zoom', variable: 'WHATSAPP_TEMPLATE_SESION_ZOOM', para: 'Sesión reservada: acceso al Zoom (botón de enlace)' },
   { clave: 'aviso_reserva', variable: 'WHATSAPP_TEMPLATE_AVISO_RESERVA', para: 'Aviso a Arkaitz: nueva reserva (interno)' },
+  { clave: 'aviso_cancelacion', variable: 'WHATSAPP_TEMPLATE_AVISO_CANCELACION', para: 'Aviso a Arkaitz: cancelación (interno)' },
 ];
 
 async function listar() {
@@ -84,6 +85,7 @@ const CLAVE_CONFIG = {
   sesion_huecos: 'templateSesionHuecos',
   sesion_zoom: 'templateSesionZoom',
   aviso_reserva: 'templateAvisoReserva',
+  aviso_cancelacion: 'templateAvisoCancelacion',
 };
 function _configurada(clave) {
   const k = CLAVE_CONFIG[clave];

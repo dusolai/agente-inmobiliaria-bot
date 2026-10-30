@@ -166,6 +166,16 @@ const PLANTILLAS_META = {
       `Tienes su seguimiento completo en three.dusolai.com/sesiones`,
     variables: [{ nombre: 'nombre', ejemplo: 'Txelo Campa' }, { nombre: 'cuando', ejemplo: 'el viernes 30 de octubre a las 10:00' }, { nombre: 'telefono', ejemplo: '+34 600 000 000' }],
   },
+  aviso_cancelacion: {
+    nombreSugerido: 'aviso_cancelacion_three',
+    variable: 'WHATSAPP_TEMPLATE_AVISO_CANCELACION',
+    categoria: 'UTILITY',
+    sinBotones: true,
+    cuerpo:
+      `{{nombre}} ha cancelado su sesión de dudas de {{cuando}}. Su teléfono es {{telefono}}, por si quieres llamarle para recuperarle.\n\n` +
+      `Tienes su seguimiento en three.dusolai.com/sesiones`,
+    variables: [{ nombre: 'nombre', ejemplo: 'Txelo Campa' }, { nombre: 'cuando', ejemplo: 'el viernes 30 de octubre a las 10:00' }, { nombre: 'telefono', ejemplo: '+34 600 000 000' }],
+  },
   // Acceso al Zoom con BOTÓN DE ENLACE: vale fuera de la ventana de 24 h. La
   // base del enlace es fija (todas las salas de Arkaitz cuelgan de ella) y
   // el sufijo (id + contraseña) va como variable del botón.
@@ -643,6 +653,16 @@ function mensajeSesionUnaHora({ nombre, hora, joinUrl }) {
   );
 }
 
+// Política de 3 oportunidades (reunión 30-10): al reservar por tercera vez
+// tras faltar dos, un mensaje cordial pero claro. Lo manda el agente, no Arkaitz.
+function mensajeTerceraOportunidad({ nombre, cuando }) {
+  return (
+    `${nombre}, te confirmo tu sesión ${cuando} ✅\n\n` +
+    `Te escribo con cariño pero claro: es la tercera vez que la reservamos. Entendemos que a todos nos surgen cosas, pero detrás hay un equipo que te reserva su tiempo. ` +
+    `Si esta vez tampoco puedes, avísanos antes; si no, no podremos volver a darte plaza. ¡Te esperamos! 🙌`
+  );
+}
+
 function mensajeSesionConfirmada({ nombre }) {
   return `¡Perfecto ${nombre}! 🙌 Te escribo una hora antes con el enlace del Zoom.`;
 }
@@ -698,6 +718,7 @@ module.exports = {
   mensajeSesionPideFeedback,
   mensajeSesionFeedbackApuntado,
   mensajeSesionLlave,
+  mensajeTerceraOportunidad,
   minutosPresentacion,
   mensajeDerivacionArkaitz,
   mensajeRamaProfesional,
