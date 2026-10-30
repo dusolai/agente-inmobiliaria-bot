@@ -65,6 +65,8 @@ module.exports = {
     templateSesionHuecos: process.env.WHATSAPP_TEMPLATE_SESION_HUECOS || '',
     // Acceso al Zoom con botón de enlace (fuera de la ventana de 24 h)
     templateSesionZoom: process.env.WHATSAPP_TEMPLATE_SESION_ZOOM || '',
+    // Aviso a Arkaitz por cada reserva nueva
+    templateAvisoReserva: process.env.WHATSAPP_TEMPLATE_AVISO_RESERVA || '',
   },
 
   // API de Calendly (token personal: Calendly → Integraciones → API y

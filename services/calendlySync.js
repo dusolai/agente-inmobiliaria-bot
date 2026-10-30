@@ -161,6 +161,7 @@ async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, join
   _marcarReservado(lead);
   activityLog.appendActivity(lead.id, 'sesion_reservada', { inicio, via, reprogramada: Boolean(prev && prev.inviteeUri !== inviteeUri) });
   console.log(`📅 [Calendly] ${lead.nombre} reservó la sesión: ${describirCuando(inicio)}`);
+  await avisarArkaitz(lead, inicio).catch((e) => console.error('❌ [Calendly] Aviso a Arkaitz:', e.message));
   // Confirmación por WhatsApp solo con la ventana abierta (Calendly ya manda
   // su email de confirmación; fuera de ventana no se gasta plantilla).
   if (messaging.dentroDeVentana(lead.telefono)) {
@@ -169,6 +170,28 @@ async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, join
     }));
   }
   return true;
+}
+
+/**
+ * Aviso a Arkaitz por cada reserva nueva (30-10): a su WhatsApp personal
+ * (config.agent.directorWhatsapp). Texto si él ha escrito al número del
+ * sistema en 24 h; si no, la plantilla de utilidad aviso_reserva_three.
+ */
+async function avisarArkaitz(lead, inicio) {
+  const tel = String(config.agent.directorWhatsapp || '').replace(/[^\d]/g, '');
+  if (!tel) return false;
+  const cuando = describirCuando(inicio);
+  const telLead = `+${String(lead.telefono || '').replace(/[^\d]/g, '')}`;
+  const nombre = lead.nombre || 'Alguien';
+  let envio = null;
+  if (messaging.dentroDeVentana(tel)) {
+    envio = await messaging.sendTextMessage(tel, `📅 Nueva reserva en la sesión de dudas: ${nombre} se ha apuntado ${cuando}. Su teléfono es ${telLead}.\n\nSeguimiento: https://three.dusolai.com/sesiones`, { delaySeconds: 0 });
+  } else if (config.whatsapp.templateAvisoReserva) {
+    envio = await messaging.sendTemplate(tel, [nombre, cuando, telLead], { name: config.whatsapp.templateAvisoReserva, lang: config.whatsapp.templateLang, varNames: ['nombre', 'cuando', 'telefono'] });
+  }
+  const ok = Boolean(envio) && envio.success !== false;
+  activityLog.appendActivity(lead.id, 'aviso_arkaitz_reserva', { ok, cuando });
+  return ok;
 }
 
 async function registrarCancelacion(lead, inviteeUri) {
@@ -292,4 +315,4 @@ function estado() {
   return { activo: activo(), ultimaSync: _ultimaSync, error: _ultimoError };
 }
 
-module.exports = { huecosTexto, sincronizar, registrarReserva, registrarCancelacion, describirCuando, horaDe, estado, activo, _leadDeInvitado };
+module.exports = { avisarArkaitz, huecosTexto, sincronizar, registrarReserva, registrarCancelacion, describirCuando, horaDe, estado, activo, _leadDeInvitado };

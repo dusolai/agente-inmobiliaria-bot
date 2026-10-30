@@ -37,6 +37,7 @@ const REQUERIDAS = [
   { clave: 'sesion_hoy', variable: 'WHATSAPP_TEMPLATE_SESION_HOY', para: 'Sesión reservada: aviso del mismo día (confirmar)' },
   { clave: 'sesion_huecos', variable: 'WHATSAPP_TEMPLATE_SESION_HUECOS', para: 'Repesca: huecos de la semana a quien ya dijo su perfil' },
   { clave: 'sesion_zoom', variable: 'WHATSAPP_TEMPLATE_SESION_ZOOM', para: 'Sesión reservada: acceso al Zoom (botón de enlace)' },
+  { clave: 'aviso_reserva', variable: 'WHATSAPP_TEMPLATE_AVISO_RESERVA', para: 'Aviso a Arkaitz: nueva reserva (interno)' },
 ];
 
 async function listar() {
@@ -82,6 +83,7 @@ const CLAVE_CONFIG = {
   sesion_hoy: 'templateSesionHoy',
   sesion_huecos: 'templateSesionHuecos',
   sesion_zoom: 'templateSesionZoom',
+  aviso_reserva: 'templateAvisoReserva',
 };
 function _configurada(clave) {
   const k = CLAVE_CONFIG[clave];
@@ -159,7 +161,7 @@ async function crear(clave) {
   const body = {
     name: def.nombreSugerido,
     language: 'es',
-    category: 'MARKETING',
+    category: def.categoria || 'MARKETING',
     parameter_format: 'NAMED',
     components: [
       {
@@ -167,13 +169,13 @@ async function crear(clave) {
         text: def.cuerpo,
         example: { body_text_named_params: (def.variables || [{ nombre: 'nombre', ejemplo: 'María' }]).map((v) => ({ param_name: v.nombre, example: v.ejemplo })) },
       },
-      {
+      ...(def.sinBotones ? [] : [{
         type: 'BUTTONS',
         // Botón de enlace con sufijo variable (Zoom) o botones de respuesta rápida
         buttons: def.botonUrl
           ? [{ type: 'URL', text: def.botonUrl.texto, url: `${def.botonUrl.base}{{1}}`, example: [def.botonUrl.ejemplo] }]
           : (def.botones || messages.PLANTILLAS_META.botones).map((t) => ({ type: 'QUICK_REPLY', text: t })),
-      },
+      }]),
     ],
   };
   try {

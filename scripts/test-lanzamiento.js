@@ -510,6 +510,13 @@ function activationReset() {
       const nueva = await cs2.registrarReserva(leadManager.getLeadById(g.id), { inviteeUri: 'inv-g', eventoUri: 'ev', inicio: pasado });
       assert.strictEqual(nueva, false); assert.strictEqual(leadManager.getLeadById(g.id).sesion.estado, 'celebrada', 'sigue celebrada');
       ok('una sesión ya celebrada no se vuelve a registrar como reserva nueva');
+      // Aviso a Arkaitz por cada reserva nueva (plantilla de utilidad)
+      config.whatsapp.templateAvisoReserva = 'aviso_reserva_three';
+      const t = leadManager.createLead({ nombre: 'Txelo', telefono: '34622000020', campana: vivas.id, segmento: 'viejos' });
+      await cs2.registrarReserva(leadManager.getLeadById(t.id), { inviteeUri: 'inv-t', eventoUri: 'ev', inicio: new Date(Date.now() + 26 * 3600 * 1000).toISOString() });
+      const av = paraTel('34696272778').slice(-1)[0];
+      assert.ok(av && av.plantilla === 'aviso_reserva_three' && av.params[0] === 'Txelo' && av.params[2] === '+34622000020', 'Arkaitz recibe el aviso con nombre y teléfono');
+      ok('aviso a Arkaitz por cada reserva nueva');
     }
 
     // d9) La presentación es la llave del Zoom

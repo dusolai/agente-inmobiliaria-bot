@@ -154,6 +154,18 @@ const PLANTILLAS_META = {
     variables: [{ nombre: 'nombre', ejemplo: 'María' }, { nombre: 'cuando', ejemplo: 'hoy a las 19:00' }],
     botones: ['Allí estaré', 'Cambiar de día'],
   },
+  // Aviso INTERNO a Arkaitz por cada reserva nueva (30-10): quién, cuándo y
+  // su teléfono. Categoría UTILIDAD y sin botones.
+  aviso_reserva: {
+    nombreSugerido: 'aviso_reserva_three',
+    variable: 'WHATSAPP_TEMPLATE_AVISO_RESERVA',
+    categoria: 'UTILITY',
+    sinBotones: true,
+    cuerpo:
+      `Nueva reserva en la sesión de dudas: {{nombre}} se ha apuntado {{cuando}}. Su teléfono es {{telefono}}.\n\n` +
+      `Tienes su seguimiento completo en three.dusolai.com/sesiones`,
+    variables: [{ nombre: 'nombre', ejemplo: 'Txelo Campa' }, { nombre: 'cuando', ejemplo: 'el viernes 30 de octubre a las 10:00' }, { nombre: 'telefono', ejemplo: '+34 600 000 000' }],
+  },
   // Acceso al Zoom con BOTÓN DE ENLACE: vale fuera de la ventana de 24 h. La
   // base del enlace es fija (todas las salas de Arkaitz cuelgan de ella) y
   // el sufijo (id + contraseña) va como variable del botón.
