@@ -172,7 +172,7 @@ const PLANTILLAS_META = {
     categoria: 'UTILITY',
     sinBotones: true,
     cuerpo:
-      `{{nombre}} ha cancelado su sesión de dudas de {{cuando}}. Su teléfono es {{telefono}}, por si quieres llamarle para recuperarle.\n\n` +
+      `Cancelación en la sesión de dudas: {{nombre}} ha anulado la de {{cuando}}. Su teléfono es {{telefono}}, por si quieres llamarle para recuperarle.\n\n` +
       `Tienes su seguimiento en three.dusolai.com/sesiones`,
     variables: [{ nombre: 'nombre', ejemplo: 'Txelo Campa' }, { nombre: 'cuando', ejemplo: 'el viernes 30 de octubre a las 10:00' }, { nombre: 'telefono', ejemplo: '+34 600 000 000' }],
   },

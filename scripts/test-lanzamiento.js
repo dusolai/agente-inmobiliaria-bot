@@ -581,6 +581,11 @@ function activationReset() {
     assert.ok(messages.PLANTILLAS_META[seg].cuerpo.includes('{{nombre}}'));
   }
   for (const b of messages.PLANTILLAS_META.botones) assert.ok(b.length <= 25, `botón "${b}" supera 25 caracteres`);
+  // Meta rechaza (2388299) un cuerpo que empieza o acaba con una variable
+  for (const [k, p] of Object.entries(messages.PLANTILLAS_META)) {
+    const c = (p && p.cuerpo || '').trim();
+    assert.ok(!/^\{\{/.test(c) && !/\}\}$/.test(c), `plantilla ${k} empieza o acaba con variable`);
+  }
   assert.strictEqual(conversationFlow.interpretarRespuesta('Soy agente inmobiliario'), 'profesional');
   assert.strictEqual(conversationFlow.interpretarRespuesta('Busco ingresos extra'), 'emprendedor');
   ok('textos por segmento y botones de plantilla (≤25 caracteres) reconocidos por el flujo');
