@@ -201,6 +201,9 @@ function seguimiento(lead, eventos, ahora = Date.now()) {
     paso('zoom', 'Recibió el enlace del Zoom', Boolean(zoom || (s.avisos && s.avisos.zoomEnviado)), (zoom && zoom.ts) || (s.avisos && s.avisos.zoomEnviado)),
     paso('asistencia', 'Entró a la sesión', s.asistio === true || lead.estado === 'reunion_asistio', s.asistioAt, s.asistio === false ? 'no se presentó' : '', s.asistio === false),
   ];
+  // Marcas que el equipo puede quitar si se puso por error (botón «Deshacer»)
+  const deshacibles = { confirma: Boolean(s.confirmada), presentacion: Boolean(s.formado || s.presentacionConfirmada), asistencia: s.asistio != null || lead.estado === 'reunion_asistio' };
+  for (const p of pasos) if (deshacibles[p.clave]) p.deshacer = p.clave === 'confirma' ? 'confirmada' : p.clave === 'presentacion' ? 'formado' : 'asistencia';
 
   // Riesgo de que no venga (solo sesiones futuras)
   const motivos = [];

@@ -53,6 +53,8 @@
   .msg small{display:block;color:var(--quiet);font-size:.72rem;margin-top:3px}
   .dudas{background:var(--warnbg);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:.88rem}
   .llamadas{font-size:.85rem;color:var(--quiet);margin-top:6px}
+  .llamada{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:2px 0}
+  button.mini{font-size:.75rem;padding:2px 7px;margin-left:4px}
   .escribir{display:flex;gap:6px;margin-top:8px}
   .escribir textarea{flex:1;font:inherit;font-size:.86rem;border:1px solid var(--line);border-radius:8px;padding:8px;min-height:42px}
   .vacio{background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:24px;text-align:center;color:var(--quiet)}
@@ -129,14 +131,15 @@ function detalleHTML(a, sg) {
   if (a.pasada && a.asistio !== true) acc.push(`<button data-acc="asistio" data-id="${a.leadId}">🤝 Sí vino</button>`);
   if (a.pestana === 'nopresentados' || a.pestana === 'descartados') acc.push(`<button data-acc="siguiente_dia" data-id="${a.leadId}">📅 Mandarle otro día</button>`);
 
-  const llamadas = a.llamadas.length ? `<div class="llamadas">${a.llamadas.map((l) => `${fecha(l.ts)} · ${RES[l.resultado] || l.resultado}${l.nota ? ' · ' + esc(l.nota) : ''}`).join('<br>')}</div>` : '';
+  const llamadas = a.llamadas.length ? `<div class="llamadas">${a.llamadas.map((l) => `<div class="llamada">${fecha(l.ts)} · ${RES[l.resultado] || l.resultado}${l.nota ? ' · ' + esc(l.nota) : ''}
+    <button class="mini" data-acc="llamada_editar" data-id="${a.leadId}" data-ts="${esc(l.ts)}" title="Cambiar el resultado o la nota">✏️ Cambiar</button><button class="mini rojo" data-acc="llamada_borrar" data-id="${a.leadId}" data-ts="${esc(l.ts)}" title="Se apuntó por error">🗑 Borrar</button></div>`).join('')}</div>` : '';
   const dudas = a.dudas && a.dudas.length ? `<div class="dudas"><b>Lo que dejó escrito:</b> ${a.dudas.map((d) => '«' + esc(d) + '»').join(' · ')}</div>` : '';
   let resto = '<p class="explica">Cargando…</p>';
   if (sg) {
     const ic = { hecho: '✅', pendiente: '⬜', fallo: '❌' };
     const ent = { enviado: '✓', entregado: '✓✓', leido: '✓✓ leído', fallido: '⚠ no llegó' };
     resto = `<div class="cols">
-      <div><h3>Paso a paso</h3><ul class="pasos">${sg.pasos.map((p) => `<li><span>${ic[p.estado]}</span><span>${esc(p.titulo)}<span class="ts">${p.ts ? fecha(p.ts) : ''}</span>${p.detalle ? `<span class="det">${esc(p.detalle)}</span>` : ''}</span></li>`).join('')}</ul></div>
+      <div><h3>Paso a paso</h3><ul class="pasos">${sg.pasos.map((p) => `<li><span>${ic[p.estado]}</span><span>${esc(p.titulo)}<span class="ts">${p.ts ? fecha(p.ts) : ''}</span>${p.detalle ? `<span class="det">${esc(p.detalle)}</span>` : ''}${p.deshacer ? `<button class="mini" data-acc="deshacer" data-que="${p.deshacer}" data-id="${a.leadId}" title="Se marcó por error">↩ Deshacer</button>` : ''}</span></li>`).join('')}</ul></div>
       <div><h3>Conversación</h3><div class="chat">${sg.conversacion.map((m) => `<div class="msg ${m.de}">${esc(m.texto)}<small>${m.de === 'lead' ? esc(a.nombre) : m.de === 'crm' ? 'Equipo' : 'Agente'} · ${fecha(m.ts)}${m.entrega ? ' · ' + ent[m.entrega] : ''}</small></div>`).join('') || '<p class="explica">Sin mensajes.</p>'}</div>
         <div class="escribir"><textarea id="txt-${a.leadId}" placeholder="${sg.ventanaAbierta ? 'Escribe un mensaje…' : 'Solo se le puede escribir si ha contestado en las últimas 24 h. Usa «Mandarle el recordatorio» o tu WhatsApp.'}" ${sg.ventanaAbierta ? '' : 'disabled'}></textarea><button class="prim" data-acc="mensaje" data-id="${a.leadId}" ${sg.ventanaAbierta ? '' : 'disabled'}>Enviar</button></div>
       </div></div>`;
@@ -187,6 +190,21 @@ document.addEventListener('click', async (ev) => {
       const nota = b.dataset.res === 'confirmada' ? '' : (prompt('¿Alguna nota de la llamada? (opcional)') || '');
       await api(`/api/sesiones/${id}/llamada`, { method: 'POST', body: JSON.stringify({ resultado: b.dataset.res, nota }) });
       toast('Llamada apuntada');
+    } else if (acc === 'llamada_borrar') {
+      if (!confirm('¿Borrar esta llamada? Úsalo si se apuntó por error.')) return;
+      await api(`/api/sesiones/${id}/llamada/editar`, { method: 'POST', body: JSON.stringify({ ts: b.dataset.ts, borrar: true }) }); toast('Llamada borrada');
+    } else if (acc === 'llamada_editar') {
+      const r = prompt('¿Cómo fue la llamada? Escribe el número:\n1 = Confirmó\n2 = No contesta\n3 = Cambia de día\n4 = Hablado (otra cosa)');
+      if (r === null) return;
+      const resultado = { 1: 'confirmada', 2: 'no_contesta', 3: 'reagenda', 4: 'otra' }[r.trim()];
+      if (!resultado) return toast('Escribe 1, 2, 3 o 4');
+      const nota = prompt('Nota de la llamada (déjalo vacío si no hay):', '');
+      if (nota === null) return;
+      await api(`/api/sesiones/${id}/llamada/editar`, { method: 'POST', body: JSON.stringify({ ts: b.dataset.ts, resultado, nota }) }); toast('Llamada cambiada');
+    } else if (acc === 'deshacer') {
+      const txt = { confirmada: 'que confirmó', formado: 'que vio la presentación', asistencia: 'si vino o no vino' }[b.dataset.que];
+      if (!confirm(`¿Quitar la marca de ${txt}? Vuelve a como estaba antes.`)) return;
+      await api(`/api/sesiones/${id}/deshacer`, { method: 'POST', body: JSON.stringify({ que: b.dataset.que }) }); toast('Deshecho');
     } else if (acc === 'descartar') {
       const motivo = prompt('¿Por qué se descarta? (por ejemplo: no le interesa)');
       if (motivo === null) return;

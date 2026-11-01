@@ -1097,6 +1097,74 @@ router.post('/sesiones/:leadId/llamada', (req, res) => {
   res.json({ ok: true, lead: leadManager.getLeadById(lead.id) });
 });
 
+// Si ya no queda ninguna llamada «confirmada», la confirmación que venía de
+// una llamada se quita (la que dio él por WhatsApp se respeta).
+function _confirmacionTrasLlamadas(lead, llamadas) {
+  if (lead.sesion.confirmadaVia !== 'llamada' || llamadas.some((l) => l.resultado === 'confirmada')) return null;
+  const { confirmadaAt, confirmadaVia, ...resto } = lead.sesion;
+  return { ...resto, confirmada: false };
+}
+
+/**
+ * POST /api/sesiones/:leadId/llamada/editar  Body: { ts, borrar?: true, resultado?, nota? }
+ * Corrige un fallo humano: una llamada apuntada por error se borra o se cambia.
+ */
+router.post('/sesiones/:leadId/llamada/editar', (req, res) => {
+  const lead = _leadConSesion(req, res);
+  if (!lead) return;
+  const b = req.body || {};
+  const sg = _seguimientoDe(lead);
+  const idx = sg.llamadas.findIndex((l) => l.ts === b.ts);
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'Esa llamada ya no está apuntada' });
+  if (b.resultado != null && !['confirmada', 'no_contesta', 'reagenda', 'otra'].includes(b.resultado)) return res.status(400).json({ ok: false, error: 'Resultado de la llamada no válido' });
+  const antes = sg.llamadas[idx];
+  sg.llamadas = b.borrar
+    ? sg.llamadas.filter((_, i) => i !== idx)
+    : sg.llamadas.map((l, i) => (i === idx ? { ...l, resultado: b.resultado || l.resultado, nota: b.nota != null ? String(b.nota).slice(0, 500) : l.nota } : l));
+  const cambios = { seguimientoSesion: sg };
+  const sesion = _confirmacionTrasLlamadas(lead, sg.llamadas);
+  if (sesion) cambios.sesion = sesion;
+  else if (!b.borrar && b.resultado === 'confirmada' && lead.sesion.estado === 'reservada' && !lead.sesion.confirmada) cambios.sesion = { ...lead.sesion, confirmada: true, confirmadaAt: new Date().toISOString(), confirmadaVia: 'llamada' };
+  leadManager.updateLead(lead.id, cambios);
+  activityLog.appendActivity(lead.id, b.borrar ? 'sesion_llamada_borrada' : 'sesion_llamada_editada', { antes: antes.resultado, despues: b.borrar ? null : (b.resultado || antes.resultado) });
+  res.json({ ok: true, lead: leadManager.getLeadById(lead.id) });
+});
+
+/**
+ * POST /api/sesiones/:leadId/deshacer  Body: { que: 'confirmada'|'formado'|'asistencia' }
+ * Quita una marca puesta a mano (o por error): vuelve a como estaba antes.
+ */
+router.post('/sesiones/:leadId/deshacer', (req, res) => {
+  const lead = _leadConSesion(req, res);
+  if (!lead) return;
+  const que = String((req.body && req.body.que) || '');
+  const s = { ...lead.sesion };
+  const cambios = {};
+  if (que === 'confirmada') {
+    delete s.confirmadaAt; delete s.confirmadaVia;
+    s.confirmada = false;
+  } else if (que === 'formado') {
+    delete s.formadoAt; delete s.presentacionConfirmada;
+    s.formado = false;
+  } else if (que === 'asistencia') {
+    delete s.asistio; delete s.asistioAt; delete s.noAsistioMarcadoAt;
+    // «Sí vino» había cerrado la sesión y avanzado el lead: se vuelve atrás
+    if (s.estado === 'celebrada' && new Date(s.inicio).getTime() > Date.now()) s.estado = 'reservada';
+    const h = lead.historial || [];
+    if (lead.estado === leadManager.LEAD_STATES.REUNION_ASISTIO && h.length > 1 && h[h.length - 1].estado === lead.estado) {
+      cambios.estado = h[h.length - 2].estado;
+      cambios.historial = h.slice(0, -1);
+      cambios.reunionAsistioAt = null;
+    }
+  } else {
+    return res.status(400).json({ ok: false, error: 'No sé qué deshacer' });
+  }
+  cambios.sesion = s;
+  leadManager.updateLead(lead.id, cambios);
+  activityLog.appendActivity(lead.id, 'sesion_deshecho', { que });
+  res.json({ ok: true, lead: leadManager.getLeadById(lead.id) });
+});
+
 /** POST /api/sesiones/:leadId/descartar  Body: { motivo } — solo a mano, tras hablar con él */
 router.post('/sesiones/:leadId/descartar', (req, res) => {
   const lead = _leadConSesion(req, res);
