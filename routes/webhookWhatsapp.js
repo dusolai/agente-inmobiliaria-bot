@@ -53,17 +53,6 @@ function _textoDelMensaje(msg) {
   }
 }
 
-// ─── ¿Es para nuestro número? ─────────────────────────────────────
-// Meta manda al webhook los avisos de TODOS los números de la WABA, y en ella
-// puede haber otros (p. ej. el de eventos, que vive en otro servicio). Solo
-// atendemos los de WHATSAPP_PHONE_NUMBER_ID: el agente no debe contestar a
-// quien escribe a otro número.
-function _esNuestro(value) {
-  const id = String(value?.metadata?.phone_number_id || '');
-  const nuestro = config.whatsapp.phoneNumberId;
-  return !id || !nuestro || id === nuestro;
-}
-
 // ─── Mensajes entrantes ───────────────────────────────────────────
 router.post('/', async (req, res) => {
   // Responder 200 cuanto antes: Meta reintenta si tarda, y no queremos
@@ -76,8 +65,6 @@ router.post('/', async (req, res) => {
       for (const change of entry.changes || []) {
         const value = change.value || {};
         const mensajes = value.messages || [];
-
-        if (!_esNuestro(value)) continue;
 
         // ─── Acuses de entrega (statuses) ────────────────────────────
         // Meta acepta el POST (200 + id) pero la ENTREGA real viene aquí:
