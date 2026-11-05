@@ -242,8 +242,8 @@ function mensajeReintentarCualificacion({ nombre }) {
 // NO se ofrece aquí: generaba fricción ("míralo ahora" + "resérvalo para otro
 // momento" a la vez). El camino es uno solo: ver la presentación → reservar 1-a-1.
 // Un solo vídeo por landing (22-10): la presentación larga. Minutos que se
-// citan en los mensajes (la de agentes dura 33, la de emprendedores 21).
-const MINUTOS_PRESENTACION = { profesional: 33, emprendedor: 21 };
+// citan en los mensajes. Vídeos nuevos (5-11): agentes 12 min, emprendedores 6.
+const MINUTOS_PRESENTACION = { profesional: 12, emprendedor: 6 };
 function minutosPresentacion(perfil) {
   return MINUTOS_PRESENTACION[perfil] || MINUTOS_PRESENTACION.emprendedor;
 }
