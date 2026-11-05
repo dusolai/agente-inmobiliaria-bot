@@ -773,7 +773,7 @@ async function procesarSesiones() {
         activityLog.appendActivity(lead.id, 'sesion_no_asistio', { inicio: s.inicio });
         continue;
       }
-      if (ahora > inicio + 6 * H) {
+      if (ahora > inicio + 6 * H && s.estado !== 'celebrada') {
         leadManager.updateLead(lead.id, { sesion: { ...(leadManager.getLeadById(lead.id).sesion), estado: 'celebrada' } });
         activityLog.appendActivity(lead.id, 'sesion_pasada', { inicio: s.inicio, asistencia: 'sin confirmar' });
       }

@@ -190,9 +190,18 @@ async function registrarReserva(lead, { inviteeUri, eventoUri, inicio, fin, join
  * (config.agent.directorWhatsapp). Texto si él ha escrito al número del
  * sistema en 24 h; si no, la plantilla de utilidad aviso_reserva_three.
  */
+// Freno: como mucho un aviso del mismo tipo por lead cada 30 min, pase lo que
+// pase en la sync (el 5-11 un bucle le mandó decenas seguidas).
+const _ultimoAviso = new Map();
 async function avisarArkaitz(lead, inicio, { cancelada = false } = {}) {
   const tel = String(config.agent.directorWhatsapp || '').replace(/[^\d]/g, '');
   if (!tel) return false;
+  const clave = `${lead.id}:${cancelada ? 'c' : 'r'}`;
+  if (Date.now() - (_ultimoAviso.get(clave) || 0) < 30 * 60 * 1000) {
+    console.warn(`⚠️ [Calendly] Aviso a Arkaitz por ${lead.nombre} frenado: ya se le avisó hace menos de 30 min`);
+    return false;
+  }
+  _ultimoAviso.set(clave, Date.now());
   const cuando = describirCuando(inicio);
   const telLead = `+${String(lead.telefono || '').replace(/[^\d]/g, '')}`;
   const nombre = lead.nombre || 'Alguien';
@@ -258,10 +267,24 @@ async function sincronizar() {
     // Primero las activas: una reprogramación en Calendly cancela el invitado
     // viejo y crea uno nuevo; así el nuevo manda y la cancelación del viejo
     // ya no coincide con lead.sesion.inviteeUri.
-    for (const { ev, inv } of activos) {
-      const lead = _leadDeInvitado(inv, leads);
+    // Un lead con DOS reservas activas en horas distintas (Héctor, 5-11: el 9 y
+    // el 17) se quedaba alternando entre ambas en cada ciclo y avisaba a
+    // Arkaitz dos veces cada 5 min. Por lead cuenta UNA: la que ya teníamos
+    // si sigue activa; si no, la última que hizo.
+    const porLead = new Map();
+    for (const item of activos) {
+      const lead = _leadDeInvitado(item.inv, leads);
       if (!lead) continue;
-      const ok = await registrarReserva(leadManager.getLeadById(lead.id), {
+      if (!porLead.has(lead.id)) porLead.set(lead.id, []);
+      porLead.get(lead.id).push(item);
+    }
+    for (const [leadId, items] of porLead) {
+      const actual = leadManager.getLeadById(leadId);
+      const uriActual = actual && actual.sesion && actual.sesion.estado !== 'cancelada' && actual.sesion.inviteeUri;
+      const { ev, inv } = items.find((i) => i.inv.uri === uriActual) ||
+        [...items].sort((a, b) => String(b.inv.created_at || '').localeCompare(String(a.inv.created_at || '')))[0];
+      if (items.length > 1) console.warn(`⚠️ [Calendly] ${actual.nombre} tiene ${items.length} reservas activas; cuenta la de ${describirCuando(ev.start_time)}`);
+      const ok = await registrarReserva(actual, {
         inviteeUri: inv.uri, eventoUri: ev.uri, inicio: ev.start_time, fin: ev.end_time,
         joinUrl: ev.location && (ev.location.join_url || ev.location.location) || null,
         rescheduleUrl: inv.reschedule_url || null,
