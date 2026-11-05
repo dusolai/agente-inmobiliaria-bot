@@ -269,8 +269,8 @@ async function sincronizar() {
     // ya no coincide con lead.sesion.inviteeUri.
     // Un lead con DOS reservas activas en horas distintas (Héctor, 5-11: el 9 y
     // el 17) se quedaba alternando entre ambas en cada ciclo y avisaba a
-    // Arkaitz dos veces cada 5 min. Por lead cuenta UNA: la que ya teníamos
-    // si sigue activa; si no, la última que hizo.
+    // Arkaitz dos veces cada 5 min. Por lead cuenta UNA: la última que hizo
+    // (fecha de creación fija, así la elección no cambia de un ciclo a otro).
     const porLead = new Map();
     for (const item of activos) {
       const lead = _leadDeInvitado(item.inv, leads);
@@ -280,9 +280,7 @@ async function sincronizar() {
     }
     for (const [leadId, items] of porLead) {
       const actual = leadManager.getLeadById(leadId);
-      const uriActual = actual && actual.sesion && actual.sesion.estado !== 'cancelada' && actual.sesion.inviteeUri;
-      const { ev, inv } = items.find((i) => i.inv.uri === uriActual) ||
-        [...items].sort((a, b) => String(b.inv.created_at || '').localeCompare(String(a.inv.created_at || '')))[0];
+      const { ev, inv } = [...items].sort((a, b) => String(b.inv.created_at || '').localeCompare(String(a.inv.created_at || '')) || a.inv.uri.localeCompare(b.inv.uri))[0];
       if (items.length > 1) console.warn(`⚠️ [Calendly] ${actual.nombre} tiene ${items.length} reservas activas; cuenta la de ${describirCuando(ev.start_time)}`);
       const ok = await registrarReserva(actual, {
         inviteeUri: inv.uri, eventoUri: ev.uri, inicio: ev.start_time, fin: ev.end_time,
